@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/database/database_service.dart';
-import '../../services/auth_service.dart';
 import '../../widgets/ui/app_button.dart';
-import '../../config/app_colors.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 
 class SystemOverviewPage extends StatefulWidget {

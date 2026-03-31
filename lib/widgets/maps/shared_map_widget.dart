@@ -3,7 +3,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../services/error_recovery_service.dart';
 import '../../services/vector_tile_provider.dart';
-import '../../config/app_colors.dart';
 
 class SharedMapWidget extends StatelessWidget {
   final MapController? mapController;

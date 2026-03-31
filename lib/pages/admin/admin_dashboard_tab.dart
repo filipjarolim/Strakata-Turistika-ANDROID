@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/database/database_service.dart';
-import '../../widgets/ui/app_button.dart';
+import '../../widgets/ui/strakata_primitives.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 
 class AdminDashboardTab extends StatefulWidget {
@@ -150,7 +150,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
               ),
               const SizedBox(height: 16),
               Container(
-                decoration: _cardDecoration(),
+                decoration: StrakataSurface.cardDecoration(),
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
@@ -224,21 +224,6 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
     );
   }
 
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.04),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
-      border: Border.all(color: Colors.grey[100]!),
-    );
-  }
-
   Widget _buildStatusIndicator() {
     final color = _isConnected ? const Color(0xFF10B981) : const Color(0xFFEF4444);
     return Row(
@@ -265,7 +250,7 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
     return Container(
       width: width,
       padding: const EdgeInsets.all(20),
-      decoration: _cardDecoration(),
+      decoration: StrakataSurface.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

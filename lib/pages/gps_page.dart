@@ -5,23 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:sensors_plus/sensors_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'dart:io';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 
 import 'package:strakataturistikaandroidapp/services/vector_tile_provider.dart';
 import 'package:strakataturistikaandroidapp/services/mapy_cz_download_service.dart';
 import 'package:strakataturistikaandroidapp/services/tracking_state_service.dart';
 import 'package:strakataturistikaandroidapp/services/haptic_service.dart';
-import 'package:strakataturistikaandroidapp/services/logging_service.dart';
 import 'package:strakataturistikaandroidapp/widgets/ui/app_toast.dart';
 
-import 'package:strakataturistikaandroidapp/models/visit_data.dart';
 import 'package:strakataturistikaandroidapp/models/tracking_summary.dart';
 import 'package:strakataturistikaandroidapp/utils/gps_utils.dart';
 
@@ -30,11 +20,10 @@ import 'package:strakataturistikaandroidapp/services/gps_services.dart';
 import 'package:strakataturistikaandroidapp/services/scoring_config_service.dart';
 import 'package:strakataturistikaandroidapp/services/error_recovery_service.dart';
 import 'package:strakataturistikaandroidapp/pages/dynamic_upload_page.dart';
-import 'package:strakataturistikaandroidapp/pages/dynamic_form_page.dart';
 
 import 'package:strakataturistikaandroidapp/config/app_colors.dart';
-import 'package:strakataturistikaandroidapp/widgets/ui/glass_ui.dart';
 import 'package:strakataturistikaandroidapp/widgets/ui/app_button.dart';
+import 'package:strakataturistikaandroidapp/widgets/ui/strakata_primitives.dart';
 import 'package:strakataturistikaandroidapp/widgets/gps/tracking_bottom_sheet.dart';
 import 'package:strakataturistikaandroidapp/widgets/gps/tracking_onboarding_sheet.dart';
 import '../widgets/maps/shared_map_widget.dart';
@@ -49,9 +38,7 @@ class GpsPage extends StatefulWidget {
 class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   final MapController _mapController = MapController();
   final TrackingStateService _trackingStateService = TrackingStateService();
-  final HapticService _hapticService = HapticService();
-  final LoggingService _loggingService = LoggingService();
-  
+
   // Animation controllers
   late AnimationController _pulseController;
   late AnimationController _slideController;
@@ -63,8 +50,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   
   // Animations
   late Animation<double> _pulseAnimation;
-  late Animation<Offset> _panelSlideAnimation;
-  
+
   // State variables
   LatLng? _currentLocation;
   double? _currentSpeed;
@@ -77,37 +63,14 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
 
   bool _isMapReady = false;
   bool _hasInitiallyCentered = false;
-  bool _isMapLoading = true;
   Timer? _updateTimer;
   Timer? _networkTimer;
   bool _isOnline = true;
   // Smart prefetch debounce
   Timer? _prefetchDebounce;
-  
-  // Offline manager state (flag removed; manager opens via sheet when invoked)
-  // Offline download UI state
-  bool _isDownloadingTiles = false;
-  double _downloadProgress = 0.0;
-  String _downloadStatus = '';
-  StreamSubscription<Map<String, dynamic>>? _dlProgressSub;
-  StreamSubscription<bool>? _dlStateSub;
-  
-  // Cache coverage state
-  double _cacheCoverage = 0.0;
-  bool _isCheckingCoverage = false;
-  Timer? _coverageDebounce;
 
-  
-
-  
-  // Compass/heading state
-
-
-
-  
   // Map centering state
   bool _showRecenterButton = false;
-  final LatLng _userPosition = const LatLng(49.8175, 15.4730); // Default to Czech Republic center
   double _currentZoom = 8.0;
   
   // Location stream for passive updates
@@ -137,28 +100,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
         await VectorTileProvider.initialize();
       } catch (_) {}
     });
-    // Listen to offline download streams
-    _dlStateSub = MapyCzDownloadService.downloadStateStream.listen((active) {
-      if (mounted) {
-        setState(() {
-          _isDownloadingTiles = active;
-        });
-      }
-    });
-    
-    // Start passive location updates immediately
     _startPassiveLocationUpdates();
-
-    _dlProgressSub = MapyCzDownloadService.progressStream.listen((m) {
-      if (mounted) {
-        setState(() {
-          _downloadProgress = (m['progress'] as double?) ?? 0.0;
-          _downloadStatus = (m['status'] as String?) ?? '';
-        });
-      }
-    });
-    
-
   }
   
   void _initializeAnimations() {
@@ -171,8 +113,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     _panelSlideController = GpsAnimations.createPanelSlideController(this);
     
     _pulseAnimation = GpsAnimations.createPulseAnimation(_pulseController);
-    _panelSlideAnimation = GpsAnimations.createPanelSlideAnimation(_panelSlideController);
-    
+
     GpsAnimations.initializeAnimations(
       pulseController: _pulseController,
       slideController: _slideController,
@@ -340,62 +281,11 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     });
   }
 
-  void _updateCacheCoverage() {
-    // Debounce coverage checks to avoid excessive calls
-    _coverageDebounce?.cancel();
-    _coverageDebounce = Timer(const Duration(milliseconds: 500), () async {
-      await _performCacheCoverageCheck();
-    });
-  }
-
-  Future<void> _performCacheCoverageCheck() async {
-    if (!_isMapReady || _isCheckingCoverage) return;
-    
-    setState(() {
-      _isCheckingCoverage = true;
-    });
-    
-    try {
-      final cam = _mapController.camera;
-      final center = cam.center;
-      final zoom = cam.zoom.floor().clamp(8, 16);
-      
-      // Check coverage for a small area around current view
-      final latDelta = 0.02; // ~2km radius
-      final lngDelta = 0.03;
-      final sw = LatLng(center.latitude - latDelta, center.longitude - lngDelta);
-      final ne = LatLng(center.latitude + latDelta, center.longitude + lngDelta);
-      
-      final coverage = await VectorTileProvider.estimateCoverage(
-        southwest: sw,
-        northeast: ne,
-        zoom: zoom,
-      );
-      
-      if (mounted) {
-        setState(() {
-          _cacheCoverage = coverage;
-          _isCheckingCoverage = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _cacheCoverage = 0.0;
-          _isCheckingCoverage = false;
-        });
-      }
-    }
-  }
-
   @override
   void dispose() {
     _updateTimer?.cancel();
     _networkTimer?.cancel();
     _prefetchDebounce?.cancel();
-    _coverageDebounce?.cancel();
-    _dlProgressSub?.cancel();
-    _dlStateSub?.cancel();
     _positionStreamSub?.cancel();
 
 
@@ -589,16 +479,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
+                const Center(child: StrakataSheetHandle()),
                 const SizedBox(height: 12),
                 const Text('Simulovat trasu', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
@@ -673,66 +554,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
           ),
         );
       },
-    );
-  }
-
-  void _showToolsSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.4,
-        minChildSize: 0.3,
-        maxChildSize: 0.85,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text('Nástroje', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.play_circle_outline, color: Color(0xFF4CAF50)),
-                      title: const Text('Simulovat trasu'),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        _showSimulateSheet();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.assessment_outlined, color: Color(0xFF4CAF50)),
-                      title: const Text('Shrnutí trasy'),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        _showTrackingSummary(_trackingStateService.getSummary());
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -853,14 +674,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
         children: [
           const SizedBox(height: 10),
           Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            child: StrakataSheetHandle(color: AppColors.border),
           ),
           const SizedBox(height: 16),
           if (draftId != null)
@@ -874,9 +688,9 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                   border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                 ),
                 child: Row(
-                  children: const [
+                  children: [
                     Icon(Icons.check_circle, color: AppColors.secondary),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Trasa byla uložena jako návrh. Můžete doplnit informace později.',
@@ -890,7 +704,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
           if (draftId != null) const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: const Text(
+            child: Text(
               'Shrnutí trasy',
               style: TextStyle(
                 fontSize: 28,
@@ -926,10 +740,10 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                     onPressed: () => Navigator.of(context).pop(),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: const BorderSide(color: AppColors.border, width: 1.2),
+                      side: BorderSide(color: AppColors.border, width: 1.2),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: const Text('Doplnit později', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    child: Text('Doplnit později', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -991,13 +805,13 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 10),
-            Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
           ],
         ),
       ),
@@ -1015,55 +829,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
       AppToast.showSuccess(context, 'Vycentrováno na vaši polohu');
     }
   }
-  
-
-  
-  void _showStorageInfo() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-            ],
-          ),
-        );
-      },
-    );
-  }
-  
-  void _recenterMap() {
-    if (_currentLocation != null) {
-      _mapController.move(_currentLocation!, _mapController.camera.zoom);
-      setState(() {
-        _showRecenterButton = false;
-      });
-    }
-  }
-  
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -1091,13 +856,11 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                 zoom: _lastMapZoom ?? 8.0,
                 onMapReady: () {
                     _isMapReady = true;
-                    _isMapLoading = false;
                     _currentZoom = _mapController.camera.zoom;
                     if (_currentLocation != null && !_hasInitiallyCentered) {
                       _smoothMoveToLocation(_currentLocation!);
                       _hasInitiallyCentered = true;
                     }
-                    _updateCacheCoverage();
                 },
                 onPositionChanged: (MapPosition position, bool hasGesture) {
                     final newZoom = position.zoom ?? _mapController.camera.zoom;
@@ -1287,6 +1050,8 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                       onStopTracking: _stopTracking,
                       onCenterMap: _centerOnLocation,
                       sheetPosition: _sheetExtent,
+                      onSimulateRoute: () => _showSimulateSheet(),
+                      onOfflineMaps: () => _showOfflineManager(),
                       onClose: () {
                          _sheetController.animateTo(
                           0.5,
@@ -1302,94 +1067,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
           ),
         );
       },
-    );
-  }
-  
-  Widget _buildGlassyIconButton({required IconData icon, required VoidCallback onTap, Color color = const Color(0xFF4CAF50)}) {
-    return SizedBox(
-      width: 48,
-      height: 48,
-      child: GlassCard(
-        padding: EdgeInsets.zero,
-        borderRadius: 16,
-        onTap: onTap,
-        child: Center(
-          child: Icon(icon, color: color),
-        ),
-      ),
-    );
-  }
-  void _showUnifiedTools() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.5,
-        minChildSize: 0.3,
-        maxChildSize: 0.9,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text('Nástroje a offline mapy', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ListView(
-                  controller: controller,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.play_circle_outline, color: Color(0xFF4CAF50)),
-                      title: const Text('Simulovat trasu'),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        _showSimulateSheet();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.assessment_outlined, color: Color(0xFF4CAF50)),
-                      title: const Text('Shrnutí trasy'),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        _showTrackingSummary(_trackingStateService.getSummary());
-                      },
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.download_for_offline_outlined, color: Color(0xFF4CAF50)),
-                      title: const Text('Stáhnout aktuální zobrazení'),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        _showOfflineManager();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.storage_rounded, color: Color(0xFF4CAF50)),
-                      title: const Text('Správa offline map'),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        _showOfflineManager();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -1410,13 +1087,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
+              const Center(child: StrakataSheetHandle()),
               const SizedBox(height: 12),
               const Text('Offline mapy', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),

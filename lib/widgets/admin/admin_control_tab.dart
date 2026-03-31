@@ -4,7 +4,6 @@ import '../../repositories/visit_repository.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:io';
-import '../../services/logging_service.dart';
 import 'admin_widgets.dart';
 import '../../widgets/ui/glass_ui.dart';
 import '../../widgets/ui/app_button.dart';

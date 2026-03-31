@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../config/app_colors.dart';
 import '../ui/app_button.dart';
-import 'package:geolocator/geolocator.dart';
+import '../ui/strakata_primitives.dart';
 
 class TrackingOnboardingSheet extends StatefulWidget {
   final VoidCallback? onComplete;
@@ -109,16 +108,7 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with 
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const Center(child: StrakataSheetHandle()),
           const SizedBox(height: 24),
           const Text(
             'Nastavení sledování',

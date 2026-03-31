@@ -7,16 +7,13 @@ import '../models/tracking_summary.dart';
 import '../widgets/route_thumbnail.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/ui/app_toast.dart';
+import '../widgets/ui/strakata_primitives.dart';
+import '../config/strakata_design_tokens.dart';
 import '../services/logging_service.dart';
-
-import '../services/logging_service.dart';
-
 import '../repositories/visit_repository.dart';
 import '../services/auth_service.dart';
 import '../services/database/database_service.dart';
 import '../services/cloudinary_service.dart';
-import 'webview_page.dart';
-import 'login_page.dart';
 import 'dynamic_form_page.dart';
 import '../services/vector_tile_provider.dart';
 import '../services/mapy_cz_download_service.dart';
@@ -114,47 +111,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
         centerTitle: false,
         scrolledUnderElevation: 2,
         shadowColor: Colors.black.withValues(alpha: 0.05),
-        title: const Text(
-          'Můj Profil',
-          style: TextStyle(
-            color: Color(0xFF111827),
-            fontWeight: FontWeight.w800,
-            fontSize: 24,
-            letterSpacing: -0.5,
-          ),
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: GestureDetector(
-              onTap: _showEditProfileSheet,
-              child: Hero(
-                tag: 'profile_avatar',
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2)),
-                    ],
-                  ),
-                  child: ClipOval(
-                    child: currentUser.image != null
-                        ? Image.network(
-                            currentUser.image!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Colors.grey),
-                          )
-                        : const Icon(Icons.person, color: Colors.grey),
-                  ),
-                ),
-              ),
+        title: Padding(
+          padding: const EdgeInsets.fromLTRB(StrakataLayout.pageHorizontalInset, 14, 8, 14),
+          child: const Text(
+            'Můj Profil',
+            style: TextStyle(
+              color: Color(0xFF111827),
+              fontWeight: FontWeight.w800,
+              fontSize: 24,
+              letterSpacing: -0.5,
             ),
           ),
-        ],
+        ),
       ),
       body: _isLoading
           ? const Center(
@@ -168,7 +136,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
               backgroundColor: Colors.white,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(
+                  StrakataLayout.pageHorizontalInset,
+                  28,
+                  StrakataLayout.pageHorizontalInset,
+                  24,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -178,7 +151,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
                     // Stats Section
                     Container(
-                      decoration: _cardDecoration(),
+                      decoration: StrakataSurface.cardDecoration(),
                       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
                       child: Row(
                         children: [
@@ -199,22 +172,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Moje Trasy',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF111827),
-                            letterSpacing: -0.5,
-                          ),
-                        ),
+                        const StrakataSectionTitle('Moje Trasy'),
                       ],
                     ),
                     const SizedBox(height: 16),
                     _userVisits.isEmpty
                         ? _buildEmptyRoutesState()
                         : SizedBox(
-                            height: 240, // Increased height for better accessibility
+                            height: 248,
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
                               itemCount: _userVisits.length > 5 ? 5 : _userVisits.length,
@@ -229,18 +194,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     const SizedBox(height: 32),
 
                     // Menu Section
-                    const Text(
-                      'Nastavení a Akce',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF111827),
-                        letterSpacing: -0.5,
-                      ),
-                    ),
+                    const StrakataSectionTitle('Nastavení a Akce'),
                     const SizedBox(height: 16),
                     Container(
-                      decoration: _cardDecoration(),
+                      decoration: StrakataSurface.cardDecoration(),
                       clipBehavior: Clip.antiAlias,
                       child: Column(
                         children: [
@@ -294,21 +251,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   // --- UI Builders ---
-
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.04),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
-      border: Border.all(color: Colors.grey[100]!),
-    );
-  }
 
   Widget _buildProfileHeaderCard(User? user) {
     return Container(
@@ -417,7 +359,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Widget _buildEmptyRoutesState() {
     return Container(
       width: double.infinity,
-      decoration: _cardDecoration(),
+      decoration: StrakataSurface.cardDecoration(),
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -446,7 +388,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Widget _buildRouteCard(VisitData visit) {
     return Container(
       width: 280, // Slightly wider
-      decoration: _cardDecoration(),
+      decoration: StrakataSurface.cardDecoration(),
       clipBehavior: Clip.antiAlias,
       child: Material(
         color: Colors.transparent,
@@ -542,23 +484,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
   // --- Logic Helpers (Bottom Sheets, Dialogs, etc.) ---
 
   void _showHelpAndAboutSheet() {
-    showModalBottomSheet(
+    showStrakataModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-            ),
+            const Center(child: StrakataSheetHandle()),
             const SizedBox(height: 24),
-            const Text('O aplikaci a podpora', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            const StrakataSheetTitle('O aplikaci a podpora'),
             const SizedBox(height: 16),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -591,10 +527,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
   
   void _showSupportContact() {
-    showModalBottomSheet(
+    showStrakataModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx2) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -602,7 +536,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           children: [
             const Icon(Icons.support_agent_rounded, size: 48, color: Color(0xFF2E7D32)),
             const SizedBox(height: 16),
-            const Text('Kontaktujte nás', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            const StrakataSheetTitle('Kontaktujte nás'),
             const SizedBox(height: 8),
             const Text('Máte dotaz nebo problém? Napište nám.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
             const SizedBox(height: 24),
@@ -626,13 +560,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   void _showOfflineMapsSheet() {
-    showModalBottomSheet(
+    showStrakataModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
       builder: (ctx) {
         return Padding(
           padding: EdgeInsets.only(
@@ -645,10 +575,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+              const Center(child: StrakataSheetHandle()),
               const SizedBox(height: 20),
-              
-              const Text('Offline mapy', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              const StrakataSheetTitle('Offline mapy'),
               const SizedBox(height: 16),
               
               Container(
@@ -790,8 +719,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         ),
         child: Column(
           children: [
-            // Handle bar
-            Container(margin: const EdgeInsets.only(top: 12), width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const StrakataSheetHandle(margin: EdgeInsets.only(top: 12)),
             
             // Header
             Padding(
@@ -998,11 +926,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
     File? selectedImageFile;
     bool isUploadingImage = false;
 
-    showModalBottomSheet(
+    showStrakataModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -1011,9 +937,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+                  const StrakataSheetHandle(),
                   const SizedBox(height: 20),
-                  const Text('Upravit profil', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                  const StrakataSheetTitle('Upravit profil'),
                   const SizedBox(height: 24),
                   
                   GestureDetector(

@@ -6,7 +6,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/tracking_state_service.dart';
 import '../services/haptic_service.dart';
-import '../widgets/ui/app_button.dart';
 import '../services/logging_service.dart';
 import '../widgets/ui/app_toast.dart';
 import '../utils/gps_utils.dart';
@@ -97,7 +96,7 @@ class GpsServices {
   static Future<void> initializeEnhancedGPSTracking(TrackingStateService trackingStateService) async {
     try {
       await trackingStateService.initialize();
-      print('Tracking State Service initialized');
+      // print('Tracking State Service initialized');
     } catch (e) {
       LoggingService().log('Tracking State Service initialization failed: $e', level: 'ERROR');
     }
@@ -114,7 +113,7 @@ class GpsServices {
       );
       if (currentPosition.heading != null) {
         setDeviceHeading(currentPosition.heading);
-        print('Initial compass heading: ${currentPosition.heading}°');
+        // print('Initial compass heading: ${currentPosition.heading}°');
       }
       
       // Start listening to compass updates
@@ -128,7 +127,7 @@ class GpsServices {
         (Position position) {
           if (position.heading != null) {
             setDeviceHeading(position.heading);
-            print('Compass heading: ${position.heading}°');
+            // print('Compass heading: ${position.heading}°');
           }
         },
         onError: (error) {
@@ -137,7 +136,7 @@ class GpsServices {
       );
       
       setCompassSubscription(compassSubscription);
-      print('Compass initialized');
+      // print('Compass initialized');
     } catch (e) {
       print('Failed to initialize compass: $e');
     }
@@ -272,9 +271,9 @@ class GpsServices {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       final permission = await Geolocator.checkPermission();
       
-      print('GPS Status:');
-      print('Service enabled: $serviceEnabled');
-      print('Permission: $permission');
+      // print('GPS Status:');
+      // print('Service enabled: $serviceEnabled');
+      // print('Permission: $permission');
       
       if (!serviceEnabled) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -369,12 +368,12 @@ class GpsServices {
 
   static void checkTrackingStatus(TrackingStateService trackingStateService) {
     final summary = trackingStateService.getSummary();
-    print('Tracking Status:');
-    print('Is tracking: ${trackingStateService.isTracking}');
-    print('Background service running: ${summary.isTracking}');
-    print('Track points: ${summary.trackPoints.length}');
-    print('Total distance: ${summary.totalDistance}m');
-    print('Duration: ${summary.duration}');
+    // print('Tracking Status:');
+    // print('Is tracking: ${trackingStateService.isTracking}');
+    // print('Background service running: ${summary.isTracking}');
+    // print('Track points: ${summary.trackPoints.length}');
+    // print('Total distance: ${summary.totalDistance}m');
+    // print('Duration: ${summary.duration}');
   }
 
   static Future<void> testCompass({

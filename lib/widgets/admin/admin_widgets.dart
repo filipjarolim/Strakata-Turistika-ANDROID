@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../ui/glass_ui.dart';
 import '../../models/visit_data.dart';
-import '../../services/scoring_config_service.dart';
 import '../../models/place_type_config.dart';
 import '../../services/form_field_service.dart' as form_service;
 import '../ui/app_button.dart';

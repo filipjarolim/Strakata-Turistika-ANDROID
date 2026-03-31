@@ -11,7 +11,7 @@ import '../services/offline_ui_bridge.dart';
 import '../widgets/ui/glass_ui.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/ui/app_toast.dart';
-import 'webview_page.dart';
+import '../widgets/ui/strakata_primitives.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -38,14 +38,10 @@ class SettingsPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                const Text(
+                const StrakataSectionTitle(
                   'Nastavení',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF1A1A1A),
-                    letterSpacing: -0.5,
-                  ),
+                  fontSize: 24,
+                  color: Color(0xFF1A1A1A),
                 ),
               ],
             ),
@@ -279,12 +275,9 @@ class SettingsPage extends StatelessWidget {
   }
 
   void _showOfflineMapsSheet(BuildContext context) {
-    showModalBottomSheet(
+    showStrakataModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (ctx) {
         // consume external open requests
         OfflineUiBridge.consumeOpenManager();
@@ -299,7 +292,9 @@ class SettingsPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Offline mapy', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const StrakataSheetHandle(),
+              const SizedBox(height: 12),
+              const StrakataSheetTitle('Offline mapy', fontSize: 18),
               const SizedBox(height: 12),
               FutureBuilder<Map<String, dynamic>>(
                 future: VectorTileProvider.getDetailedStats(),
@@ -406,12 +401,9 @@ class SettingsPage extends StatelessWidget {
     final user = AuthService.currentUser;
     final nameController = TextEditingController(text: user?.name ?? '');
     final dogNameController = TextEditingController(text: user?.dogName ?? '');
-    showModalBottomSheet(
+    showStrakataModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (ctx) {
         return Padding(
           padding: EdgeInsets.only(
@@ -424,7 +416,9 @@ class SettingsPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Upravit profil', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const StrakataSheetHandle(),
+              const SizedBox(height: 12),
+              const StrakataSheetTitle('Upravit profil', fontSize: 18),
               const SizedBox(height: 12),
               TextField(
                 controller: nameController,
@@ -489,44 +483,6 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  void _showDisplayNameDialog(BuildContext context) {
-    final controller = TextEditingController(text: AuthService.currentUser?.name ?? '');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Zobrazované jméno'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Jméno',
-          ),
-        ),
-        actions: [
-          AppButton(
-            onPressed: () => Navigator.pop(ctx),
-            text: 'Zrušit',
-            type: AppButtonType.ghost,
-          ),
-          AppButton(
-            onPressed: () async {
-              final newName = controller.text.trim();
-              final user = AuthService.currentUser;
-              if (user != null && newName.isNotEmpty) {
-                await _updateUserName(user.id, newName);
-                // ignore: use_build_context_synchronously
-                Navigator.pop(ctx);
-                // ignore: use_build_context_synchronously
-                AppToast.showSuccess(context, 'Jméno aktualizováno');
-              }
-            },
-            text: 'Uložit',
-            type: AppButtonType.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _updateUserName(String userId, String name) async {
     try {
       final users = await DatabaseService().getCollection('users');
@@ -581,13 +537,11 @@ class SettingsPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        StrakataSectionTitle(
           title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF333333),
-          ),
+          fontSize: 18,
+          color: const Color(0xFF333333),
+          letterSpacing: 0,
         ),
         const SizedBox(height: 16),
         ...items,
@@ -656,126 +610,4 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  void _showDogNameDialog(BuildContext context, String currentDogName) {
-    final dogNameController = TextEditingController(text: currentDogName);
-    
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.pets,
-                  color: Color(0xFF4CAF50),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Jméno psa',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF333333),
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Zadejte jméno svého psa pro personalizaci vašeho zážitku',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF666666),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: dogNameController,
-                decoration: InputDecoration(
-                  labelText: 'Jméno psa',
-                  hintText: 'Zadejte jméno svého psa',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF4CAF50), width: 2),
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFFFAFAFA),
-                  prefixIcon: const Icon(
-                    Icons.pets,
-                    color: Color(0xFF4CAF50),
-                  ),
-                ),
-                textCapitalization: TextCapitalization.words,
-              ),
-            ],
-          ),
-          actions: [
-            AppButton(
-              onPressed: () => Navigator.of(context).pop(),
-              text: 'Zrušit',
-              type: AppButtonType.ghost,
-            ),
-            AppButton(
-              onPressed: () async {
-                final newDogName = dogNameController.text.trim();
-                final currentUser = AuthService.currentUser;
-                
-                if (currentUser != null) {
-                  final success = await AuthService.updateUserDogName(
-                    currentUser.id,
-                    newDogName,
-                  );
-                  
-                  Navigator.of(context).pop();
-                  
-                  if (success) {
-                    if (context.mounted) {
-                      AppToast.showSuccess(
-                        context, 
-                        newDogName.isEmpty 
-                          ? 'Jméno psa odstraněno'
-                          : 'Jméno psa aktualizováno na "$newDogName"',
-                      );
-                      // Refresh the page to show updated dog name
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (context) => const SettingsPage()),
-                      );
-                    }
-                  } else {
-                    if (context.mounted) {
-                      AppToast.showError(context, 'Nepodařilo se aktualizovat jméno psa');
-                    }
-                  }
-                }
-              },
-              text: 'Uložit',
-              type: AppButtonType.primary,
-            ),
-          ],
-        );
-      },
-    );
-  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'config/app_theme.dart';
 import 'config/app_colors.dart';
+import 'config/strakata_design_tokens.dart';
 import 'animations/app_animations.dart';
 import 'widgets/tab_switch.dart';
 import 'widgets/custom_bottom_nav_bar.dart';
@@ -22,7 +23,9 @@ import 'services/auth_service.dart';
 import 'pages/onboarding/auth_gate.dart';
 import 'pages/login_page.dart';
 import 'pages/settings_page.dart';
-import 'pages/admin/admin_review_page.dart';
+import 'pages/admin/admin_dashboard_home.dart';
+import 'pages/admin/admin_news_list_page.dart';
+import 'pages/admin/admin_visit_list_page.dart';
 import 'pages/user_profile_page.dart';
 
 import 'pages/dynamic_form_page.dart';
@@ -75,27 +78,31 @@ void main() async {
 
   // Initialize new services
   try {
+    // Parallelize independent service initialization
+    await Future.wait([
+      ErrorRecoveryService().initialize(),
+      
+      // Notifications: background handler and service init
+      (() async {
+        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        await NotificationsService().initialize();
+      })(),
 
-    await ErrorRecoveryService().initialize();
-    // Notifications: background handler and service init
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    await NotificationsService().initialize();
-    
-    // Initialize VectorTileProvider for offline maps
-    try {
-      await VectorTileProvider.initialize();
-    } catch (e) {
-      print('⚠️ VectorTileProvider init failed: $e');
-    }
-    
-    // Initialize GPS Tracking Service immediately (even if not on map tab)
-    // This allows pre-loading location and ensures permissions are checked
-    try {
-      final trackingStateService = TrackingStateService();
-      await GpsServices.initializeEnhancedGPSTracking(trackingStateService);
-    } catch (e) {
-      print('⚠️ Extended GPS init failed in main: $e');
-    }
+      // Initialize VectorTileProvider for offline maps
+      VectorTileProvider.initialize().catchError((e) {
+        print('⚠️ VectorTileProvider init failed: $e');
+      }),
+
+      // Initialize GPS Tracking Service
+      (() async {
+        try {
+          final trackingStateService = TrackingStateService();
+          await GpsServices.initializeEnhancedGPSTracking(trackingStateService);
+        } catch (e) {
+          print('⚠️ Extended GPS init failed in main: $e');
+        }
+      })(),
+    ]);
   } catch (e, st) {
     FirebaseCrashlytics.instance.recordError(e, st, reason: 'Local services init failed');
   }
@@ -128,7 +135,9 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginPage(),
         '/settings': (context) => const SettingsPage(),
-        '/admin-review': (context) => const AdminReviewPage(),
+        '/admin-review': (context) => const AdminDashboardHome(), // Replaced historic route
+        '/admin-news': (context) => const AdminNewsListPage(), // New route
+        '/admin-visits': (context) => const AdminVisitListPage(), // New route
         '/user-profile': (context) => const UserProfilePage(),
         '/visit-data-form': (context) {
           // Create a default tracking summary for the route
@@ -169,22 +178,10 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, WidgetsBindingObserver {
   int _currentIndex = 0;
-  int _previousIndex = 0;
-  int _slideDirection = 1; // 1 = slide from right, -1 = slide from left
-  
 
-
-  
   // Notification handling
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
   
-  final List<Widget> _pages = [
-    const ExploreTab(),
-    const ResultsPage(),
-    const MapTab(),
-    const UserProfilePage(),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -306,12 +303,8 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
     // Provide haptic feedback for navigation
     await HapticService.navigationTap();
     
-    // Update the current index to trigger the animation
     setState(() {
-      _previousIndex = _currentIndex;
-      _slideDirection = index > _previousIndex ? 1 : -1;
       _currentIndex = index;
-
     });
   }
 
@@ -320,9 +313,18 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
     return Stack(
       children: [
         Positioned.fill(
-          child: Image.asset(
-            'assets/mainBackground_optimized.png',
-            fit: BoxFit.cover,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  context.strakataTokens?.heroOverlayTop ?? AppColors.heroOverlayTop,
+                  AppColors.pageBg,
+                  AppColors.surfaceMuted,
+                ],
+              ),
+            ),
           ),
         ),
         Positioned.fill(
@@ -354,7 +356,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
             duration: AppAnimations.durationPageTransition,
             curve: AppAnimations.curveStandard,
             opacity: _currentIndex == 0 ? 0.0 : 1.0,
-            child: Container(color: const Color(0xFFFEFEFE)),
+            child: Container(color: Theme.of(context).colorScheme.surface),
           ),
         ),
         Positioned.fill(
@@ -396,40 +398,15 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
                 ],
               ),
             ),
-            bottomNavigationBar: CustomBottomNavBar(
-              currentIndex: _currentIndex,
-              onTap: _onNavItemTapped,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTabBody(int index) {
-    return Stack(
-      children: [
-        if (index == 0)
-          Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withOpacity(0.90),
-                  Colors.black.withOpacity(0.75),
-                  Colors.black.withOpacity(0.45),
-                  Colors.transparent,
-                  Colors.transparent,
-                  Colors.black.withOpacity(0.2),
-                ],
-                stops: const [0.0, 0.15, 0.32, 0.45, 0.8, 1.0],
+            bottomNavigationBar: Material(
+              color: Colors.transparent,
+              child: CustomBottomNavBar(
+                currentIndex: _currentIndex,
+                onTap: _onNavItemTapped,
               ),
             ),
           ),
-        _pages[index],
+        ),
       ],
     );
   }

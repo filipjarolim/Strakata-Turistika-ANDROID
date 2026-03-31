@@ -1,22 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../repositories/visit_repository.dart';
-import '../models/visit_data.dart';
 import '../models/leaderboard_entry.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import '../services/error_recovery_service.dart';
 import 'user_visits_page.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../config/app_colors.dart';
-import '../widgets/ui/app_toast.dart';
-import '../widgets/route_thumbnail.dart';
-// import 'visit_data_form_page.dart'; // Removed
-import 'dynamic_form_page.dart';
-import '../models/tracking_summary.dart';
-import '../services/auth_service.dart';
-import '../utils/type_converter.dart';
+import '../config/strakata_design_tokens.dart';
+import '../widgets/ui/strakata_primitives.dart';
 
 class ResultsPage extends StatefulWidget {
   const ResultsPage({super.key});
@@ -25,204 +16,20 @@ class ResultsPage extends StatefulWidget {
   State<ResultsPage> createState() => _ResultsPageState();
 }
 
-class _ResultsScreenshotPreview extends StatelessWidget {
-  final Map<String, dynamic> photo;
-  const _ResultsScreenshotPreview({Key? key, required this.photo}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    final url = (photo['url'] ?? '').toString();
-    
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.network(
-              url,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => Container(
-                color: const Color(0xFFF5F6F7),
-                child: const Center(
-                  child: Icon(Icons.broken_image, color: Color(0xFF9E9E9E), size: 48),
-                ),
-              ),
-            ),
-            // Badge
-            Positioned(
-              top: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2196F3).withValues(alpha: 0.95),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.watch, size: 16, color: Colors.white),
-                    SizedBox(width: 6),
-                    Text(
-                      'GPS Screenshot z hodinek',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ResultsRoutePreview extends StatelessWidget {
-  final List<dynamic> trackPoints;
-  const _ResultsRoutePreview({Key? key, required this.trackPoints}) : super(key: key);
-
-  LatLng _center() {
-    if (trackPoints.isEmpty) return const LatLng(49.8175, 15.4730);
-    double lat = 0, lng = 0;
-    for (final p in trackPoints) {
-      lat += TypeConverter.toDoubleWithDefault(p['latitude'], 0.0);
-      lng += TypeConverter.toDoubleWithDefault(p['longitude'], 0.0);
-    }
-    lat /= trackPoints.length;
-    lng /= trackPoints.length;
-    return LatLng(lat, lng);
-  }
-
-  double _zoom() {
-    if (trackPoints.length < 2) return 13.0;
-    double minLat = TypeConverter.toDoubleWithDefault(trackPoints.first['latitude'], 0.0);
-    double maxLat = minLat;
-    double minLng = TypeConverter.toDoubleWithDefault(trackPoints.first['longitude'], 0.0);
-    double maxLng = minLng;
-    for (final p in trackPoints) {
-      final la = TypeConverter.toDoubleWithDefault(p['latitude'], 0.0);
-      final lo = TypeConverter.toDoubleWithDefault(p['longitude'], 0.0);
-      if (la < minLat) minLat = la;
-      if (la > maxLat) maxLat = la;
-      if (lo < minLng) minLng = lo;
-      if (lo > maxLng) maxLng = lo;
-    }
-    final span = (maxLat - minLat).abs() > (maxLng - minLng).abs()
-        ? (maxLat - minLat).abs()
-        : (maxLng - minLng).abs();
-    if (span > 0.1) return 10.0;
-    if (span > 0.05) return 11.0;
-    if (span > 0.01) return 12.0;
-    if (span > 0.005) return 13.0;
-    return 14.0;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final pts = trackPoints
-        .map((p) => LatLng(
-          TypeConverter.toDoubleWithDefault(p['latitude'], 0.0), 
-          TypeConverter.toDoubleWithDefault(p['longitude'], 0.0)
-        ))
-        .toList();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: FlutterMap(
-          mapController: MapController(),
-          options: MapOptions(
-            initialCenter: _center(),
-            initialZoom: _zoom(),
-            interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-          ),
-          children: [
-            FutureBuilder<bool>(
-              future: ErrorRecoveryService().isNetworkAvailable(),
-              builder: (context, snapshot) {
-                if (snapshot.data == true) {
-                  return TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'cz.strakata.turistika.strakataturistikaandroidapp',
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-            if (pts.isNotEmpty)
-              PolylineLayer(
-                polylines: [
-                  Polyline(points: pts, strokeWidth: 6, color: const Color(0xFF4CAF50)),
-                ],
-              ),
-            if (pts.isNotEmpty)
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: pts.first,
-                    width: 22,
-                    height: 22,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF4CAF50),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: const Icon(Icons.trip_origin, color: Colors.white, size: 12),
-                    ),
-                  ),
-                  if (pts.length > 1)
-                    Marker(
-                      point: pts.last,
-                      width: 22,
-                      height: 22,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2E7D32),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Icon(Icons.location_on, color: Colors.white, size: 12),
-                      ),
-                    ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin, WidgetsBindingObserver {
   // Data
   final VisitRepository _visitRepository = VisitRepository();
   List<int> availableSeasons = [];
   int? selectedSeason;
 
-  // Paging state for the selected season
-  final List<VisitData> _items = [];
+  // Leaderboard data for the selected season
   final List<LeaderboardEntry> _leaders = [];
 
-  int _page = 1;
-  final int _limit = 50; // tune for performance
   bool _hasMore = true;
   bool _isInitialLoading = true;
   bool _isLoadingMore = false;
-  String _sortBy = 'points';
-  bool _sortDesc = true;
-  // Always use approved results
-  final VisitState _effectiveState = VisitState.APPROVED;
   String _searchQuery = '';
   Timer? _searchDebounce;
-  bool _showLeaderboard = true; // always show leaderboard only
   bool _sortLeaderboardByVisits = false;
   
   // Network state
@@ -306,7 +113,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     });
     
     // When coming back online, reload data if we have no data
-    if (online && (_items.isEmpty && _leaders.isEmpty)) {
+    if (online && _leaders.isEmpty) {
       _loadSeasons();
     }
   }
@@ -354,9 +161,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     if (selectedSeason == null) return;
     setState(() {
       _isInitialLoading = true;
-      _items.clear();
       _leaders.clear();
-      _page = 1;
       _hasMore = true;
     });
     if (resetScroll) {
@@ -373,40 +178,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     });
   }
 
-  Future<void> _loadNextPage() async {
-    if (!_hasMore || _isLoadingMore || selectedSeason == null) return;
-    setState(() {
-      _isLoadingMore = true;
-    });
-    try {
-      final result = await _visitRepository.getVisits(
-        page: _page,
-        limit: _limit,
-        seasonYear: selectedSeason,
-        // state: _effectiveState, // Logic moved to onlyApproved flag or custom query if needed, keeping simple matching for now
-        onlyApproved: _effectiveState == VisitState.APPROVED,
-        searchQuery: _searchQuery.isEmpty ? null : _searchQuery,
-        // sortBy: _sortBy, // Repo defaults to date desc for now, add sorting to repo if needed later
-      );
-      final data = (result['data'] as List<dynamic>).cast<VisitData>();
-      final hasMore = result['hasMore'] == true;
-      if (!mounted) return;
-      setState(() {
-        _items.addAll(data);
-        _hasMore = hasMore;
-        _page += 1;
-        _isLoadingMore = false;
-      });
-    } catch (e) {
-      // ignore: avoid_print
-      print('❌ Error loading page: $e');
-      if (!mounted) return;
-      setState(() {
-        _isLoadingMore = false;
-      });
-      _showErrorSnackBar('Chyba načítání výsledků');
-    }
-  }
 
   Future<void> _loadNextLeaderboardPage() async {
     if (_isLoadingMore || selectedSeason == null) return;
@@ -442,74 +213,9 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     }
   }
 
-  void _showErrorSnackBar(String message) {
-    AppToast.showError(context, message);
-  }
 
-  String _getStateText(VisitState state) {
-    switch (state) {
-      case VisitState.DRAFT:
-        return 'Koncept';
-      case VisitState.PENDING_REVIEW:
-        return 'Čekající';
-      case VisitState.APPROVED:
-        return 'Schválené';
-      case VisitState.REJECTED:
-        return 'Odmítnuté';
-    }
-  }
 
-  Color _getStateColor(VisitState state) {
-    switch (state) {
-      case VisitState.DRAFT:
-        return const Color(0xFF666666);
-      case VisitState.PENDING_REVIEW:
-        return const Color(0xFFFF9800);
-      case VisitState.APPROVED:
-        return const Color(0xFF4CAF50);
-      case VisitState.REJECTED:
-        return const Color(0xFFF44336);
-    }
-  }
 
-  Future<void> _handleEditVisit(VisitData visit) async {
-    // Construct TrackingSummary from visit data
-    final routeData = visit.route ?? {};
-    final trackPointsData = (routeData['trackPoints'] as List?) ?? [];
-    
-    final List<TrackPoint> trackPoints = trackPointsData.map((p) {
-       return TrackPoint.fromJson(Map<String, dynamic>.from(p));
-    }).toList();
-    
-    final summary = TrackingSummary(
-      isTracking: false,
-      startTime: visit.visitDate ?? DateTime.now(),
-      // Use duration to estimate end time
- 
-      duration: Duration(seconds: TypeConverter.toIntWithDefault(routeData['duration'], 0)),
-      totalDistance: TypeConverter.toDoubleWithDefault(routeData['totalDistance'], 0.0),
-      averageSpeed: TypeConverter.toDoubleWithDefault(routeData['averageSpeed'], 0.0),
-      maxSpeed: TypeConverter.toDoubleWithDefault(routeData['maxSpeed'], 0.0),
-      totalElevationGain: TypeConverter.toDoubleWithDefault(routeData['totalElevationGain'], 0.0),
-      totalElevationLoss: TypeConverter.toDoubleWithDefault(routeData['totalElevationLoss'], 0.0),
-      minAltitude: TypeConverter.toDouble(routeData['minAltitude']),
-      maxAltitude: TypeConverter.toDouble(routeData['maxAltitude']),
-      trackPoints: trackPoints,
-    );
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => DynamicFormPage(
-          slug: 'gps-tracking',
-          trackingSummary: summary,
-          existingVisit: visit,
-        ),
-      ),
-    );
-    
-    // Always reload to reflect changes
-    _reloadForCurrentFilters(resetScroll: false);
-  }
 
 
 
@@ -520,9 +226,9 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6F7),
       appBar: AppBar(
-        toolbarHeight: 70,
+        toolbarHeight: 78,
         title: Padding(
-          padding: const EdgeInsets.only(top: 8.0),
+          padding: const EdgeInsets.fromLTRB(StrakataLayout.pageHorizontalInset, 12, 8, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -536,12 +242,15 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                 ),
               ),
               if (selectedSeason != null)
-                Row(
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -553,7 +262,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
                     Text(
                       '• Nejlepší turisti',
                       style: TextStyle(
@@ -592,7 +300,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
           Container(
             margin: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(100),
             ),
             child: IconButton(
@@ -638,7 +346,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2E7D32).withOpacity(0.1),
+                  color: const Color(0xFF2E7D32).withValues(alpha: 0.1),
                   blurRadius: 32,
                   offset: const Offset(0, 16),
                 ),
@@ -647,7 +355,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
             child: Icon(
               Icons.emoji_events_outlined,
               size: 64,
-              color: AppColors.primary.withOpacity(0.8),
+              color: AppColors.primary.withValues(alpha: 0.8),
             ),
           ),
           const SizedBox(height: 24),
@@ -675,45 +383,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildResultsList() {
-    return _fadeAnimation != null
-        ? FadeTransition(
-            opacity: _fadeAnimation!,
-            child: ListView.builder(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 150),
-              itemCount: _items.isEmpty ? 1 : _items.length + 1,
-              itemBuilder: (context, index) {
-                if (index < _items.length) {
-                  return _buildResultCard(_items[index]);
-                }
-                // loader/footer
-                if (_isLoadingMore) {
-                  return _buildLoadMoreSkeleton();
-                }
-                if (!_hasMore && _items.isNotEmpty) {
-                  return _buildEndOfList();
-                }
-                
-                // If list is completely empty AND we are not initially loading (handled by _buildInitialSkeleton), show empty state inside the list
-                if (_items.isEmpty && !_isInitialLoading && !_isLoadingMore) {
-                  return SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.6,
-                    child: _buildEmptyState(),
-                  );
-                }
-                
-                return const SizedBox.shrink();
-              },
-            ),
-          )
-        : const Center(
-            child: CircularProgressIndicator(
-              color: Color(0xFF4CAF50),
-            ),
-          );
-  }
 
   Widget _buildLeaderboardList() {
     return _fadeAnimation != null
@@ -722,7 +391,12 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
             child: ListView.builder(
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 150),
+              padding: EdgeInsets.fromLTRB(
+                StrakataLayout.pageHorizontalInset,
+                20,
+                StrakataLayout.pageHorizontalInset,
+                120,
+              ),
               itemCount: _leaders.isEmpty ? 1 : _leaders.length + 1,
               itemBuilder: (context, index) {
                 if (index < _leaders.length) {
@@ -748,376 +422,10 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
           );
   }
 
-  Widget _buildResultCard(VisitData result) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () async {
-            final full = await _visitRepository.getVisitById(result.id);
-            if (!mounted) return;
-            _showRouteDetailsSheet(full ?? result);
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Thumbnail Area with Overlays
-              Stack(
-                children: [
-                  RouteThumbnail(
-                    visit: result,
-                    height: 150,
-                    borderRadius: 0,
-                  ),
-                  
-                  // State Badge (Top Right)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.95),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: Offset(0, 2))
-                        ]
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                           Container(
-                             width: 8, height: 8,
-                             decoration: BoxDecoration(
-                               color: _getStateColor(result.state),
-                               shape: BoxShape.circle,
-                             ),
-                           ),
-                           const SizedBox(width: 6),
-                           Text(
-                            _getStateText(result.state),
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1A1A1A),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
 
-                  // Points Badge (Bottom Left)
-                  Positioned(
-                    bottom: 12,
-                    left: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFD700), // Gold
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: Offset(0, 2))
-                        ]
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.star, color: Colors.black, size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${result.points.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              
-              // Content Area
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                     // Title
-                     Text(
-                        _getShortVisitTitle(result),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A1A1A),
-                          letterSpacing: -0.5,
-                        ),
-                     ),
-                     const SizedBox(height: 6),
-                     
-                     // User & Date & Actions
-                     Row(
-                       children: [
-                         const Icon(Icons.person_outline, size: 14, color: Color(0xFF999999)),
-                         const SizedBox(width: 4),
-                         Flexible(
-                           child: Text(
-                              _displayUserName(result),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13, color: Color(0xFF666666)),
-                           ),
-                         ),
-                         const SizedBox(width: 12),
-                         const Icon(Icons.calendar_today_outlined, size: 13, color: Color(0xFF999999)),
-                         const SizedBox(width: 4),
-                         if (result.visitDate != null)
-                           Text(
-                             '${result.visitDate!.day}.${result.visitDate!.month}.${result.visitDate!.year}',
-                             style: const TextStyle(fontSize: 13, color: Color(0xFF666666)),
-                           ),
-                           
-                         const Spacer(),
-                         
-                         // Trasa Button
-                         if (result.route != null && (result.route!['trackPoints'] as List?)?.isNotEmpty == true)
-                          Container(
-                            margin: const EdgeInsets.only(left: 8),
-                            child: InkWell(
-                              onTap: () => _showRoutePreview(result),
-                              borderRadius: BorderRadius.circular(8),
-                              child: Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Icon(Icons.map_outlined, size: 20, color: AppColors.primary),
-                              ),
-                            ),
-                          ),
 
-                         // Admin Edit Button
-                         if (AuthService.currentUser?.role == UserRole.ADMIN.name)
-                             Container(
-                               margin: const EdgeInsets.only(left: 4),
-                               child: InkWell(
-                                 onTap: () => _handleEditVisit(result),
-                                 borderRadius: BorderRadius.circular(8),
-                                 child: const Padding(
-                                   padding: EdgeInsets.all(6),
-                                   child: Icon(Icons.edit_outlined, size: 20, color: Colors.blue),
-                                 ),
-                               ),
-                             ),
-                       ],
-                     ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  String _displayUserName(VisitData v) {
-    // Prefer displayName computed from JOIN with User collection
-    if (v.displayName != null && v.displayName!.isNotEmpty) {
-      return v.displayName!;
-    }
-    
-    // Fallback to user.name from JOIN data
-    if (v.user != null && v.user!['name'] != null && v.user!['name'].toString().isNotEmpty) {
-      return v.user!['name'].toString();
-    }
-    
-    // Legacy fallback to extraPoints names
-    final fromExtra = (v.extraPoints['fullName'] ?? v.extraPoints['displayName'] ?? '').toString().trim();
-    if (fromExtra.isNotEmpty) return fromExtra;
-    
-    // Last resort fallback
-    final uid = (v.userId ?? '').trim();
-    return uid.isNotEmpty ? uid : 'Neznámý uživatel';
-  }
 
-  String _getShortVisitTitle(VisitData visit) {
-    // Prefer route title if available and not too long
-    if (visit.routeTitle != null && visit.routeTitle!.isNotEmpty && visit.routeTitle!.length <= 50) {
-      return visit.routeTitle!;
-    }
-    
-    // If no route title or too long, use visited places
-    final places = visit.visitedPlaces.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
-    if (places.isEmpty) return 'Bez názvu trasy';
-    
-    // Show first 3 places and add ellipsis if more
-    if (places.length <= 3) {
-      return places.join(', ');
-    } else {
-      return '${places.take(3).join(', ')}...';
-    }
-  }
-
-  Widget _buildPlaceTags(String places) {
-    final placeList = places.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
-    if (placeList.isEmpty) return const SizedBox.shrink();
-    
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: placeList.map((place) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFF4CAF50).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF4CAF50).withOpacity(0.3)),
-        ),
-        child: Text(
-          place,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Color(0xFF4CAF50),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      )).toList(),
-    );
-  }
-
-  void _showRoutePreview(VisitData visit) {
-    final track = (visit.route?['trackPoints'] as List?) ?? [];
-    
-    // Check if this is a screenshot upload (no GPS data)
-    final legacy = visit.photos ?? [];
-    final firstPhoto = legacy.isNotEmpty ? legacy.first : null;
-    final isScreenshot = track.isEmpty && firstPhoto != null && (
-      (firstPhoto['title']?.toString().toLowerCase().contains('screenshot') ?? false) ||
-      (firstPhoto['title']?.toString().toLowerCase().contains('watch') ?? false) ||
-      (firstPhoto['description']?.toString().toLowerCase().contains('screenshot') ?? false)
-    );
-    
-    if (track.isEmpty && !isScreenshot) return;
-    
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.75,
-          margin: const EdgeInsets.only(top: 64),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 40,
-                offset: Offset(0, -10),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2.5),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isScreenshot ? 'GPS Screenshot' : 'Náhled trasy', 
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF111827),
-                              letterSpacing: -0.5,
-                            )
-                          ),
-                          if (!isScreenshot)
-                            const SizedBox(height: 4),
-                          if (!isScreenshot)
-                            Text(
-                              'Detail zaznamenané trasy',
-                              style: TextStyle(fontSize: 14, color: Colors.grey[500], fontWeight: FontWeight.w500),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFD700).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFFFD700).withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFFD700)),
-                          const SizedBox(width: 4),
-                          Text(
-                            visit.points.toStringAsFixed(1),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                              color: Color(0xFF1A1A1A),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 24),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.grey[200]!),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: isScreenshot 
-                    ? _ResultsScreenshotPreview(photo: firstPhoto!)
-                    : _ResultsRoutePreview(trackPoints: track),
-                ),
-              ),
-              const SizedBox(height: 32),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildLeaderCard(int rank, LeaderboardEntry entry) {
     final Color badgeColor = rank == 1
@@ -1139,12 +447,12 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF111827).withOpacity(0.04),
+            color: const Color(0xFF111827).withValues(alpha: 0.04),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
-        border: Border.all(color: Colors.white.withOpacity(0.5)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
       ),
       child: Material(
         color: Colors.transparent,
@@ -1166,7 +474,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                     shape: BoxShape.circle,
                     border: rankBorder,
                     boxShadow: rank <= 3 
-                      ? [BoxShadow(color: badgeColor.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4))] 
+                      ? [BoxShadow(color: badgeColor.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 4))] 
                       : null,
                   ),
                   child: Text(
@@ -1186,7 +494,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: rank <= 3 
-                      ? LinearGradient(colors: [badgeColor, badgeColor.withOpacity(0.5)], begin: Alignment.topLeft, end: Alignment.bottomRight)
+                      ? LinearGradient(colors: [badgeColor, badgeColor.withValues(alpha: 0.5)], begin: Alignment.topLeft, end: Alignment.bottomRight)
                       : null,
                   ),
                   child: CircleAvatar(
@@ -1223,7 +531,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.08),
+                                color: AppColors.primary.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(100),
                               ),
                               child: Row(
@@ -1292,66 +600,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildFilters() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Seasons chips
-        SizedBox(
-          height: 40,
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
-            itemCount: availableSeasons.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final season = availableSeasons[index];
-              final selected = season == selectedSeason;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                child: FilterChip(
-                  label: Text(
-                    'Sezóna $season',
-                    style: TextStyle(
-                      color: selected ? Colors.white : const Color(0xFF4B5563),
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  selected: selected,
-                  showCheckmark: false,
-                  backgroundColor: Colors.white,
-                  selectedColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(100),
-                    side: BorderSide(
-                      color: selected ? Colors.transparent : Colors.grey.shade200,
-                      width: 1.5,
-                    ),
-                  ),
-                  elevation: selected ? 4 : 0,
-                  shadowColor: AppColors.primary.withOpacity(0.4),
-                  onSelected: (value) async {
-                    if (value && selectedSeason != season) {
-                      setState(() => selectedSeason = season);
-                      await _reloadForCurrentFilters(resetScroll: true);
-                    }
-                  },
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 12),
-        Builder(builder: (context) {
-          final screenWidth = MediaQuery.of(context).size.width;
-          final double searchWidth = screenWidth.clamp(220.0, 480.0);
-          return const SizedBox.shrink();
-        }),
-      ],
-    );
-  }
 
   Widget _buildInitialSkeleton() {
     return ListView.builder(
@@ -1435,325 +683,12 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     );
   }
 
-  void _showRouteDetailsSheet(VisitData visit) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE5E7EB),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: _getStateColor(visit.state).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Icon(
-                      _getStateIcon(visit.state),
-                      color: _getStateColor(visit.state),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _getShortVisitTitle(visit),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF111827),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _getStateText(visit.state),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: _getStateColor(visit.state),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDetailRow(Icons.star_outline, 'Body', '${visit.points.toStringAsFixed(1)} bodů'),
-                    if (visit.route != null && visit.route!['totalDistance'] != null)
-                      _buildDetailRow(Icons.route_outlined, 'Vzdálenost', '${((visit.route!['totalDistance'] as num) / 1000).toStringAsFixed(1)} km'),
-                    if (visit.visitDate != null)
-                      _buildDetailRow(Icons.calendar_today_outlined, 'Datum návštěvy', '${visit.visitDate!.day}.${visit.visitDate!.month}.${visit.visitDate!.year}'),
-                    if (visit.year != 0)
-                      _buildDetailRow(Icons.calendar_month, 'Sezóna', '${visit.year}'),
-                    _buildClickableUserRow(visit),
-                    if (visit.dogName != null && visit.dogName!.isNotEmpty)
-                      _buildDetailRow(Icons.pets, 'Jméno psa', visit.dogName!),
-                    if (visit.routeDescription != null && visit.routeDescription!.isNotEmpty)
-                      _buildDetailRow(Icons.description_outlined, 'Popis trasy', visit.routeDescription!),
-                    // Navštívená místa jako tagy
-                    if (visit.visitedPlaces.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.location_on_outlined, color: const Color(0xFF6B7280), size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Navštívená místa',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF111827),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildPlaceTags(visit.visitedPlaces),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (visit.dogNotAllowed != null && visit.dogNotAllowed!.isNotEmpty)
-                      _buildDetailRow(Icons.warning_outlined, 'Pes není povolen', visit.dogNotAllowed!),
-                    if (visit.rejectionReason != null && visit.rejectionReason!.isNotEmpty)
-                      _buildDetailRow(Icons.cancel_outlined, 'Důvod odmítnutí', visit.rejectionReason!),
-                    if (visit.places.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Navštívená místa',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF111827),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ...visit.places.map((place) => Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _getPlaceTypeIcon(place.type),
-                              color: const Color(0xFF6B7280),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                place.name,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF111827),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )),
-                    ],
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFF6B7280), size: 20),
-          const SizedBox(width: 12),
-          Text(
-            '$label: ',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF6B7280),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF111827),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  IconData _getPlaceTypeIcon(PlaceType type) {
-    switch (type) {
-      case PlaceType.PEAK:
-        return Icons.landscape;
-      case PlaceType.TOWER:
-        return Icons.location_city;
-      case PlaceType.TREE:
-        return Icons.park;
-      case PlaceType.OTHER:
-        return Icons.place;
-    }
-  }
 
-  IconData _getStateIcon(VisitState state) {
-    switch (state) {
-      case VisitState.APPROVED:
-        return Icons.check_circle_outline;
-      case VisitState.PENDING_REVIEW:
-        return Icons.schedule;
-      case VisitState.REJECTED:
-        return Icons.cancel_outlined;
-      case VisitState.DRAFT:
-        return Icons.edit_outlined;
-    }
-  }
 
-  Widget _buildModernIconButton({
-    required VoidCallback onPressed,
-    required IconData icon,
-    required String tooltip,
-  }) {
-    return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(24),
-          child: Icon(
-            icon,
-            color: const Color(0xFF6B7280),
-            size: 20,
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildClickableUserRow(VisitData visit) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: InkWell(
-        onTap: () => _showUserVisits(visit),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              Icon(Icons.person, color: const Color(0xFF6B7280), size: 20),
-              const SizedBox(width: 12),
-              const Text(
-                'Uživatel: ',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF6B7280),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  _displayUserName(visit),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF4CAF50),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: Color(0xFF6B7280),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
-  void _showUserVisits(VisitData visit) {
-    final userId = visit.userId;
-    if (userId == null || userId.isEmpty) return;
-    
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => UserVisitsPage(
-          userId: userId,
-          userName: _displayUserName(visit),
-        ),
-      ),
-    );
-  }
 
   void _showUserVisitsFromLeaderboard(LeaderboardEntry entry) {
     final userId = entry.userId;
@@ -1791,28 +726,17 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
-              child: Container(
-                width: 40,
+              child: StrakataSheetHandle(
                 height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2.5),
-                ),
+                borderRadius: 2.5,
+                color: Colors.grey[300],
               ),
             ),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Filtrovat výsledky',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF111827),
-                    letterSpacing: -0.5,
-                  ),
-                ),
+                const StrakataSectionTitle('Filtrovat výsledky', fontSize: 22),
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.grey[100],
@@ -1850,7 +774,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                       width: 1.5,
                     ),
                     boxShadow: isSelected 
-                      ? [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
+                      ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))]
                       : null,
                   ),
                   child: InkWell(

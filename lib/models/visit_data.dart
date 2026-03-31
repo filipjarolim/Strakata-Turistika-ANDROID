@@ -344,9 +344,4 @@ class VisitData {
   factory VisitData.fromJson(Map<String, dynamic> json) {
     return VisitData.fromMap(json);
   }
-
-  // Helper method to parse int values from MongoDB (handles both int and Int64)
-  static int? _parseInt(dynamic value) => TypeConverter.toInt(value);
-
-  static double? _parseDouble(dynamic value) => TypeConverter.toDouble(value);
 } 

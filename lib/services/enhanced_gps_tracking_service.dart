@@ -182,7 +182,7 @@ class EnhancedGPSTrackingService {
   
   // Request location permissions with battery optimization
   Future<bool> _requestPermissions() async {
-    print('GPS: Requesting all necessary permissions...');
+    // print('GPS: Requesting all necessary permissions...');
     
     // First check if location service is enabled
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -193,7 +193,7 @@ class EnhancedGPSTrackingService {
     
     // Step 1: Use Geolocator directly to request location permission
     // This triggers Android's native permission dialog more reliably
-    print('GPS: Checking location permission status...');
+    // print('GPS: Checking location permission status...');
     LocationPermission permission = await Geolocator.checkPermission();
     
     if (permission == LocationPermission.denied) {
@@ -211,7 +211,7 @@ class EnhancedGPSTrackingService {
       return false;
     }
     
-    print('GPS: Basic location permission granted ✓ (${permission.name})');
+    // print('GPS: Basic location permission granted ✓ (${permission.name})');
     
     // Step 2: Request background location permission
     // This must be done AFTER basic permission is granted
@@ -219,7 +219,7 @@ class EnhancedGPSTrackingService {
       // Give Android time to process the foreground permission
       await Future.delayed(const Duration(milliseconds: 1000));
       
-      print('GPS: Now requesting background location permission...');
+      // print('GPS: Now requesting background location permission...');
       var locationAlwaysStatus = await Permission.locationAlways.status;
       
       if (!locationAlwaysStatus.isGranted) {
@@ -233,10 +233,10 @@ class EnhancedGPSTrackingService {
           print('GPS: WARNING - Tracking may not work reliably when screen is locked!');
           // Continue anyway - we'll show a warning dialog
         } else {
-          print('GPS: Background location permission granted ✓');
+          // print('GPS: Background location permission granted ✓');
         }
       } else {
-        print('GPS: Background location permission already granted ✓');
+        // print('GPS: Background location permission already granted ✓');
       }
     }
     
@@ -247,12 +247,12 @@ class EnhancedGPSTrackingService {
       batteryStatus = await Permission.ignoreBatteryOptimizations.request();
       
       if (batteryStatus.isGranted) {
-        print('GPS: Battery optimization exemption granted ✓');
+        // print('GPS: Battery optimization exemption granted ✓');
       } else {
         print('GPS: Battery optimization exemption denied - tracking may be interrupted');
       }
     } else {
-      print('GPS: Battery optimization already exempted ✓');
+      // print('GPS: Battery optimization already exempted ✓');
     }
     
     // Summary
@@ -334,7 +334,7 @@ class EnhancedGPSTrackingService {
     try {
       final result = await _methodChannel.invokeMethod('startGPSTracking');
       _backgroundServiceRunning = result == true;
-      print('GPS: Background service started: $_backgroundServiceRunning');
+      // print('GPS: Background service started: $_backgroundServiceRunning');
       // After starting, push current settings if already profiled
       if (_currentProfile != null) {
         await _applyAdaptiveSettingsForPlatform(_currentProfile!);
@@ -428,7 +428,7 @@ class EnhancedGPSTrackingService {
       final acceptedStale = _lastAcceptedAt == null || now.difference(_lastAcceptedAt!) > GpsConfig.staleUpdateThreshold;
       
       if (rawStale) {
-        print('GPS: Watchdog detected stale RAW updates; enabling backup stream and restarting service');
+        // print('GPS: Watchdog detected stale RAW updates; enabling backup stream and restarting service');
         if (Platform.isAndroid) {
           _ensureAndroidBackupStream();
           await _startBackgroundService();
@@ -439,7 +439,7 @@ class EnhancedGPSTrackingService {
       } else if (acceptedStale) {
         // Raw is coming but filters might be too strict → relax briefly and nudge settings faster
         _relaxedUntil = now.add(const Duration(seconds: 20));
-        print('GPS: Watchdog relaxing filters for 20s due to no accepted positions');
+        // print('GPS: Watchdog relaxing filters for 20s due to no accepted positions');
         if (Platform.isAndroid) {
           await _applyAdaptiveSettingsForPlatform(_MotionProfile.running);
           _ensureAndroidBackupStream();
@@ -476,7 +476,7 @@ class EnhancedGPSTrackingService {
         _androidBackupSubscription = null;
       },
     );
-    print('GPS: Android backup stream started');
+    // print('GPS: Android backup stream started');
   }
   
   void _stopAndroidBackupStream() {
@@ -642,7 +642,7 @@ class EnhancedGPSTrackingService {
       try {
         final settings = _androidSettingsFor(profile);
         await _methodChannel.invokeMethod('updateGPSSettings', settings);
-        print('GPS: Android settings updated for profile: $profile');
+        // print('GPS: Android settings updated for profile: $profile');
       } catch (e) {
         print('GPS: Failed to update Android GPS settings: $e');
       }

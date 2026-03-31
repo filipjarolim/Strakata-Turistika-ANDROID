@@ -1,8 +1,8 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../config/app_colors.dart';
 import '../../models/tracking_summary.dart';
 import '../ui/app_button.dart';
+import '../ui/strakata_primitives.dart';
 import '../../pages/dynamic_form_page.dart';
 
 class TrackingBottomSheet extends StatelessWidget {
@@ -18,6 +18,8 @@ class TrackingBottomSheet extends StatelessWidget {
   final VoidCallback? onClose;
   final double? currentSpeed;
   final double? currentAltitude;
+  final VoidCallback? onSimulateRoute;
+  final VoidCallback? onOfflineMaps;
 
   const TrackingBottomSheet({
     super.key,
@@ -33,6 +35,8 @@ class TrackingBottomSheet extends StatelessWidget {
     required this.onCenterMap,
     this.sheetPosition = 0.0,
     this.onClose,
+    this.onSimulateRoute,
+    this.onOfflineMaps,
   });
 
   @override
@@ -378,20 +382,46 @@ class TrackingBottomSheet extends StatelessWidget {
   }
   
   Widget _buildMapTools(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // "Centrovat" button removed as it is already on the map
-        const Spacer(),
-        if (isTracking)
-          Expanded(
+        if (onSimulateRoute != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
             child: AppButton(
-              onPressed: onStopTracking,
-              text: 'Ukončit',
-              icon: Icons.stop_rounded,
-              type: AppButtonType.destructiveOutline,
+              onPressed: onSimulateRoute!,
+              text: 'Simulovat trasu',
+              icon: Icons.play_circle_outline,
+              type: AppButtonType.secondary,
               size: AppButtonSize.medium,
             ),
           ),
+        if (onOfflineMaps != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: AppButton(
+              onPressed: onOfflineMaps!,
+              text: 'Offline mapy',
+              icon: Icons.download_for_offline_outlined,
+              type: AppButtonType.secondary,
+              size: AppButtonSize.medium,
+            ),
+          ),
+        Row(
+          children: [
+            const Spacer(),
+            if (isTracking)
+              Expanded(
+                child: AppButton(
+                  onPressed: onStopTracking,
+                  text: 'Ukončit',
+                  icon: Icons.stop_rounded,
+                  type: AppButtonType.destructiveOutline,
+                  size: AppButtonSize.medium,
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -405,14 +435,7 @@ class TrackingBottomSheet extends StatelessWidget {
         child: AnimatedCrossFade(
           duration: const Duration(milliseconds: 300),
           crossFadeState: showClose ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          firstChild: Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
+          firstChild: const StrakataSheetHandle(),
           secondChild: GestureDetector(
             onTap: onClose,
             child: Container(

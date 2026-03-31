@@ -1,8 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../config/app_colors.dart';
-import '../animations/app_animations.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+import '../config/app_colors.dart';
+import '../services/auth_service.dart';
+
+/// Floating pill navigation (Domů, Soutěž, Výsledky) + circular profile to the right.
 class CustomBottomNavBar extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -15,71 +17,137 @@ class CustomBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(30),
-        topRight: Radius.circular(30),
-      ),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), // Increased blur for better glass effect
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.85), // Slightly more opaque for better contrast
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(30),
-              topRight: Radius.circular(30),
-            ),
-            border: Border(
-              top: BorderSide(
-                color: Colors.white.withOpacity(0.5),
-                width: 1,
-              ),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 20,
-                offset: const Offset(0, -5),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 24, right: 24, top: 14, bottom: 34),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _NavBarItem(
-                    index: 0,
-                    icon: Icons.public_outlined,
-                    label: 'Objevovat',
-                    isSelected: currentIndex == 0,
-                    onTap: () => onTap(0),
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final user = AuthService.currentUser;
+    final screenW = MediaQuery.sizeOf(context).width;
+    // ~95% content width (2.5% inset each side)
+    final horizontalInset = screenW * 0.025;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, 10 + bottomInset),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // White floating pill — expands; tab order: Domů(0), Soutěž(2), Výsledky(1)
+          Expanded(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.10),
+                    blurRadius: 36,
+                    offset: const Offset(0, 14),
+                    spreadRadius: -2,
                   ),
-                  _NavBarItem(
-                    index: 1,
-                    icon: Icons.analytics_outlined,
-                    label: 'Výsledky',
-                    isSelected: currentIndex == 1,
-                    onTap: () => onTap(1),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
                   ),
-                  _NavBarItem(
-                    index: 2,
-                    icon: Icons.map_outlined,
-                    label: 'Mapa',
-                    isSelected: currentIndex == 2,
-                    onTap: () => onTap(2),
-                  ),
-                  _NavBarItem(
-                    index: 3,
-                    icon: Icons.person_outline,
-                    label: 'Profil',
-                    isSelected: currentIndex == 3,
-                    onTap: () => onTap(3),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _PillNavItem(
+                      label: 'Domů',
+                      icon: Icons.home_outlined,
+                      selectedIcon: Icons.home_rounded,
+                      isSelected: currentIndex == 0,
+                      onTap: () => onTap(0),
+                    ),
+                    _PillNavItem(
+                      label: 'Soutěž',
+                      icon: Icons.explore_outlined,
+                      selectedIcon: Icons.explore_rounded,
+                      isSelected: currentIndex == 2,
+                      onTap: () => onTap(2),
+                    ),
+                    _PillNavItem(
+                      label: 'Výsledky',
+                      icon: Icons.bar_chart_outlined,
+                      selectedIcon: Icons.bar_chart_rounded,
+                      isSelected: currentIndex == 1,
+                      onTap: () => onTap(1),
+                    ),
+                  ],
+                ),
+              ),
             ),
+          ),
+          const SizedBox(width: 12),
+          _ProfileAvatarButton(
+            isSelected: currentIndex == 3,
+            imageUrl: user?.image,
+            onTap: () => onTap(3),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PillNavItem extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _PillNavItem({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = isSelected ? AppColors.textPrimary : AppColors.textTertiary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        splashColor: AppColors.primary.withValues(alpha: 0.12),
+        highlightColor: AppColors.primary.withValues(alpha: 0.06),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFF3F4F6) : Colors.transparent,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isSelected ? selectedIcon : icon,
+                size: 24,
+                color: isSelected ? AppColors.primary : fg,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: GoogleFonts.lora(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? AppColors.textPrimary : fg,
+                  height: 1.1,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -87,18 +155,14 @@ class CustomBottomNavBar extends StatelessWidget {
   }
 }
 
-class _NavBarItem extends StatelessWidget {
-  final int index;
-  final IconData icon;
-  final String label;
+class _ProfileAvatarButton extends StatelessWidget {
   final bool isSelected;
+  final String? imageUrl;
   final VoidCallback onTap;
 
-  const _NavBarItem({
-    required this.index,
-    required this.icon,
-    required this.label,
+  const _ProfileAvatarButton({
     required this.isSelected,
+    required this.imageUrl,
     required this.onTap,
   });
 
@@ -108,46 +172,54 @@ class _NavBarItem extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        splashColor: AppColors.primary.withOpacity(0.1),
-        highlightColor: AppColors.primary.withOpacity(0.05),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        customBorder: const CircleBorder(),
+        child: Ink(
+          width: 54,
+          height: 54,
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.primary.withOpacity(0.12) : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: isSelected ? AppColors.primary : AppColors.textSecondary,
-                size: 24,
+            shape: BoxShape.circle,
+            color: Colors.white,
+            border: Border.all(
+              color: isSelected ? AppColors.primary : const Color(0xFFE5E7EB),
+              width: isSelected ? 2.5 : 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+                spreadRadius: -1,
               ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                child: Row(
-                  children: [
-                    if (isSelected) const SizedBox(width: 8),
-                    if (isSelected)
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                  ],
-                ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
+          child: ClipOval(
+            child: imageUrl != null && imageUrl!.isNotEmpty
+                ? Image.network(
+                    imageUrl!,
+                    fit: BoxFit.cover,
+                    width: 54,
+                    height: 54,
+                    errorBuilder: (_, __, ___) => _placeholder(),
+                  )
+                : _placeholder(),
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _placeholder() {
+    return ColoredBox(
+      color: const Color(0xFFF3F4F6),
+      child: Icon(
+        Icons.person_rounded,
+        size: 28,
+        color: Colors.grey[600],
       ),
     );
   }

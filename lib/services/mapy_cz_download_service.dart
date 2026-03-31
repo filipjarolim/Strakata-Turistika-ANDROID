@@ -2,11 +2,8 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:math';
 import 'dart:io';
-import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:archive/archive.dart';
-import 'package:crypto/crypto.dart';
 import 'vector_tile_provider.dart';
 // Single-option CZ downloader: fixed fast config up to zoom 18
 import 'download_notification_service.dart';
@@ -72,7 +69,6 @@ class MapyCzDownloadService {
       const int maxZoom = 12; // limit to z<=12 as requested
       const int batchSize = 2048; // larger logical batch
       const int batchDelayMs = 0; // no delay between batches
-      const int zoomDelayMs = 0; // no delay between zoom levels
       const int concurrency = 48; // higher bounded parallelism for speed
       
       print('🗺️ Starting Czech Republic download');
@@ -577,28 +573,6 @@ class MapyCzDownloadService {
     }
   }
   
-  /// Get tiles for specific bounds
-  static List<Map<String, int>> _getTilesForBounds(LatLng southwest, LatLng northeast, int zoom) {
-    final tiles = <Map<String, int>>[];
-    final n = pow(2, zoom).toDouble();
-    
-    // Convert bounds to tile coordinates
-    final minTileX = ((southwest.longitude + 180) / 360 * n).floor();
-    final maxTileX = ((northeast.longitude + 180) / 360 * n).floor();
-    final minTileY = ((1 - log(tan(northeast.latitude * pi / 180) + 1 / cos(northeast.latitude * pi / 180)) / pi) / 2 * n).floor();
-    final maxTileY = ((1 - log(tan(southwest.latitude * pi / 180) + 1 / cos(southwest.latitude * pi / 180)) / pi) / 2 * n).floor();
-    
-    for (int x = minTileX; x <= maxTileX; x++) {
-      for (int y = minTileY; y <= maxTileY; y++) {
-        if (x >= 0 && x < n && y >= 0 && y < n) {
-          tiles.add({'x': x, 'y': y});
-        }
-      }
-    }
-    
-    return tiles;
-  }
-
   /// Get tile coordinate range for bounds (no allocation of full list)
   static Map<String, int?> _getTileRangeForBounds(LatLng southwest, LatLng northeast, int zoom) {
     final n = pow(2, zoom).toDouble();

@@ -1,12 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
 import '../../../models/visit_data.dart';
 import '../../../models/place_type_config.dart';
-import '../../../services/database/database_service.dart'; // Indirect usage via config service
 import '../../../widgets/ui/app_button.dart';
 
 class PlacesManagerWidget extends StatefulWidget {

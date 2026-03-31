@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:strakataturistikaandroidapp/widgets/gps/tracking_onboarding_sheet.dart';
 import '../../config/app_colors.dart';
-import '../../services/haptic_service.dart';
-
+import '../../config/strakata_design_tokens.dart';
 /// One-time onboarding page that forces the user to grant permissions
 class PermissionOnboardingPage extends StatelessWidget {
   const PermissionOnboardingPage({super.key});
@@ -12,18 +11,26 @@ class PermissionOnboardingPage extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
-          // Background Image
           Positioned.fill(
-            child: Image.asset(
-              'assets/mainBackground_optimized.png',
-              fit: BoxFit.cover,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    context.strakataTokens?.heroOverlayTop ?? AppColors.heroOverlayTop,
+                    AppColors.pageBg,
+                    AppColors.surfaceMuted,
+                  ],
+                ),
+              ),
             ),
           ),
           
           // Dark Overlay
           Positioned.fill(
             child: Container(
-              color: Colors.black.withOpacity(0.7),
+              color: Colors.black.withValues(alpha: 0.7),
             ),
           ),
           
@@ -50,7 +57,7 @@ class PermissionOnboardingPage extends StatelessWidget {
                          textAlign: TextAlign.center,
                          style: TextStyle(
                            fontSize: 16,
-                           color: Colors.white.withOpacity(0.8),
+                           color: Colors.white.withValues(alpha: 0.8),
                          ),
                        ),
                        const SizedBox(height: 32),

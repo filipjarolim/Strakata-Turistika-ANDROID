@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mongo_dart/mongo_dart.dart' as mongo; // Keep for types if needed, or remove if unused in interface
-import '../services/database/database_service.dart'; // Updated
+import '../services/database/database_service.dart';
 import '../services/auth_service.dart';
 
 class PlaceTypeConfig {
@@ -98,13 +97,14 @@ class PlaceTypeConfig {
         return iconMap[map['name']] ?? Icons.place_outlined;
     }
 
+    final colorVal = safeIntFromMap(map['color']);
     return PlaceTypeConfig(
       id: map['id']?.toString() ?? '',
       name: map['name']?.toString() ?? '',
       label: map['label']?.toString() ?? '',
       icon: getIcon(),
       points: safeIntFromMap(map['points']),
-      color: Color(safeIntFromMap(map['color']) ?? Colors.grey.value),
+      color: Color(colorVal != 0 ? colorVal : (colorMap[map['name']]?.value ?? Colors.grey.value)),
       isActive: map['isActive'] != false,
       order: safeIntFromMap(map['order']),
       createdAt: DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? DateTime.now(),

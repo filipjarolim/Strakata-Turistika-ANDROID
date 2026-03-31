@@ -127,15 +127,15 @@ class AppButton extends StatelessWidget {
         );
       case AppButtonType.secondary:
         return ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFF3F4F6),
-          foregroundColor: const Color(0xFF1F2937),
+          backgroundColor: AppColors.surfaceMuted,
+          foregroundColor: AppColors.textPrimary,
           elevation: 0,
           shape: shape,
           padding: padding,
         );
       case AppButtonType.destructive:
         return ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFEF4444),
+          backgroundColor: AppColors.error,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: shape,
@@ -143,22 +143,22 @@ class AppButton extends StatelessWidget {
         );
       case AppButtonType.outline:
         return OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF374151),
-          side: const BorderSide(color: Color(0xFFE5E7EB), width: 1.5),
+          foregroundColor: AppColors.textSecondary,
+          side: BorderSide(color: AppColors.border, width: 1.5),
           shape: shape,
           padding: padding,
         );
       case AppButtonType.destructiveOutline:
         return OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFFEF4444),
-          side: const BorderSide(color: Color(0xFFFECACA), width: 1.5),
+          foregroundColor: AppColors.error,
+          side: BorderSide(color: AppColors.error.withValues(alpha: 0.35), width: 1.5),
           shape: shape,
           padding: padding,
-          backgroundColor: const Color(0xFFFEF2F2),
+          backgroundColor: AppColors.errorContainer,
         );
       case AppButtonType.ghost:
         return TextButton.styleFrom(
-          foregroundColor: const Color(0xFF4B5563),
+          foregroundColor: AppColors.textSecondary,
           shape: shape,
           padding: padding,
         );
@@ -173,13 +173,13 @@ class AppButton extends StatelessWidget {
       case AppButtonType.destructive:
         return Colors.white;
       case AppButtonType.secondary:
-        return const Color(0xFF1F2937);
+        return AppColors.textPrimary;
       case AppButtonType.outline:
-        return const Color(0xFF374151);
+        return AppColors.textSecondary;
       case AppButtonType.destructiveOutline:
-        return const Color(0xFFEF4444);
+        return AppColors.error;
       case AppButtonType.ghost:
-        return const Color(0xFF4B5563);
+        return AppColors.textSecondary;
     }
   }
   

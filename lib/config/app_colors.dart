@@ -1,32 +1,58 @@
 import 'package:flutter/material.dart';
+import 'strakata_color_math.dart';
 
+/// Strakatá turistika palette (web parity). Prefer [Theme.of(context).colorScheme]
+/// and [StrakataThemeExtension] in new UI; this class keeps stable names for existing imports.
 class AppColors {
-  // Primary Brand Colors
-  static const Color primary = Color(0xFF4CAF50);
-  static const Color secondary = Color(0xFF2E7D32);
-  static const Color accent = Color(0xFF81C784);
+  AppColors._();
 
-  // Background Colors
-  static const Color background = Color(0xFFF1F5F9);
-  static const Color surface = Colors.white;
-  static const Color surfaceVariant = Color(0xFFFAFAFA);
+  // Page / canvas
+  static const Color pageBg = Color(0xFFFAFAF6);
 
-  // Text Colors
-  static const Color textPrimary = Color(0xFF111827);
-  static const Color textSecondary = Color(0xFF4B5563);
-  static const Color textTertiary = Color(0xFF9CA3AF);
+  // Brand — HSL 142 72% 46%
+  static Color get brand => strakataHsl(142, 72, 46);
+  static Color get brandForeground => Colors.white;
 
-  // Status Colors
-  static const Color error = Color(0xFFEF4444);
-  static const Color success = Color(0xFF10B981);
-  static const Color warning = Color(0xFFF59E0B);
-  static const Color info = Color(0xFF3B82F6);
+  // Supporting surfaces
+  static Color get brandMuted => strakataHsl(152, 76, 88);
+  static Color get brandSubtle => strakataHsl(72, 62, 90);
 
-  // UI Elements
-  static const Color border = Color(0xFFE5E7EB);
-  static const Color divider = Color(0xFFE5E7EB);
-  static const Color shadow = Color(0x1A000000);
-  
-  // Overlay
-  static const Color overlay = Color(0x66000000);
+  // Semantic surfaces (warm gray family, web --background / --muted)
+  static Color get background => strakataHsl(48, 35, 98);
+  static Color get surface => const Color(0xFFFFFFFF);
+  static Color get surfaceMuted => strakataHsl(48, 22, 94);
+  static Color get surfaceVariant => strakataHsl(48, 28, 96);
+
+  // Text
+  static const Color textPrimary = Color(0xFF0A0A0A);
+  static const Color textSecondary = Color(0xFF1A1A1A);
+  static const Color textTertiary = Color(0xFF525252);
+
+  // Borders
+  static Color get border => strakataHsl(48, 18, 88);
+  static Color get divider => strakataHsl(48, 16, 90);
+
+  // Destructive — HSL ~0 84.2% 60.2%
+  static Color get error => strakataHsl(0, 84.2, 60.2);
+  static Color get errorContainer => strakataHsl(0, 84, 95);
+  static Color get onErrorContainer => strakataHsl(0, 70, 30);
+
+  // Semantic (non-error)
+  static Color get success => strakataHsl(142, 72, 36);
+  static Color get warning => strakataHsl(38, 92, 50);
+  static Color get info => strakataHsl(200, 80, 46);
+
+  // Focus ring — HSL 142 72% 40%
+  static Color get focusRing => strakataHsl(142, 72, 40);
+
+  // Legacy names (mapped to new system)
+  static Color get primary => brand;
+  static Color get secondary => strakataHsl(142, 55, 32);
+  static Color get accent => brandMuted;
+
+  static Color get overlay => const Color(0x66000000);
+  static Color get shadow => const Color(0x1A000000);
+
+  /// Hero overlay wash (pairs with decorative gradients).
+  static const Color heroOverlayTop = Color(0xFFF2F9C4);
 }

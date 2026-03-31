@@ -34,13 +34,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _shakeController;
-  late AnimationController _successController;
   
   // Animations
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  late Animation<double> _shakeAnimation;
-  late Animation<double> _successAnimation;
   
   // Local auth
   final LocalAuthentication _localAuth = LocalAuthentication();
@@ -66,10 +63,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       duration: AppAnimations.durationMedium,
       vsync: this,
     );
-    _successController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
     
     _fadeAnimation = Tween<double>(
       begin: 0.0,
@@ -85,22 +78,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     ).animate(CurvedAnimation(
       parent: _slideController,
       curve: Curves.easeOutCubic,
-    ));
-    
-    _shakeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _shakeController,
-      curve: Curves.elasticIn,
-    ));
-    
-    _successAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _successController,
-      curve: Curves.elasticOut,
     ));
     
     // Start entrance animations
@@ -149,7 +126,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     _fadeController.dispose();
     _slideController.dispose();
     _shakeController.dispose();
-    _successController.dispose();
     super.dispose();
   }
   
@@ -207,12 +183,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     AppToast.showError(context, message);
   }
   
-  void _showSuccess(String message) {
-    HapticService.mediumImpact();
-    _successController.forward().then((_) => _successController.reverse());
-    AppToast.showSuccess(context, message);
-  }
-
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     HapticService.mediumImpact();
@@ -245,11 +215,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // 1. Immersive Background Layer
+          // 1. Brand gradient shell (assets optional)
           Positioned.fill(
-            child: Image.asset(
-              'assets/login_background.png',
-              fit: BoxFit.cover,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.pageBg,
+                    AppColors.brandMuted,
+                    AppColors.brand.withValues(alpha: 0.35),
+                  ],
+                ),
+              ),
             ),
           ),
           
@@ -261,10 +240,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.30),
-                    Colors.black.withOpacity(0.50),
-                    Colors.black.withOpacity(0.70),
-                    Colors.black.withOpacity(0.90), 
+                    Colors.black.withValues(alpha: 0.30),
+                    Colors.black.withValues(alpha: 0.50),
+                    Colors.black.withValues(alpha: 0.70),
+                    Colors.black.withValues(alpha: 0.90), 
                   ],
                 ),
               ),
@@ -290,9 +269,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       Container(
                          padding: const EdgeInsets.all(16),
                          decoration: BoxDecoration(
-                           color: Colors.white.withOpacity(0.1),
+                           color: Colors.white.withValues(alpha: 0.1),
                            shape: BoxShape.circle,
-                           border: Border.all(color: Colors.white.withOpacity(0.2)),
+                           border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
                          ),
                          child: const Icon(Icons.pets, size: 60, color: Colors.white), 
                       ),
@@ -315,7 +294,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         'Objevujte nová místa se svým psem a zaznamenávejte společná dobrodružství.',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           height: 1.5,
                         ),
                         textAlign: TextAlign.center,
@@ -330,9 +309,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
+                              color: Colors.white.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.white.withOpacity(0.2)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
                             ),
                             padding: const EdgeInsets.all(24),
                             child: Column(
@@ -340,7 +319,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               children: [
                                 _buildGlassSocialButton(
                                   text: 'Pokračovat s Google',
-                                  iconPath: 'assets/google_logo.png',
                                   onPressed: _signInWithGoogle,
                                 ),
                                 
@@ -363,7 +341,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         child: Text(
                           'Pokračováním souhlasíte s našimi Podmínkami použití a Zásadami ochrany osobních údajů.',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                             fontSize: 12,
                           ),
                           textAlign: TextAlign.center,
@@ -387,7 +365,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   
   Widget _buildGlassSocialButton({
     required String text,
-    required String iconPath,
     required VoidCallback onPressed,
   }) {
     return SizedBox(
@@ -408,7 +385,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset(iconPath, height: 24, width: 24),
+            const Icon(Icons.g_mobiledata, size: 28, color: Color(0xFF4285F4)),
             const SizedBox(width: 12),
             Text(
               text,
@@ -433,11 +410,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             color: _isBiometricEnabled 
-              ? AppColors.primary.withOpacity(0.2) 
+              ? AppColors.primary.withValues(alpha: 0.2) 
               : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: _isBiometricEnabled ? AppColors.primary : Colors.white.withOpacity(0.2),
+              color: _isBiometricEnabled ? AppColors.primary : Colors.white.withValues(alpha: 0.2),
             ),
           ),
           child: Row(
@@ -446,14 +423,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               Icon(
                 Icons.fingerprint, 
                 size: 18, 
-                color: _isBiometricEnabled ? AppColors.primary : Colors.white.withOpacity(0.6)
+                color: _isBiometricEnabled ? AppColors.primary : Colors.white.withValues(alpha: 0.6)
               ),
               const SizedBox(width: 8),
               Text(
                 'Biometrické přihlášení ${_isBiometricEnabled ? "Zapnuto" : "Vypnuto"}',
                 style: TextStyle(
                   fontSize: 12,
-                  color: _isBiometricEnabled ? AppColors.primary : Colors.white.withOpacity(0.6),
+                  color: _isBiometricEnabled ? AppColors.primary : Colors.white.withValues(alpha: 0.6),
                   fontWeight: FontWeight.w600,
                 ),
               ),

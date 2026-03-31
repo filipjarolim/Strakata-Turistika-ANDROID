@@ -1,8 +1,6 @@
 import 'package:flutter/services.dart';
 
 class HapticService {
-  static const MethodChannel _channel = MethodChannel('haptic_feedback');
-
   /// Light haptic feedback for minor interactions
   static Future<void> lightImpact() async {
     try {

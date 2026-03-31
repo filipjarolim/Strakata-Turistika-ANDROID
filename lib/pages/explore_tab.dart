@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import '../config/app_colors.dart';
+import '../config/strakata_design_tokens.dart';
 import '../services/auth_service.dart';
 import '../pages/dynamic_upload_page.dart';
 import '../repositories/visit_repository.dart';
 import '../models/visit_data.dart';
 import '../widgets/tab_switch.dart';
 import '../widgets/ui/app_button.dart';
-import 'login_page.dart';
+import '../widgets/ui/strakata_primitives.dart';
 
 class ExploreTab extends StatelessWidget {
   const ExploreTab({super.key});
@@ -17,19 +19,27 @@ class ExploreTab extends StatelessWidget {
     final heroHeight = screenHeight * 0.42; 
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB), // Very light grey base
+      backgroundColor: AppColors.pageBg,
       body: Stack(
         children: [
-          // 1. Hero Image Background
+          // 1. Hero band (decorative gradient — web parity)
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            height: heroHeight + 30, // Extra bleed for curve overlap
-            child: Image.asset(
-              'assets/home_mascot.png',
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
+            height: heroHeight + 30,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    context.strakataTokens?.heroOverlayTop ?? AppColors.heroOverlayTop,
+                    StrakataGradients.greenStart,
+                    AppColors.brandMuted,
+                  ],
+                ),
+              ),
             ),
           ),
           
@@ -45,7 +55,7 @@ class ExploreTab extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.3),
+                    Colors.black.withValues(alpha: 0.3),
                     Colors.transparent,
                   ],
                 ),
@@ -62,14 +72,19 @@ class ExploreTab extends StatelessWidget {
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
                     offset: const Offset(0, -5),
                   ),
                 ],
               ),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 32, 24, 150),
+                padding: EdgeInsets.fromLTRB(
+                  StrakataLayout.pageHorizontalInset,
+                  StrakataLayout.pageContentTopInset,
+                  StrakataLayout.pageHorizontalInset,
+                  120,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -104,8 +119,8 @@ class ExploreTab extends StatelessWidget {
           
           // App Bar Title (Floating)
           Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
-            left: 20,
+            top: MediaQuery.of(context).padding.top + 12,
+            left: StrakataLayout.pageHorizontalInset,
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -195,7 +210,7 @@ class MainActionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2E7D32).withOpacity(0.4),
+            color: const Color(0xFF2E7D32).withValues(alpha: 0.4),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -244,7 +259,7 @@ class MainActionCard extends StatelessWidget {
                     color: Colors.white,
                     shape: BoxShape.circle,
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 4)),
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 12, offset: const Offset(0, 4)),
                     ],
                   ),
                   child: const Icon(Icons.play_arrow_rounded, color: Color(0xFF2E7D32), size: 38),
@@ -268,22 +283,18 @@ class QuickStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey[100]!),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
+      decoration: StrakataSurface.cardDecoration(),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-             if (label.contains('data')) TabSwitch.of(context)?.switchTo(1);
-             else TabSwitch.of(context)?.switchTo(2);
+            if (label.contains('data')) {
+              TabSwitch.of(context)?.switchTo(1);
+            } else {
+              TabSwitch.of(context)?.switchTo(2);
+            }
           },
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(StrakataRadii.app),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
@@ -291,7 +302,7 @@ class QuickStatCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, color: color, size: 26),
@@ -367,14 +378,7 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Poslední aktivita',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF111827),
-              ),
-            ),
+            const StrakataSectionTitle('Poslední aktivita', fontSize: 18),
             AppButton(
               text: 'Zobrazit vše',
               onPressed: () => TabSwitch.of(context)?.switchTo(1),
@@ -410,10 +414,8 @@ class ActivityItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[200]!),
+      decoration: StrakataSurface.cardDecoration(
+        borderRadius: 16,
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -449,14 +451,7 @@ class ManualUploadSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Ruční nahrání',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF111827),
-          ),
-        ),
+        const StrakataSectionTitle('Ruční nahrání', fontSize: 18),
         const SizedBox(height: 16),
         Row(
           children: [
@@ -506,19 +501,12 @@ class _UploadCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
+      decoration: StrakataSurface.cardDecoration(),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(StrakataRadii.app),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(

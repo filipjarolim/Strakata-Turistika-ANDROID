@@ -13,6 +13,7 @@ import '../../widgets/admin/admin_dialogs.dart';
 import '../../widgets/admin/admin_tabs.dart';
 import '../../widgets/ui/app_toast.dart';
 import '../../widgets/ui/app_button.dart';
+import '../../widgets/ui/strakata_primitives.dart';
 import '../../widgets/ui/glass_ui.dart';
 import '../../widgets/maps/shared_map_widget.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -667,15 +668,7 @@ class _AdminReviewPageState extends State<AdminReviewPage> with TickerProviderSt
               ),
               child: Column(
                 children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE5E7EB),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+                  const StrakataSheetHandle(margin: EdgeInsets.only(top: 12)),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
                     child: Row(
@@ -752,15 +745,10 @@ class _AdminReviewPageState extends State<AdminReviewPage> with TickerProviderSt
         ),
         child: Column(
           children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 12),
+            const StrakataSheetHandle(
+              margin: EdgeInsets.only(top: 12),
               width: 32,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(2),
-              ),
+              color: Color(0xFFF3F4F6),
             ),
             // Header
             Padding(
@@ -987,17 +975,8 @@ class _AdminReviewPageState extends State<AdminReviewPage> with TickerProviderSt
               ),
               child: Column(
                 children: [
-                  // Handle bar
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.only(top: 12),
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
+                  const Center(
+                    child: StrakataSheetHandle(margin: EdgeInsets.only(top: 12)),
                   ),
                   // Header
                   Padding(

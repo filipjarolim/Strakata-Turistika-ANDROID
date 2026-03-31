@@ -61,6 +61,7 @@ dependencies:
   firebase_messaging: ^15.2.10
   in_app_update: ^4.2.2
   provider: ^6.1.2
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -87,12 +88,6 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - .env
-    - assets/mainBackground_optimized.png
-    - assets/google_logo.png
-    - assets/home_mascot.png
-    - assets/login_illustration.png
-    - assets/empty_state_illustration.png
-    - assets/login_background.png
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
@@ -102,37 +97,3 @@ flutter:
   # For details regarding adding assets from package dependencies, see
   # https://flutter.dev/to/asset-from-package
 
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  fonts:
-    - family: SF Pro Display
-      fonts:
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYREGULAR.OTF
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYLIGHTITALIC.OTF
-          weight: 300
-          style: italic
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYMEDIUM.OTF
-          weight: 500
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYSEMIBOLDITALIC.OTF
-          weight: 600
-          style: italic
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYBOLD.OTF
-          weight: 700
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYHEAVYITALIC.OTF
-          weight: 800
-          style: italic
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYBLACKITALIC.OTF
-          weight: 900
-          style: italic
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYTHINITALIC.OTF
-          weight: 100
-          style: italic
-        - asset: assets/fonts/sf-pro/SFPRODISPLAYULTRALIGHTITALIC.OTF
-          weight: 200
-          style: italic
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package

@@ -1,5 +1,5 @@
-import 'dart:developer';
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:mongo_dart/mongo_dart.dart';
 
@@ -43,7 +43,7 @@ class DatabaseService {
         await _db!.getCollectionNames(); // Lightweight ping
         return true;
       } catch (e) {
-        print('⚠️ [DatabaseService] Health check failed, reconnecting...');
+        // print('⚠️ [DatabaseService] Health check failed, reconnecting...');
         await close();
       }
     }
@@ -73,8 +73,9 @@ class DatabaseService {
       }
       
       // 4. Increase timeouts for flaky networks.
+      // REDUCED: 30s is too long. Using 10s.
       if (!url.contains('connectTimeoutMS=')) {
-        url += '&connectTimeoutMS=30000&socketTimeoutMS=30000&serverSelectionTimeoutMS=30000';
+        url += '&connectTimeoutMS=10000&socketTimeoutMS=10000&serverSelectionTimeoutMS=10000';
       }
 
       print('🔗 [DatabaseService] Connecting to MongoDB...');
@@ -86,12 +87,12 @@ class DatabaseService {
       await _db!.open(secure: true);
       
       // Give the driver a moment to establish background pool/connections
-      // Atlas replica sets can take a moment to "settle" after the socket opens
-      await Future.delayed(const Duration(milliseconds: 3000));
+      // REDUCED: 3s is too long. Using 1s.
+      await Future.delayed(const Duration(milliseconds: 1000));
 
       // 6. Verify primary is ready (Wait for master)
       bool isReady = false;
-      int retries = 15;
+      int retries = 5; // Reduced from 15
       while (!isReady && retries > 0) {
         try {
           await _db!.getCollectionNames(); // This forces a master check
@@ -103,8 +104,8 @@ class DatabaseService {
                              errorStr.contains('reset by peer');
 
           if (isRetryable) {
-            print('⏳ [DatabaseService] Waiting for stable connection (${16-retries}/15): $e');
-            await Future.delayed(const Duration(milliseconds: 2000));
+            // print('⏳ [DatabaseService] Waiting for stable connection (${6-retries}/5): $e');
+            await Future.delayed(const Duration(milliseconds: 1000));
             retries--;
           } else {
             rethrow;
@@ -113,16 +114,26 @@ class DatabaseService {
       }
 
       if (isReady) {
-        final dbName = _db?.databaseName ?? 'unknown';
-        print('✅ [DatabaseService] Connected to database: $dbName');
+        // final dbName = _db?.databaseName ?? 'unknown';
+        print('✅ [DatabaseService] Connected');
         return true;
       } else {
         print('❌ [DatabaseService] Timed out waiting for master connection');
         await close();
         return false;
       }
+    } on SocketException catch (_) {
+      // Specific handling for network/DNS errors (common on Emulator)
+      print('⚠️ [DatabaseService] Network unreachable (Offline Mode)');
+      _db = null;
+      return false;
     } catch (e) {
-      print('❌ [DatabaseService] Connection failed: $e');
+      // Check for strict SocketException string if "on SocketException" didn't catch it
+      if (e.toString().contains('SocketException') || e.toString().contains('Failed host lookup')) {
+         print('⚠️ [DatabaseService] Connection failed (Offline Mode)');
+      } else {
+         print('❌ [DatabaseService] Connection failed: $e');
+      }
       _db = null;
       return false;
     }

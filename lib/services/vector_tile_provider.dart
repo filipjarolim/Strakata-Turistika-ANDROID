@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'dart:convert';
 import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -53,7 +52,7 @@ class VectorTileProvider extends TileProvider {
     _labelLayerBox = await Hive.openBox('vector_tiles_labels');
     _metadataBox = await Hive.openBox('vector_tiles_metadata');
     
-    print('🗺️ Vector tile storage initialized');
+    // print('🗺️ Vector tile storage initialized');
   }
 
   @override

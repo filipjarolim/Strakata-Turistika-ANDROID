@@ -12,7 +12,6 @@ import '../services/auth_service.dart';
 import '../services/scoring_config_service.dart';
 import '../services/cloudinary_service.dart'; // Ensure this exists or use appropriate service
 import '../models/place_type_config.dart';
-import 'package:geolocator/geolocator.dart'; // If needed for location
 
 class DynamicFormPage extends StatefulWidget {
   final String slug;

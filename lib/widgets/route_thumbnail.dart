@@ -27,37 +27,40 @@ class RouteThumbnail extends StatelessWidget {
     if (visit.photos != null && visit.photos!.isNotEmpty) {
       final String? url = visit.photos!.first['url'] as String?;
       if (url != null && url.isNotEmpty) {
-        return ClipRRect(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(borderRadius)),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Hero(
-                tag: 'visit_photo_${visit.id}',
-                child: Image.network(
-                  url,
-                  height: height,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _buildMapPreview(context),
-                ),
-              ),
-              if (showGradient)
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.0),
-                        Colors.black.withOpacity(0.4),
-                      ],
-                      stops: const [0.0, 0.6, 1.0],
-                    ),
+        return SizedBox(
+          height: height,
+          child: ClipRRect(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(borderRadius)),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Hero(
+                  tag: 'visit_photo_${visit.id}',
+                  child: Image.network(
+                    url,
+                    height: height,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildMapPreview(context),
                   ),
                 ),
-            ],
+                if (showGradient)
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.0),
+                          Colors.black.withValues(alpha: 0.4),
+                        ],
+                        stops: const [0.0, 0.6, 1.0],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       }

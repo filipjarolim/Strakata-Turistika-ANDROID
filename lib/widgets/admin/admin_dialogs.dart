@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import '../../widgets/ui/app_button.dart';
 import '../../widgets/ui/app_toast.dart';
+import '../../widgets/ui/strakata_primitives.dart';
 import '../../utils/type_converter.dart';
 
 class AdminDialogs {
@@ -1016,16 +1017,7 @@ class AdminDialogs {
           ),
           child: Column(
             children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE5E7EB),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+              const StrakataSheetHandle(margin: EdgeInsets.only(top: 12)),
               // Header
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),

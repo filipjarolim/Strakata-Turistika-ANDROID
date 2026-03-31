@@ -1,7 +1,6 @@
 import '../services/database/database_service.dart';
 import '../models/visit_data.dart';
 import 'package:mongo_dart/mongo_dart.dart';
-import 'dart:developer';
 import '../utils/type_converter.dart';
 
 class VisitRepository {
@@ -16,13 +15,20 @@ class VisitRepository {
     String? searchQuery,
     String? userId,
     bool onlyApproved = true,
+    List<VisitState>? states, // New: Filter by specific states
   }) async {
     return _dbService.execute((db) async {
       final collection = db.collection(_collectionName);
       final query = where;
       if (seasonYear != null) query.eq('seasonYear', seasonYear);
-      if (onlyApproved) query.eq('state', 'APPROVED');
       if (userId != null) query.eq('userId', userId);
+      
+      // Handle state filtering logic
+      if (states != null && states.isNotEmpty) {
+        query.oneFrom('state', states.map((s) => s.name).toList());
+      } else if (onlyApproved) {
+        query.eq('state', 'APPROVED');
+      }
 
       if (searchQuery != null && searchQuery.isNotEmpty) {
         final regex = '.*$searchQuery.*';

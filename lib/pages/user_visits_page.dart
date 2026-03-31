@@ -3,6 +3,7 @@ import '../repositories/visit_repository.dart';
 import '../models/visit_data.dart';
 import '../widgets/ui/app_toast.dart';
 import '../widgets/route_thumbnail.dart';
+import '../widgets/ui/strakata_primitives.dart';
 
 class UserVisitsPage extends StatefulWidget {
   final String userId;
@@ -91,11 +92,11 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                        Opacity(
-                         opacity: 0.8,
-                         child: Image.asset(
-                          'assets/empty_state_illustration.png',
-                          height: 150,
-                          errorBuilder: (c, e, s) => const Icon(Icons.hiking, size: 80, color: Colors.grey),
+                         opacity: 0.85,
+                         child: Icon(
+                          Icons.hiking_outlined,
+                          size: 80,
+                          color: Theme.of(context).colorScheme.outline,
                         ),
                        ),
                       const SizedBox(height: 24),
@@ -123,7 +124,7 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
                         border: Border.all(color: const Color(0xFFE0E0E0)),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -154,7 +155,7 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF4CAF50).withOpacity(0.1),
+                                        color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Text(
@@ -245,9 +246,9 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
       children: placeList.map((place) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF4CAF50).withOpacity(0.1),
+          color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF4CAF50).withOpacity(0.3)),
+          border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.3)),
         ),
         child: Text(
           place,
@@ -274,15 +275,7 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
         ),
         child: Column(
           children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE5E7EB),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+            const StrakataSheetHandle(margin: EdgeInsets.only(top: 12)),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
