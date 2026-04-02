@@ -218,12 +218,12 @@ class TrackingBottomSheet extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Probíhá záznam',
+                  Text(
+                    isPaused ? 'Pozastaveno' : 'Probíhá záznam',
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      color: isPaused ? Colors.orange.shade800 : AppColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -261,31 +261,55 @@ class TrackingBottomSheet extends StatelessWidget {
                 ],
               ),
             ),
-            
-            // Action Button (Pause/Resume)
-            GestureDetector(
-               onTap: onToggleTracking,
-               child: AnimatedContainer(
-                 duration: const Duration(milliseconds: 300),
-                 width: 56,
-                 height: 56,
-                 decoration: BoxDecoration(
-                   color: isPaused ? Colors.orange : Colors.red,
-                   borderRadius: BorderRadius.circular(18),
-                   boxShadow: [
-                     BoxShadow(
-                       color: (isPaused ? Colors.orange : Colors.red).withOpacity(0.3),
-                       blurRadius: 12,
-                       offset: const Offset(0, 4),
-                     ),
-                   ],
-                 ),
-                 child: Icon(
-                   isPaused ? Icons.play_arrow : Icons.pause,
-                   color: Colors.white,
-                   size: 28,
-                 ),
-               ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Ukončit trasu',
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onStopTracking,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Icon(Icons.stop_rounded, color: Colors.red.shade700, size: 26),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: isPaused ? 'Pokračovat' : 'Pauza',
+              child: GestureDetector(
+                onTap: onToggleTracking,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: isPaused ? Colors.orange : Colors.red,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (isPaused ? Colors.orange : Colors.red).withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    isPaused ? Icons.play_arrow : Icons.pause,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -407,21 +431,6 @@ class TrackingBottomSheet extends StatelessWidget {
               size: AppButtonSize.medium,
             ),
           ),
-        Row(
-          children: [
-            const Spacer(),
-            if (isTracking)
-              Expanded(
-                child: AppButton(
-                  onPressed: onStopTracking,
-                  text: 'Ukončit',
-                  icon: Icons.stop_rounded,
-                  type: AppButtonType.destructiveOutline,
-                  size: AppButtonSize.medium,
-                ),
-              ),
-          ],
-        ),
       ],
     );
   }

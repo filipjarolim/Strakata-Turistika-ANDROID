@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../repositories/visit_repository.dart';
 import '../models/visit_data.dart';
 import '../widgets/ui/app_toast.dart';
 import '../widgets/route_thumbnail.dart';
 import '../widgets/ui/strakata_primitives.dart';
+import '../config/app_colors.dart';
+import '../config/app_theme.dart';
+import '../config/strakata_design_tokens.dart';
+import '../widgets/strakata_editorial_background.dart';
 
 class UserVisitsPage extends StatefulWidget {
   final String userId;
@@ -67,108 +72,130 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        title: Text('Návštěvy uživatele ${widget.userName}'),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF111827),
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: const Color(0xFFE5E7EB),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: StrakataEditorialBackground()),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: Text(
+              'Návštěvy — ${widget.userName}',
+              style: GoogleFonts.libreFranklin(
+                fontWeight: FontWeight.w700,
+                fontSize: 17,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            elevation: 0,
+            foregroundColor: AppColors.textPrimary,
           ),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
-            )
-          : _visits.isEmpty
+          body: _isLoading
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                       Opacity(
-                         opacity: 0.85,
-                         child: Icon(
-                          Icons.hiking_outlined,
-                          size: 80,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                       ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Uživatel zatím nemá žádné schválené návštěvy',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: const Color(0xFF6B7280),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: CircularProgressIndicator(color: AppColors.brand),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _visits.length,
-                  itemBuilder: (context, index) {
-                    final visit = _visits[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE0E0E0)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+              : _visits.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.hiking_outlined,
+                              size: 64,
+                              color: AppColors.textTertiary.withValues(alpha: 0.4),
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              'Žádné schválené návštěvy',
+                              textAlign: TextAlign.center,
+                              style: AppTheme.editorialHeadline(
+                                color: AppColors.textPrimary,
+                                fontSize: 22,
+                              ).copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Tento uživatel zatím nemá veřejné záznamy.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.libreFranklin(
+                                fontSize: 15,
+                                color: AppColors.textTertiary,
+                                fontWeight: FontWeight.w500,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => _showRouteDetailsSheet(visit),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                    )
+                  : ListView.builder(
+                      padding: EdgeInsets.fromLTRB(
+                        StrakataLayout.pageHorizontalInset,
+                        8,
+                        StrakataLayout.pageHorizontalInset,
+                        120,
+                      ),
+                      itemCount: _visits.length,
+                      itemBuilder: (context, index) {
+                        final visit = _visits[index];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBF7),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: const Color(0xFFE8E4DC)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _showRouteDetailsSheet(visit),
+                              borderRadius: BorderRadius.circular(24),
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        _getShortVisitTitle(visit),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1A1A1A),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            _getShortVisitTitle(visit),
+                                            style: GoogleFonts.libreFranklin(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '${visit.points.toStringAsFixed(1)} bodů',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF4CAF50),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.brand.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(100),
+                                          ),
+                                          child: Text(
+                                            '${visit.points.toStringAsFixed(1)} bodů',
+                                            style: GoogleFonts.libreFranklin(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.brand,
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ),
-                                  ],
-                                ),
                                 const SizedBox(height: 8),
                                 if (visit.visitedPlaces.isNotEmpty)
                                   _buildPlaceTags(visit.visitedPlaces),
@@ -196,13 +223,13 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
                                     if (visit.route != null && (visit.route!['trackPoints'] as List?)?.isNotEmpty == true)
                                       Row(
                                         children: [
-                                          const Icon(Icons.route, size: 14, color: Color(0xFF4CAF50)),
+                                          Icon(Icons.route, size: 14, color: AppColors.brand),
                                           const SizedBox(width: 4),
-                                          const Text(
+                                          Text(
                                             'Trasa',
-                                            style: TextStyle(
+                                            style: GoogleFonts.libreFranklin(
                                               fontSize: 12,
-                                              color: Color(0xFF4CAF50),
+                                              color: AppColors.brand,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
@@ -218,6 +245,8 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
                     );
                   },
                 ),
+        ),
+      ],
     );
   }
 
@@ -246,15 +275,15 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
       children: placeList.map((place) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+          color: AppColors.brand.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.3)),
+          border: Border.all(color: AppColors.brand.withValues(alpha: 0.28)),
         ),
         child: Text(
           place,
-          style: const TextStyle(
+          style: GoogleFonts.libreFranklin(
             fontSize: 12,
-            color: Color(0xFF4CAF50),
+            color: AppColors.brand,
             fontWeight: FontWeight.w500,
           ),
         ),

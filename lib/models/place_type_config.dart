@@ -75,6 +75,15 @@ class PlaceTypeConfig {
     'updatedBy': updatedBy,
   };
 
+  /// Maps stored Material code points to const [IconData] so release builds can tree-shake fonts.
+  static IconData iconForMaterialCodePoint(int codePoint) {
+    if (codePoint == Icons.terrain.codePoint) return Icons.terrain;
+    if (codePoint == Icons.attractions.codePoint) return Icons.attractions;
+    if (codePoint == Icons.park.codePoint) return Icons.park;
+    if (codePoint == Icons.place_outlined.codePoint) return Icons.place_outlined;
+    return Icons.place_outlined;
+  }
+
   factory PlaceTypeConfig.fromMap(Map<String, dynamic> map) {
     // Default icon and color mappings
     final iconMap = {
@@ -91,10 +100,11 @@ class PlaceTypeConfig {
       'OTHER': Colors.grey,
     };
 
-    // Helper for safe icon loading if stored as int or mapped
     IconData getIcon() {
-        if (map['icon'] is int) return IconData(map['icon'], fontFamily: 'MaterialIcons');
-        return iconMap[map['name']] ?? Icons.place_outlined;
+      if (map['icon'] is int) {
+        return iconForMaterialCodePoint(map['icon'] as int);
+      }
+      return iconMap[map['name']] ?? Icons.place_outlined;
     }
 
     final colorVal = safeIntFromMap(map['color']);

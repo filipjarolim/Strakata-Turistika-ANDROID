@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import '../config/app_colors.dart';
+import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
 import '../services/auth_service.dart';
 import '../pages/dynamic_upload_page.dart';
@@ -7,186 +10,332 @@ import '../repositories/visit_repository.dart';
 import '../models/visit_data.dart';
 import '../widgets/tab_switch.dart';
 import '../widgets/ui/app_button.dart';
-import '../widgets/ui/strakata_primitives.dart';
+import '../widgets/strakata_editorial_background.dart';
 
+/// Domů — editorial layout: pale wash background, large rounded story cards.
 class ExploreTab extends StatelessWidget {
   const ExploreTab({super.key});
 
+  static const double _cardRadius = 28;
+  static const String _dogAsset = 'aidrop/dog.png';
+  static const String _mountainsAsset = 'aidrop/mountains.png';
+
   @override
   Widget build(BuildContext context) {
-    // Get screen height to determine hero height
-    final screenHeight = MediaQuery.of(context).size.height;
-    final heroHeight = screenHeight * 0.42; 
-
     return Scaffold(
-      backgroundColor: AppColors.pageBg,
-      body: Stack(
-        children: [
-          // 1. Hero band (decorative gradient — web parity)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: heroHeight + 30,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    context.strakataTokens?.heroOverlayTop ?? AppColors.heroOverlayTop,
-                    StrakataGradients.greenStart,
-                    AppColors.brandMuted,
-                  ],
-                ),
-              ),
+      backgroundColor: Colors.transparent,
+      body: StrakataEditorialBackground(
+        child: SafeArea(
+          bottom: false,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              StrakataLayout.pageHorizontalInset,
+              20,
+              StrakataLayout.pageHorizontalInset,
+              120,
             ),
-          ),
-          
-          // 2. Gradient Overlay for status bar visibility
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 120,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.3),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // 3. Main Content Sheet
-          Positioned.fill(
-            top: heroHeight,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, -5),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  StrakataLayout.pageHorizontalInset,
-                  StrakataLayout.pageContentTopInset,
-                  StrakataLayout.pageHorizontalInset,
-                  120,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                     // Greeting Section
-                    const GreetingSection(),
-                    const SizedBox(height: 24),
-
-                    // Main Start Button
-                    const MainActionCard(),
-                    const SizedBox(height: 20),
-                    
-                    // Quick Stats & Actions Row
-                    const Row(
-                      children: [
-                        Expanded(child: QuickStatCard(label: 'Moje data', icon: Icons.bar_chart_rounded, color: Colors.blue)),
-                        SizedBox(width: 16),
-                        Expanded(child: QuickStatCard(label: 'Mapa', icon: Icons.map_rounded, color: Colors.orange)),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-
-                    const RecentActivitySection(),
-                    const SizedBox(height: 32),
-
-                    // Manual Upload Section
-                    const ManualUploadSection(),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          
-          // App Bar Title (Floating)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
-            left: StrakataLayout.pageHorizontalInset,
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Strakatá',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 24,
-                    letterSpacing: -0.5,
-                    shadows: [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2))],
-                  ),
-                ),
-                Text(
-                  'TURISTIKA',
-                  style: TextStyle(
-                    color: Colors.white, // White text for hero
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                    letterSpacing: 2.0,
-                    shadows: [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2))],
-                  ),
-                ),
+                const _HomeTitleBlock(),
+                const SizedBox(height: 28),
+                _HeroCompetitionCard(radius: _cardRadius, dogAsset: _dogAsset),
+                const SizedBox(height: 20),
+                _AboutUsCard(radius: _cardRadius, mountainsAsset: _mountainsAsset),
+                const SizedBox(height: 28),
+                const _HomeQuickNavRow(),
+                const SizedBox(height: 28),
+                const RecentActivitySection(),
+                const SizedBox(height: 28),
+                const ManualUploadSection(),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class GreetingSection extends StatelessWidget {
-  const GreetingSection({super.key});
+class _HomeTitleBlock extends StatelessWidget {
+  const _HomeTitleBlock();
 
   @override
   Widget build(BuildContext context) {
     final user = AuthService.currentUser;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ).createShader(bounds),
-          child: Text(
-            user != null ? 'Ahoj, ${user.name.split(' ')[0]}!' : 'Vítejte!',
-            style: const TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w900,
-              color: Colors.white, // Required for ShaderMask
-              letterSpacing: -1.0,
-              height: 1.1,
-            ),
-          ),
+        Text(
+          'Strakatá Turistika',
+          textAlign: TextAlign.center,
+          style: AppTheme.editorialHeadline(
+            color: AppColors.textPrimary,
+            fontSize: 26,
+          ).copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         Text(
-          'Připraveni na nové dobrodružství?',
-          style: TextStyle(
-            fontSize: 17,
-            color: Colors.grey[600],
+          'Poznávajte Česko se svým psím parťákem',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.libreFranklin(
+            fontSize: 15,
+            height: 1.35,
             fontWeight: FontWeight.w500,
-            letterSpacing: -0.2,
+            color: AppColors.textTertiary,
+          ),
+        ),
+        if (user != null) ...[
+          const SizedBox(height: 14),
+          Text(
+            'Ahoj, ${user.name.split(' ').first}!',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.libreFranklin(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _HeroCompetitionCard extends StatelessWidget {
+  const _HeroCompetitionCard({
+    required this.radius,
+    required this.dogAsset,
+  });
+
+  final double radius;
+  final String dogAsset;
+
+  static const Color _tan = Color(0xFFE8D4BC);
+  static const Color _tanDeep = Color(0xFFD4B896);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        clipBehavior: Clip.hardEdge,
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [_tan, _tanDeep.withValues(alpha: 0.85)],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 22, 112, 22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Objevujte svět tlapku v tlapce.',
+                    style: AppTheme.editorialHeadline(
+                      color: AppColors.textPrimary,
+                      fontSize: 22,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Stačí ujít 3 km, ulovit vrchol nebo památku a body do žebříčku jsou vaše. Každý kilometr se počítá!',
+                    style: GoogleFonts.libreFranklin(
+                      fontSize: 14,
+                      height: 1.45,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF3D3D3D),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  _CompetitionPillButton(
+                    onTap: () => TabSwitch.of(context)?.switchTo(2),
+                  ),
+                ],
+              ),
+            ),
+            // Larger dog, nudged past card edges — ClipRRect crops for a “peek” effect.
+            Positioned(
+              right: -28,
+              bottom: -18,
+              child: Image.asset(
+                dogAsset,
+                height: 268,
+                fit: BoxFit.contain,
+                alignment: Alignment.bottomRight,
+                errorBuilder: (_, __, ___) => const SizedBox(
+                  height: 268,
+                  width: 120,
+                  child: Icon(Icons.pets, size: 88, color: Color(0xFF8D6B4A)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompetitionPillButton extends StatelessWidget {
+  const _CompetitionPillButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 0,
+      borderRadius: BorderRadius.circular(999),
+      shadowColor: Colors.black26,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.explore_rounded, size: 22, color: Colors.black),
+              const SizedBox(width: 10),
+              Text(
+                'Soutěžit',
+                style: GoogleFonts.libreFranklin(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AboutUsCard extends StatelessWidget {
+  const _AboutUsCard({
+    required this.radius,
+    required this.mountainsAsset,
+  });
+
+  final double radius;
+  final String mountainsAsset;
+
+  static const Color _tintWhite = Color(0xB8FFFFFF);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        clipBehavior: Clip.hardEdge,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset(
+                mountainsAsset,
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+                errorBuilder: (_, __, ___) => const ColoredBox(
+                  color: Color(0xFFA8CFE8),
+                  child: Center(child: Icon(Icons.landscape_rounded, size: 48, color: Colors.white70)),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: ColoredBox(color: _tintWhite),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 22, 22, 26),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kdo jsme?',
+                    style: AppTheme.editorialHeadline(
+                      color: AppColors.textPrimary,
+                      fontSize: 22,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Jsme komunita milovníků turistiky a psích parťáků. '
+                    'Společně objevujeme českou krajinu, sbíráme vrcholy a památky '
+                    'a těšíme se z každého kilometru v terénu — soutěžně i jen tak pro radost.',
+                    style: GoogleFonts.libreFranklin(
+                      fontSize: 14,
+                      height: 1.5,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF2C2C2C),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeQuickNavRow extends StatelessWidget {
+  const _HomeQuickNavRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _TintedHomeCard(
+            label: 'Moje data',
+            icon: Icons.bar_chart_rounded,
+            tint: const Color(0xFFE3EDF8),
+            iconColor: const Color(0xFF2563EB),
+            onTap: () => TabSwitch.of(context)?.switchTo(1),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _TintedHomeCard(
+            label: 'Mapa',
+            icon: Icons.map_rounded,
+            tint: const Color(0xFFF0EBE3),
+            iconColor: const Color(0xFFB45309),
+            onTap: () => TabSwitch.of(context)?.switchTo(2),
           ),
         ),
       ],
@@ -194,78 +343,65 @@ class GreetingSection extends StatelessWidget {
   }
 }
 
-class MainActionCard extends StatelessWidget {
-  const MainActionCard({super.key});
+class _TintedHomeCard extends StatelessWidget {
+  const _TintedHomeCard({
+    required this.label,
+    required this.icon,
+    required this.tint,
+    required this.iconColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color tint;
+  final Color iconColor;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2E7D32), Color(0xFF43A047)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF2E7D32).withValues(alpha: 0.4),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
+    const r = 24.0;
+    return Material(
+      color: tint,
+      borderRadius: BorderRadius.circular(r),
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(r),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.65), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => TabSwitch.of(context)?.switchTo(2), // GPS
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'NOVÝ VÝLET',
-                      style: TextStyle(
-                        color: Color(0xFFE8F5E9),
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Zaznamenat\ntrasu',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ],
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  shape: BoxShape.circle,
                 ),
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 12, offset: const Offset(0, 4)),
-                    ],
-                  ),
-                  child: const Icon(Icons.play_arrow_rounded, color: Color(0xFF2E7D32), size: 38),
+                child: Icon(icon, color: iconColor, size: 26),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.libreFranklin(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: AppColors.textPrimary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -273,49 +409,18 @@ class MainActionCard extends StatelessWidget {
   }
 }
 
-class QuickStatCard extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
 
-  const QuickStatCard({super.key, required this.label, required this.icon, required this.color});
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: StrakataSurface.cardDecoration(),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            if (label.contains('data')) {
-              TabSwitch.of(context)?.switchTo(1);
-            } else {
-              TabSwitch.of(context)?.switchTo(2);
-            }
-          },
-          borderRadius: BorderRadius.circular(StrakataRadii.app),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 26),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  label,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF1F2937)),
-                ),
-              ],
-            ),
-          ),
-        ),
+    return Text(
+      text,
+      style: AppTheme.editorialHeadline(
+        color: AppColors.textPrimary,
+        fontSize: 20,
       ),
     );
   }
@@ -350,12 +455,11 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
       final season = DateTime.now().year;
       final currentUser = AuthService.currentUser;
       final result = await _visitRepository.getVisits(
-        page: 1, 
-        limit: 3, 
-        seasonYear: season, 
-        userId: currentUser?.id, 
-        onlyApproved: false, // Show pending/rejected for own activity too? Or usually public valid ones? Let's say user's own.
-        // Actually getVisits filter is structured. Let's use it as is.
+        page: 1,
+        limit: 3,
+        seasonYear: season,
+        userId: currentUser?.id,
+        onlyApproved: false,
       );
       if (!mounted) return;
       setState(() {
@@ -377,8 +481,9 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const StrakataSectionTitle('Poslední aktivita', fontSize: 18),
+            const _SectionTitle('Poslední aktivita'),
             AppButton(
               text: 'Zobrazit vše',
               onPressed: () => TabSwitch.of(context)?.switchTo(1),
@@ -389,19 +494,59 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
         ),
         const SizedBox(height: 16),
         if (_loading)
-          const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: Color(0xFF2E7D32))))
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: CircularProgressIndicator(color: AppColors.brand),
+            ),
+          )
         else if (_recent.isEmpty)
-           Container(
-             width: double.infinity,
-             padding: const EdgeInsets.all(20),
-             decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(16)),
-             child: const Center(child: Text('Zatím žádná aktivita.', style: TextStyle(color: Colors.grey))),
-           )
+          _EmptyHomePanel(
+            message: 'Zatím žádná aktivita.',
+          )
         else
           Column(
-            children: _recent.map((v) => ActivityItem(v)).toList(),
+            children: _recent.map((v) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: ActivityItem(v),
+                )).toList(),
           ),
       ],
+    );
+  }
+}
+
+class _EmptyHomePanel extends StatelessWidget {
+  const _EmptyHomePanel({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F4EF),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          message,
+          style: GoogleFonts.libreFranklin(
+            color: AppColors.textTertiary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -412,32 +557,55 @@ class ActivityItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: StrakataSurface.cardDecoration(
-        borderRadius: 16,
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
+    return Material(
+      color: const Color(0xFFFFFBF7),
+      borderRadius: BorderRadius.circular(24),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => TabSwitch.of(context)?.switchTo(1),
+        child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFF3F4F6),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFE8E4DC)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-          child: const Icon(Icons.terrain, color: Colors.black54),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEF2F0),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.terrain_rounded, color: Color(0xFF5C5C5C)),
+            ),
+            title: Text(
+              visit.routeTitle ?? visit.visitedPlaces,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.libreFranklin(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            subtitle: Text(
+              '${visit.points.toStringAsFixed(0)} bodů',
+              style: GoogleFonts.libreFranklin(
+                color: AppColors.brand,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+            trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey[500]),
+          ),
         ),
-        title: Text(
-          visit.routeTitle ?? visit.visitedPlaces,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF1F2937)),
-        ),
-        subtitle: Text(
-           '${visit.points.toStringAsFixed(0)} bodů',
-           style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.w600),
-        ),
-        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
       ),
     );
   }
@@ -451,15 +619,16 @@ class ManualUploadSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const StrakataSectionTitle('Ruční nahrání', fontSize: 18),
+        const _SectionTitle('Ruční nahrání'),
         const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
-              child: _UploadCard(
+              child: _UploadHomeCard(
                 label: 'GPX soubor',
                 icon: Icons.upload_file_rounded,
-                color: Colors.blue,
+                tint: const Color(0xFFE8F0FC),
+                iconColor: const Color(0xFF1D4ED8),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const DynamicUploadPage(slug: 'gpx-upload')),
@@ -468,10 +637,11 @@ class ManualUploadSection extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: _UploadCard(
+              child: _UploadHomeCard(
                 label: 'Screenshot',
                 icon: Icons.add_photo_alternate_rounded,
-                color: Colors.purple,
+                tint: const Color(0xFFF3E8FF),
+                iconColor: const Color(0xFF7C3AED),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const DynamicUploadPage(slug: 'screenshot-upload')),
@@ -485,41 +655,57 @@ class ManualUploadSection extends StatelessWidget {
   }
 }
 
-class _UploadCard extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _UploadCard({
+class _UploadHomeCard extends StatelessWidget {
+  const _UploadHomeCard({
     required this.label,
     required this.icon,
-    required this.color,
+    required this.tint,
+    required this.iconColor,
     required this.onTap,
   });
 
+  final String label;
+  final IconData icon;
+  final Color tint;
+  final Color iconColor;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: StrakataSurface.cardDecoration(),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(StrakataRadii.app),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Icon(icon, color: color, size: 28),
-                const SizedBox(height: 12),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Color(0xFF1F2937)),
+    const r = 24.0;
+    return Material(
+      color: tint,
+      borderRadius: BorderRadius.circular(r),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(r),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: iconColor, size: 30),
+              const SizedBox(height: 12),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.libreFranklin(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

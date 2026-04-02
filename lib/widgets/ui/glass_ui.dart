@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../strakata_editorial_background.dart';
+
 
 
 
@@ -23,13 +25,30 @@ class GlassScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: backgroundColor ?? const Color(0xFFF5F6F7),
-      appBar: appBar,
-      extendBody: true,
-      body: body,
-      bottomNavigationBar: bottomNavigationBar,
-      floatingActionButton: floatingActionButton,
+    final bg = backgroundColor;
+    if (bg != null) {
+      return Scaffold(
+        backgroundColor: bg,
+        appBar: appBar,
+        extendBody: true,
+        body: body,
+        bottomNavigationBar: bottomNavigationBar,
+        floatingActionButton: floatingActionButton,
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: StrakataEditorialBackground()),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: appBar,
+          extendBody: true,
+          body: body,
+          bottomNavigationBar: bottomNavigationBar,
+          floatingActionButton: floatingActionButton,
+        ),
+      ],
     );
   }
 }
@@ -62,14 +81,14 @@ class GlassCard extends StatelessWidget {
       margin: margin ?? const EdgeInsets.symmetric(vertical: 8),
       padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(borderRadius ?? 20),
-        border: Border.all(color: const Color(0xFFF3F4F6)),
+        color: const Color(0xFFFFFBF7),
+        borderRadius: BorderRadius.circular(borderRadius ?? 24),
+        border: Border.all(color: const Color(0xFFE8E4DC)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
         ],
       ),

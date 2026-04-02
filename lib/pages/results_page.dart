@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../repositories/visit_repository.dart';
 import '../models/leaderboard_entry.dart';
 import '../services/error_recovery_service.dart';
 import 'user_visits_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/app_colors.dart';
+import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
+import '../widgets/strakata_editorial_background.dart';
 import '../widgets/ui/strakata_primitives.dart';
 
 class ResultsPage extends StatefulWidget {
@@ -223,162 +226,176 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F7),
-      appBar: AppBar(
-        toolbarHeight: 78,
-        title: Padding(
-          padding: const EdgeInsets.fromLTRB(StrakataLayout.pageHorizontalInset, 12, 8, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Žebříček',
-                style: TextStyle(
-                  color: Color(0xFF111827),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 26,
-                  letterSpacing: -1.0,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: StrakataEditorialBackground()),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            toolbarHeight: 78,
+            title: Padding(
+              padding: const EdgeInsets.fromLTRB(StrakataLayout.pageHorizontalInset, 12, 8, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Žebříček',
+                    style: AppTheme.editorialHeadline(
+                      color: AppColors.textPrimary,
+                      fontSize: 26,
+                    ).copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  if (selectedSeason != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                            ),
+                            child: Text(
+                              'Sezóna $selectedSeason',
+                              style: GoogleFonts.libreFranklin(
+                                color: AppColors.primary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '• Nejlepší turisti',
+                            style: GoogleFonts.libreFranklin(
+                              color: AppColors.textTertiary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            elevation: 0,
+            centerTitle: false,
+            actions: [
+              TextButton.icon(
+                onPressed: () async {
+                  final url = Uri.parse('https://strakataturistika.vercel.app/pravidla');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  }
+                },
+                icon: Icon(Icons.description_outlined, size: 20, color: AppColors.textPrimary),
+                label: Text(
+                  'Pravidla',
+                  style: GoogleFonts.libreFranklin(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  backgroundColor: Colors.white.withValues(alpha: 0.85),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.9)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 ),
               ),
-              if (selectedSeason != null)
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'Sezóna $selectedSeason',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '• Nejlepší turisti',
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+              const SizedBox(width: 6),
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0EBE3),
+                  borderRadius: BorderRadius.circular(100),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
                 ),
+                child: IconButton(
+                  onPressed: () => _showFilterSheet(),
+                  icon: Icon(Icons.tune_rounded, color: AppColors.textPrimary, size: 22),
+                  tooltip: 'Filtrovat',
+                  style: IconButton.styleFrom(
+                    padding: const EdgeInsets.all(8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
             ],
           ),
+          body: _isInitialLoading
+              ? _buildInitialSkeleton()
+              : availableSeasons.isEmpty
+                  ? _buildEmptyState()
+                  : RefreshIndicator(
+                      onRefresh: () async {
+                        await _reloadForCurrentFilters(resetScroll: false);
+                      },
+                      color: AppColors.brand,
+                      backgroundColor: Colors.white,
+                      child: _buildLeaderboardList(),
+                    ),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: false,
-        actions: [
-          TextButton.icon(
-            onPressed: () async {
-              final url = Uri.parse('https://strakataturistika.vercel.app/pravidla');
-              if (await canLaunchUrl(url)) {
-                await launchUrl(url, mode: LaunchMode.externalApplication);
-              }
-            },
-            icon: const Icon(Icons.description_outlined, size: 20),
-            label: const Text('Pravidla'),
-            style: TextButton.styleFrom(
-              foregroundColor: Color(0xFF1A1A1A),
-              textStyle: const TextStyle(fontWeight: FontWeight.w700),
-              backgroundColor: const Color(0xFFF3F4F6),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(100),
-            ),
-            child: IconButton(
-              onPressed: () => _showFilterSheet(),
-              icon: Icon(Icons.filter_list, color: AppColors.primary, size: 22),
-              tooltip: 'Filtrovat',
-              style: IconButton.styleFrom(
-                padding: const EdgeInsets.all(8),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey[200], height: 1),
-        ),
-      ),
-      body: _isInitialLoading
-          ? _buildInitialSkeleton()
-          : availableSeasons.isEmpty
-              ? _buildEmptyState()
-          : RefreshIndicator(
-              onRefresh: () async {
-                await _reloadForCurrentFilters(resetScroll: false);
-              },
-              color: AppColors.primary,
-              backgroundColor: Colors.white,
-              child: _buildLeaderboardList(),
-            ),
+      ],
     );
   }
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF2E7D32).withValues(alpha: 0.1),
-                  blurRadius: 32,
-                  offset: const Offset(0, 16),
-                ),
-              ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBF7),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFE8E4DC)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 24,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.emoji_events_outlined,
+                size: 56,
+                color: AppColors.brand.withValues(alpha: 0.85),
+              ),
             ),
-            child: Icon(
-              Icons.emoji_events_outlined,
-              size: 64,
-              color: AppColors.primary.withValues(alpha: 0.8),
+            const SizedBox(height: 22),
+            Text(
+              'Žádné výsledky',
+              textAlign: TextAlign.center,
+              style: AppTheme.editorialHeadline(
+                color: AppColors.textPrimary,
+                fontSize: 22,
+              ).copyWith(fontWeight: FontWeight.w700),
             ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Žádné výsledky',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1A1A1A),
-              letterSpacing: -0.5,
+            const SizedBox(height: 8),
+            Text(
+              'Buďte první a zaznamenejte svůj výlet!',
+              style: GoogleFonts.libreFranklin(
+                fontSize: 15,
+                color: AppColors.textTertiary,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Buďte první a zaznamenejte svůj výlet!',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[500],
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -417,8 +434,8 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
               },
             ),
           )
-        : const Center(
-            child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
+        : Center(
+            child: CircularProgressIndicator(color: AppColors.brand),
           );
   }
 
@@ -443,16 +460,16 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFFFFBF7),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF111827).withValues(alpha: 0.04),
-            blurRadius: 20,
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 16,
             offset: const Offset(0, 8),
           ),
         ],
-        border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+        border: Border.all(color: const Color(0xFFE8E4DC)),
       ),
       child: Material(
         color: Colors.transparent,
@@ -517,11 +534,11 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                         entry.userName.isEmpty ? 'Neznámý uživatel' : entry.userName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: GoogleFonts.libreFranklin(
                           fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF111827),
-                          letterSpacing: -0.3,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.2,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -562,9 +579,9 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF9FAFB),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFF3F4F6)),
+                    color: const Color(0xFFF0EBE3),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -576,11 +593,11 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                           const SizedBox(width: 4),
                           Text(
                             entry.totalPoints.toStringAsFixed(0),
-                            style: const TextStyle(
+                            style: GoogleFonts.libreFranklin(
                               fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF111827),
-                              letterSpacing: -0.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                              letterSpacing: -0.4,
                             ),
                           ),
                         ],
@@ -603,7 +620,12 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
 
   Widget _buildInitialSkeleton() {
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(
+        StrakataLayout.pageHorizontalInset,
+        16,
+        StrakataLayout.pageHorizontalInset,
+        120,
+      ),
       itemCount: 8,
       itemBuilder: (context, index) => _skeletonCard(),
     );
@@ -634,12 +656,12 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
 
   Widget _skeletonCard() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
+        color: const Color(0xFFFFFBF7),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE8E4DC)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,8 +699,8 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
       height: height,
       width: width,
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F1F2),
-        borderRadius: BorderRadius.circular(6),
+        color: const Color(0xFFE8E4DC).withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(8),
       ),
     );
   }
@@ -709,14 +731,15 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBF7),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(color: const Color(0xFFE8E4DC)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black26,
-              blurRadius: 40,
-              offset: Offset(0, -10),
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 32,
+              offset: const Offset(0, -8),
             ),
           ],
         ),
@@ -736,7 +759,13 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const StrakataSectionTitle('Filtrovat výsledky', fontSize: 22),
+                Text(
+                  'Filtrovat výsledky',
+                  style: AppTheme.editorialHeadline(
+                    color: AppColors.textPrimary,
+                    fontSize: 22,
+                  ).copyWith(fontWeight: FontWeight.w700),
+                ),
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.grey[100],

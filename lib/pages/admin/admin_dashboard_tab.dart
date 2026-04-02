@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../config/app_colors.dart';
 import '../../services/database/database_service.dart';
+import '../../widgets/strakata_editorial_background.dart';
 import '../../widgets/ui/strakata_primitives.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 
@@ -86,17 +88,21 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      body: RefreshIndicator(
-        onRefresh: _refreshSystemStatus,
-        color: const Color(0xFF2E7D32),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: StrakataEditorialBackground()),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          body: RefreshIndicator(
+            onRefresh: _refreshSystemStatus,
+            color: AppColors.brand,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               // Header
               const Text(
                 'Přehled Systému',
@@ -221,6 +227,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
           ),
         ),
       ),
+        ),
+      ],
     );
   }
 

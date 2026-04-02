@@ -42,7 +42,7 @@ class _HubDashboardCardState extends State<HubDashboardCard> {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 padding: const EdgeInsets.all(AdminSpacing.md),
@@ -52,19 +52,15 @@ class _HubDashboardCardState extends State<HubDashboardCard> {
                 ),
                 child: Icon(widget.icon, color: AdminColors.indigo500, size: 24),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.title,
-                    style: AdminTextStyles.headingLarge,
-                  ),
-                  const SizedBox(height: AdminSpacing.xs),
-                  Text(
-                    widget.count,
-                    style: AdminTextStyles.body,
-                  ),
-                ],
+              const SizedBox(height: AdminSpacing.lg),
+              Text(
+                widget.title,
+                style: AdminTextStyles.headingLarge,
+              ),
+              const SizedBox(height: AdminSpacing.xs),
+              Text(
+                widget.count,
+                style: AdminTextStyles.body,
               ),
             ],
           ),
@@ -222,7 +218,8 @@ class _VisitDataCardState extends State<VisitDataCard> {
                   crossAxisCount: 2,
                   mainAxisSpacing: AdminSpacing.md,
                   crossAxisSpacing: AdminSpacing.md,
-                  childAspectRatio: 1.2,
+                  // Taller cells than 1.2 — StatBox (icon + label + value) needs vertical room
+                  childAspectRatio: 0.98,
                   children: widget.stats,
                 ),
                 if (widget.images.isNotEmpty) ...[

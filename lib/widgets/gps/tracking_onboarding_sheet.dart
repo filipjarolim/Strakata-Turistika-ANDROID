@@ -100,9 +100,10 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with 
 
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBF7),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: const Color(0xFFE8E4DC)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../config/admin_theme.dart';
+import '../strakata_editorial_background.dart';
 
 class BackgroundDecoration extends StatelessWidget {
   const BackgroundDecoration({super.key});
@@ -9,7 +10,7 @@ class BackgroundDecoration extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        Container(color: AdminColors.zinc50),
+        Container(color: Colors.transparent),
         Positioned(
           top: -100,
           left: -100,
@@ -86,6 +87,7 @@ class AdminPageTemplate extends StatelessWidget {
     return Scaffold(
       body: Stack(
         children: [
+          const Positioned.fill(child: StrakataEditorialBackground()),
           const BackgroundDecoration(),
           SafeArea(
             child: Column(

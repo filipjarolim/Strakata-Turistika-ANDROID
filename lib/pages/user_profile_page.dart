@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,7 +9,10 @@ import '../widgets/route_thumbnail.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/ui/app_toast.dart';
 import '../widgets/ui/strakata_primitives.dart';
+import '../config/app_colors.dart';
+import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
+import '../widgets/strakata_editorial_background.dart';
 import '../services/logging_service.dart';
 import '../repositories/visit_repository.dart';
 import '../services/auth_service.dart';
@@ -103,55 +107,67 @@ class _UserProfilePageState extends State<UserProfilePage> {
     final totalPoints = _getTotalPoints();
     final totalDistance = _getTotalDistance() / 1000; // Convert to km
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: false,
-        scrolledUnderElevation: 2,
-        shadowColor: Colors.black.withValues(alpha: 0.05),
-        title: Padding(
-          padding: const EdgeInsets.fromLTRB(StrakataLayout.pageHorizontalInset, 14, 8, 14),
-          child: const Text(
-            'Můj Profil',
-            style: TextStyle(
-              color: Color(0xFF111827),
-              fontWeight: FontWeight.w800,
-              fontSize: 24,
-              letterSpacing: -0.5,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: StrakataEditorialBackground()),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            elevation: 0,
+            centerTitle: false,
+            title: Padding(
+              padding: const EdgeInsets.fromLTRB(StrakataLayout.pageHorizontalInset, 14, 8, 14),
+              child: Text(
+                'Můj profil',
+                style: AppTheme.editorialHeadline(
+                  color: AppColors.textPrimary,
+                  fontSize: 26,
+                ).copyWith(fontWeight: FontWeight.w700),
+              ),
             ),
           ),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF2E7D32),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadUserVisits,
-              color: const Color(0xFF2E7D32),
-              backgroundColor: Colors.white,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
-                  StrakataLayout.pageHorizontalInset,
-                  28,
-                  StrakataLayout.pageHorizontalInset,
-                  24,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Profile Header Card
-                    _buildProfileHeaderCard(currentUser),
-                    const SizedBox(height: 24),
+          body: _isLoading
+              ? Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.brand,
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadUserVisits,
+                  color: AppColors.brand,
+                  backgroundColor: Colors.white,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      StrakataLayout.pageHorizontalInset,
+                      20,
+                      StrakataLayout.pageHorizontalInset,
+                      120,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildProfileHeaderCard(currentUser),
+                        const SizedBox(height: 22),
 
                     // Stats Section
                     Container(
-                      decoration: StrakataSurface.cardDecoration(),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F4EF),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.75)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
                       child: Row(
                         children: [
@@ -166,14 +182,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ),
                     ),
 
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
 
-                    // "Mé trasy" section
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const StrakataSectionTitle('Moje Trasy'),
-                      ],
+                    Text(
+                      'Moje trasy',
+                      style: AppTheme.editorialHeadline(
+                        color: AppColors.textPrimary,
+                        fontSize: 20,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _userVisits.isEmpty
@@ -191,13 +207,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
                             ),
                           ),
 
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
 
-                    // Menu Section
-                    const StrakataSectionTitle('Nastavení a Akce'),
+                    Text(
+                      'Nastavení a akce',
+                      style: AppTheme.editorialHeadline(
+                        color: AppColors.textPrimary,
+                        fontSize: 20,
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     Container(
-                      decoration: StrakataSurface.cardDecoration(),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBF7),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFFE8E4DC)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 14,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
                       clipBehavior: Clip.antiAlias,
                       child: Column(
                         children: [
@@ -242,11 +274,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ),
                     ),
                     
-                    const SizedBox(height: 150),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
             ),
+        ),
+      ],
     );
   }
 
@@ -255,27 +289,27 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Widget _buildProfileHeaderCard(User? user) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      // No decoration needed as it's just text info above stats, keeping it clean
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             user?.name ?? 'Uživatel',
-            style: const TextStyle(
+            style: AppTheme.editorialHeadline(
+              color: AppColors.textPrimary,
               fontSize: 28,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF111827),
-              letterSpacing: -0.5,
-            ),
+            ).copyWith(fontWeight: FontWeight.w700),
           ),
           if (user?.email != null)
-            Text(
-              user!.email,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                user!.email,
+                style: GoogleFonts.libreFranklin(
+                  fontSize: 15,
+                  color: AppColors.textTertiary,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
         ],
@@ -297,19 +331,19 @@ class _UserProfilePageState extends State<UserProfilePage> {
         const SizedBox(height: 12),
         Text(
           value,
-          style: const TextStyle(
+          style: GoogleFonts.libreFranklin(
             fontSize: 24,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF111827),
+            color: AppColors.textPrimary,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(
+          style: GoogleFonts.libreFranklin(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Colors.grey[500],
+            color: AppColors.textTertiary,
           ),
         ),
       ],
@@ -327,20 +361,20 @@ class _UserProfilePageState extends State<UserProfilePage> {
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: (iconColor ?? const Color(0xFF2E7D32)).withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: iconColor ?? const Color(0xFF2E7D32), size: 22),
+              decoration: BoxDecoration(
+                color: (iconColor ?? AppColors.brand).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: iconColor ?? AppColors.brand, size: 22),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: GoogleFonts.libreFranklin(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF374151),
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ),
@@ -353,32 +387,46 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Widget _buildDivider() {
-    return Divider(height: 1, thickness: 1, color: Colors.grey[100], indent: 70);
+    return Divider(height: 1, thickness: 1, color: const Color(0xFFE8E4DC).withValues(alpha: 0.6), indent: 70);
   }
 
   Widget _buildEmptyRoutesState() {
     return Container(
       width: double.infinity,
-      decoration: StrakataSurface.cardDecoration(),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F4EF),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.75)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.hiking_rounded, size: 64, color: Colors.grey[300]),
+          Icon(Icons.hiking_rounded, size: 56, color: AppColors.textTertiary.withValues(alpha: 0.35)),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Žádné trasy',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 18,
-              color: Color(0xFF374151),
+            style: AppTheme.editorialHeadline(
+              color: AppColors.textPrimary,
+              fontSize: 20,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Vyrazte na výlet a začněte objevovat!',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[500], fontSize: 15),
+            style: GoogleFonts.libreFranklin(
+              color: AppColors.textTertiary,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -387,8 +435,19 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Widget _buildRouteCard(VisitData visit) {
     return Container(
-      width: 280, // Slightly wider
-      decoration: StrakataSurface.cardDecoration(),
+      width: 280,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBF7),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE8E4DC)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       clipBehavior: Clip.antiAlias,
       child: Material(
         color: Colors.transparent,
@@ -440,10 +499,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     // Title
                     Text(
                       visit.routeTitle ?? visit.visitedPlaces,
-                      style: const TextStyle(
+                      style: GoogleFonts.libreFranklin(
                         fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF111827),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
                         height: 1.2,
                       ),
                       maxLines: 2,

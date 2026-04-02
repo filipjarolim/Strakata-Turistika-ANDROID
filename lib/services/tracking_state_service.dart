@@ -23,6 +23,7 @@ class TrackingStateService {
   
   // Getters
   bool get isTracking => _isTracking;
+  bool get isRecordingPaused => _trackingService.isRecordingPaused;
   Stream<bool> get trackingStateStream => _trackingStateController.stream;
   Stream<String> get trackingInfoStream => _trackingInfoController.stream;
   
@@ -84,6 +85,11 @@ class TrackingStateService {
     return success;
   }
   
+  /// Pause/resume time and track recording (GPS updates ignored while paused).
+  void setRecordingPaused(bool paused) {
+    _trackingService.setRecordingPaused(paused);
+  }
+
   // Stop tracking
   Future<void> stopTracking() async {
     await _trackingService.stopTracking();

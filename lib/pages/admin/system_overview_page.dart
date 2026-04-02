@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../config/app_colors.dart';
 import '../../services/database/database_service.dart';
+import '../../widgets/strakata_editorial_background.dart';
 import '../../widgets/ui/app_button.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 
@@ -82,139 +85,157 @@ class _SystemOverviewPageState extends State<SystemOverviewPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
-      appBar: AppBar(
-        title: const Text('Admin Dashboard', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-             icon: const Icon(Icons.refresh), 
-             onPressed: _isLoading ? null : _refreshSystemStatus,
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Status Header
-            _buildStatusHeader(),
-            const SizedBox(height: 24),
-            
-            // Critical Metrics Grid
-            Text(
-              'Database metrics'.toUpperCase(), 
-              style: TextStyle(
-                fontSize: 12, 
-                fontWeight: FontWeight.w900, 
-                color: Colors.grey[800],
-                letterSpacing: 0.8,
-              ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: StrakataEditorialBackground()),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: Text(
+              'Admin Dashboard',
+              style: GoogleFonts.libreFranklin(fontWeight: FontWeight.w700, fontSize: 18),
             ),
-            const SizedBox(height: 16),
-            LayoutBuilder(builder: (context, constraints) {
-              return Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: [
-                  _buildMetricCard(
-                    'Connection', 
-                    _isConnected ? 'Active' : 'Offline', 
-                    _isConnected ? Colors.green : Colors.red,
-                    icon: Icons.link
-                  ),
-                  _buildMetricCard(
-                    'Latency', 
-                    _pingLatency, 
-                    Colors.orange,
-                    icon: Icons.speed
-                  ),
-                  _buildMetricCard(
-                    'Total Users', 
-                    _userCount.toString(), 
-                    Colors.blue,
-                    icon: Icons.people
-                  ),
-                  _buildMetricCard(
-                    'Total Visits', 
-                    _visitCount.toString(), 
-                    Colors.purple,
-                    icon: Icons.map
-                  ),
-                ],
-              );
-            }),
-
-            const SizedBox(height: 32),
-            
-            // Quick Actions
-            Text(
-              'Quick actions'.toUpperCase(), 
-              style: TextStyle(
-                fontSize: 12, 
-                fontWeight: FontWeight.w900, 
-                color: Colors.grey[800],
-                letterSpacing: 0.8,
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            elevation: 0,
+            foregroundColor: AppColors.textPrimary,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: _isLoading ? null : _refreshSystemStatus,
               ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[200]!),
-              ),
-              child: Column(
-                children: [
-                   AppButton(
-                     text: 'Force Reconnect',
-                     onPressed: _isLoading ? null : () async {
-                       await DatabaseService().close();
-                       _refreshSystemStatus();
-                     },
-                     type: AppButtonType.outline,
-                   ),
-                   const SizedBox(height: 12),
-                   const Text('Environment: Production (Atlas)', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Error Logs Console
-            if (_errorLogs.isNotEmpty) ...[
-               const Text('Debug Console', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
-               const SizedBox(height: 8),
-               Container(
-                 width: double.infinity,
-                 padding: const EdgeInsets.all(12),
-                 decoration: BoxDecoration(
-                   color: Colors.black87,
-                   borderRadius: BorderRadius.circular(8),
-                 ),
-                 child: Column(
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: _errorLogs.map((e) => Text(
-                     '> $e', 
-                     style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 12)
-                   )).toList(),
-                 ),
-               )
             ],
-            
-            if (_isLoading)
-               Center(child: Padding(
-                 padding: const EdgeInsets.all(20.0),
-                 child: Text(_statusMessage, style: const TextStyle(color: Colors.grey)),
-               )),
-          ],
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Status Header
+                _buildStatusHeader(),
+                const SizedBox(height: 24),
+
+                // Critical Metrics Grid
+                Text(
+                  'Database metrics'.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.grey[800],
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                LayoutBuilder(builder: (context, constraints) {
+                  return Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      _buildMetricCard(
+                        'Connection',
+                        _isConnected ? 'Active' : 'Offline',
+                        _isConnected ? Colors.green : Colors.red,
+                        icon: Icons.link,
+                      ),
+                      _buildMetricCard(
+                        'Latency',
+                        _pingLatency,
+                        Colors.orange,
+                        icon: Icons.speed,
+                      ),
+                      _buildMetricCard(
+                        'Total Users',
+                        _userCount.toString(),
+                        Colors.blue,
+                        icon: Icons.people,
+                      ),
+                      _buildMetricCard(
+                        'Total Visits',
+                        _visitCount.toString(),
+                        Colors.purple,
+                        icon: Icons.map,
+                      ),
+                    ],
+                  );
+                }),
+
+                const SizedBox(height: 32),
+
+                // Quick Actions
+                Text(
+                  'Quick actions'.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.grey[800],
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBF7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE8E4DC)),
+                  ),
+                  child: Column(
+                    children: [
+                      AppButton(
+                        text: 'Force Reconnect',
+                        onPressed: _isLoading
+                            ? null
+                            : () async {
+                                await DatabaseService().close();
+                                _refreshSystemStatus();
+                              },
+                        type: AppButtonType.outline,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Environment: Production (Atlas)', style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Error Logs Console
+                if (_errorLogs.isNotEmpty) ...[
+                  const Text('Debug Console',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: _errorLogs
+                          .map((e) => Text('> $e',
+                              style: const TextStyle(
+                                  color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 12)))
+                          .toList(),
+                    ),
+                  )
+                ],
+
+                if (_isLoading)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Text(_statusMessage, style: const TextStyle(color: Colors.grey)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 

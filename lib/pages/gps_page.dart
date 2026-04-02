@@ -80,9 +80,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   static LatLng? _lastMapCenter;
   static double? _lastMapZoom;
   
-  // Tracking pause state
-  bool _isPaused = false;
-
   // Sheet state
   final DraggableScrollableController _sheetController = DraggableScrollableController();
   double _sheetExtent = 0.18;
@@ -426,7 +423,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   void _toggleTracking() {
     HapticService.selectionClick();
     if (_trackingStateService.isTracking) {
-      if (_isPaused) {
+      if (_trackingStateService.isRecordingPaused) {
         _resumeTracking();
       } else {
         _pauseTracking();
@@ -437,19 +434,17 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   }
 
   void _pauseTracking() {
-    setState(() {
-      _isPaused = true;
-    });
+    _trackingStateService.setRecordingPaused(true);
     _pulseController.stop();
     HapticService.mediumImpact();
+    setState(() {});
   }
   
   void _resumeTracking() {
-    setState(() {
-      _isPaused = false;
-    });
+    _trackingStateService.setRecordingPaused(false);
     _pulseController.repeat(reverse: true);
     HapticService.selectionClick();
+    setState(() {});
   }
 
   void _showSimulateSheet() async {
@@ -1044,7 +1039,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                       currentSpeed: _currentSpeed,
                       currentAltitude: _currentAltitude,
                       isTracking: isTracking,
-                      isPaused: _isPaused,
+                      isPaused: _trackingStateService.isRecordingPaused,
                       onToggleTracking: _toggleTracking,
                       onPauseTracking: _pauseTracking,
                       onStopTracking: _stopTracking,

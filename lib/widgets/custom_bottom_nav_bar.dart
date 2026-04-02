@@ -124,7 +124,7 @@ class _PillNavItem extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
           decoration: BoxDecoration(
             color: isSelected ? const Color(0xFFF3F4F6) : Colors.transparent,
             borderRadius: BorderRadius.circular(22),

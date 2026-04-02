@@ -209,28 +209,35 @@ class StatBox extends StatelessWidget {
           width: 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AdminSpacing.sm),
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AdminRadius.medium),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.topLeft,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AdminSpacing.sm),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AdminRadius.medium),
+              ),
+              child: Icon(icon, color: iconColor, size: 16),
             ),
-            child: Icon(icon, color: iconColor, size: 16),
-          ),
-          const Spacer(),
-          Text(
-            label.toUpperCase(),
-            style: AdminTextStyles.statLabel,
-          ),
-          const SizedBox(height: AdminSpacing.xs),
-          Text(
-            value,
-            style: AdminTextStyles.statNumber,
-          ),
-        ],
+            const SizedBox(height: AdminSpacing.sm),
+            Text(
+              label.toUpperCase(),
+              style: AdminTextStyles.statLabel,
+            ),
+            const SizedBox(height: AdminSpacing.xs),
+            Text(
+              value,
+              style: AdminTextStyles.statNumber,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }

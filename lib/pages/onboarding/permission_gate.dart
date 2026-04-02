@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../services/gps_services.dart';
+import '../../config/app_colors.dart';
 import '../../main.dart'; // For MyHomePage
+import '../../services/gps_services.dart';
+import '../../widgets/strakata_editorial_background.dart';
 import 'permission_onboarding_page.dart';
 
 /// Wraps the main app to enforce permissions.
@@ -24,9 +26,15 @@ class _PermissionGateState extends State<PermissionGate> {
       builder: (context, snapshot) {
         // While checking, show a blank loading screen matching the splash
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            backgroundColor: Colors.white, // Or brand color
-            body: Center(child: CircularProgressIndicator()),
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Stack(
+              fit: StackFit.expand,
+              children: [
+                const Positioned.fill(child: StrakataEditorialBackground()),
+                Center(child: CircularProgressIndicator(color: AppColors.brand)),
+              ],
+            ),
           );
         }
 

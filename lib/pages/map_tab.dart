@@ -10,7 +10,7 @@ class MapTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final isLoggedIn = AuthService.currentUser != null;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: isLoggedIn ? const GpsPage() : const LoginPage(),
       ),

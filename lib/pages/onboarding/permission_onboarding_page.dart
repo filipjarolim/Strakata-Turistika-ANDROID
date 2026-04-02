@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:strakataturistikaandroidapp/widgets/gps/tracking_onboarding_sheet.dart';
 import '../../config/app_colors.dart';
-import '../../config/strakata_design_tokens.dart';
+import '../../config/app_theme.dart';
+import '../../widgets/strakata_editorial_background.dart';
 /// One-time onboarding page that forces the user to grant permissions
 class PermissionOnboardingPage extends StatelessWidget {
   const PermissionOnboardingPage({super.key});
@@ -9,70 +11,53 @@ class PermissionOnboardingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    context.strakataTokens?.heroOverlayTop ?? AppColors.heroOverlayTop,
-                    AppColors.pageBg,
-                    AppColors.surfaceMuted,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          
-          // Dark Overlay
-          Positioned.fill(
-            child: Container(
-              color: Colors.black.withValues(alpha: 0.7),
-            ),
-          ),
-          
-          // Re-use the onboarding sheet logic but centered
+          const Positioned.fill(child: StrakataEditorialBackground()),
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
-                         'Nastavení oprávnění',
-                         style: TextStyle(
-                           fontSize: 28,
-                           fontWeight: FontWeight.bold,
-                           color: Colors.white,
-                         ),
-                       ),
-                       const SizedBox(height: 16),
-                       Text(
-                         'Aby aplikace správně fungovala, potřebujeme nastavit přístup k poloze a baterii.',
-                         textAlign: TextAlign.center,
-                         style: TextStyle(
-                           fontSize: 16,
-                           color: Colors.white.withValues(alpha: 0.8),
-                         ),
-                       ),
-                       const SizedBox(height: 32),
-                       
-                       // Embed the sheet content directly
-                       // We can't use TrackingOnboardingSheet directly if it has "Navigator.pop" calls
-                       // So we'll wrap it or just rely on it updating permissions.
-                       // Actually, TrackingOnboardingSheet expects to be in a BottomSheet and pops itself.
-                       // We need to modify it or wrap it.
-                       // Since we can't easily modify the sheet to be a page without breaking existing usage, 
-                       // we'll just instantiate it here. The sheet is actually designed as a widget.
-                       // The issue is `Navigator.pop(context, true)`. 
-                       // In this full page context, we want to reload the PermissionGate, not pop.
-                       
-                       const _EmbeddedOnboarding(),
+                      Text(
+                        'Nastavení oprávnění',
+                        textAlign: TextAlign.center,
+                        style: AppTheme.editorialHeadline(
+                          color: AppColors.textPrimary,
+                          fontSize: 28,
+                        ).copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Aby aplikace správně fungovala, potřebujeme nastavit přístup k poloze a baterii.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.libreFranklin(
+                          fontSize: 16,
+                          color: AppColors.textTertiary,
+                          height: 1.45,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: const Color(0xFFE8E4DC)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: const _EmbeddedOnboarding(),
+                      ),
                     ],
                   ),
                 ),

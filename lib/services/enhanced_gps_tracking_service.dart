@@ -79,14 +79,28 @@ class EnhancedGPSTrackingService {
   static const double _stationarySpeedThreshold = GpsConfig.stationarySpeedThresholdMs; // m/s (~1.8 km/h)
   static const double _emaAlpha = GpsConfig.emaAlpha; // exponential moving average factor
   _MotionProfile? _currentProfile;
+
+  /// When true, elapsed time does not increase and new GPS points are not recorded.
+  bool _recordingPaused = false;
+  DateTime? _pauseStartedAt;
+  Duration _pausedBeforeCurrentSegment = Duration.zero;
   
   // Getters
   bool get isTracking => _isTracking;
+  bool get isRecordingPaused => _recordingPaused;
   DateTime? get startTime => _startTime;
   double get totalDistance => _totalDistance;
   double get averageSpeed => _averageSpeed;
   double get maxSpeed => _maxSpeed;
-  Duration get trackingDuration => _startTime != null ? DateTime.now().difference(_startTime!) : Duration.zero;
+  Duration get trackingDuration {
+    if (_startTime == null) return Duration.zero;
+    final wall = DateTime.now().difference(_startTime!);
+    final currentPause = (_recordingPaused && _pauseStartedAt != null)
+        ? DateTime.now().difference(_pauseStartedAt!)
+        : Duration.zero;
+    final active = wall - _pausedBeforeCurrentSegment - currentPause;
+    return active.isNegative ? Duration.zero : active;
+  }
   List<TrackPoint> get trackPoints => List.unmodifiable(_trackPoints);
   bool get backgroundServiceRunning => _backgroundServiceRunning;
   
@@ -97,9 +111,31 @@ class EnhancedGPSTrackingService {
     return lastPoint.heading;
   }
 
+  /// Pause or resume recording (time and track points). Does nothing if not tracking.
+  void setRecordingPaused(bool paused) {
+    if (!_isTracking) return;
+    final now = DateTime.now();
+    if (paused && !_recordingPaused) {
+      _recordingPaused = true;
+      _pauseStartedAt = now;
+    } else if (!paused && _recordingPaused) {
+      if (_pauseStartedAt != null) {
+        _pausedBeforeCurrentSegment += now.difference(_pauseStartedAt!);
+      }
+      _pauseStartedAt = null;
+      _recordingPaused = false;
+    }
+  }
+
+  void _resetRecordingPauseState() {
+    _recordingPaused = false;
+    _pauseStartedAt = null;
+    _pausedBeforeCurrentSegment = Duration.zero;
+  }
+
   // Force add a position for testing (useful when GPS is not working)
   void forceAddPosition(Position position) {
-    if (_isTracking) {
+    if (_isTracking && !_recordingPaused) {
       // Ensure previous reference is set so statistics use a realistic baseline
       if (_trackPoints.isNotEmpty) {
         final prev = _trackPoints.last;
@@ -293,7 +329,7 @@ class EnhancedGPSTrackingService {
     _stationaryAnchor = null;
     _stationaryCandidateSince = null;
     _consecutiveUnlockEligible = 0;
-    
+    _resetRecordingPauseState();
     
     FirebaseCrashlytics.instance.log('Enhanced GPS Tracking started');
     
@@ -515,6 +551,12 @@ class EnhancedGPSTrackingService {
     await HapticService.trackingStop();
     
     _isTracking = false;
+    // Include any in-progress pause in totals so final stats omit paused time
+    if (_recordingPaused && _pauseStartedAt != null) {
+      _pausedBeforeCurrentSegment += DateTime.now().difference(_pauseStartedAt!);
+    }
+    _recordingPaused = false;
+    _pauseStartedAt = null;
     
     // Stop Android background service
     await _stopBackgroundService();
@@ -552,6 +594,7 @@ class EnhancedGPSTrackingService {
   
   // Advanced position processing with Kalman filtering
   void onPositionUpdate(Position position) {
+    if (_recordingPaused) return;
     _rawPositions.add(position);
     _lastRawAt = DateTime.now();
     

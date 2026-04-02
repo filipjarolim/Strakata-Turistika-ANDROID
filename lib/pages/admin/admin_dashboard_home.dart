@@ -57,6 +57,7 @@ class _AdminDashboardHomeState extends State<AdminDashboardHome> {
             crossAxisCount: crossAxisCount,
             mainAxisSpacing: AdminSpacing.lg,
             crossAxisSpacing: AdminSpacing.lg,
+            childAspectRatio: crossAxisCount <= 2 ? 0.92 : 1.05,
             children: [
               HubDashboardCard(
                 icon: Icons.article_rounded,

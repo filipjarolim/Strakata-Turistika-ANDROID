@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../config/app_colors.dart';
+import '../config/app_theme.dart';
 import '../models/forms/form_config.dart';
 import '../models/forms/form_context.dart';
 import '../models/visit_data.dart';
@@ -12,6 +15,7 @@ import '../services/auth_service.dart';
 import '../services/scoring_config_service.dart';
 import '../services/cloudinary_service.dart'; // Ensure this exists or use appropriate service
 import '../models/place_type_config.dart';
+import '../widgets/strakata_editorial_background.dart';
 
 class DynamicFormPage extends StatefulWidget {
   final String slug;
@@ -53,37 +57,66 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<FormContext>.value(
       value: _formContext,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF9FAFB),
-        appBar: AppBar(
-          title: FutureBuilder<FormConfig?>(
-            future: _formConfigFuture,
-            builder: (context, snapshot) {
-              return Text(snapshot.data?.name ?? 'Načítání...');
-            },
-          ),
-          centerTitle: true,
-          backgroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.close, color: Colors.black),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        body: FutureBuilder<FormConfig?>(
-          future: _formConfigFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError || snapshot.data == null) {
-              return Center(child: Text('Chyba při načítání formuláře: ${snapshot.error}'));
-            }
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const Positioned.fill(child: StrakataEditorialBackground()),
+          Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              title: FutureBuilder<FormConfig?>(
+                future: _formConfigFuture,
+                builder: (context, snapshot) {
+                  final name = snapshot.data?.name ?? 'Načítání...';
+                  return Text(
+                    name,
+                    style: GoogleFonts.libreFranklin(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 17,
+                      color: AppColors.textPrimary,
+                    ),
+                  );
+                },
+              ),
+              centerTitle: true,
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              scrolledUnderElevation: 0,
+              elevation: 0,
+              foregroundColor: AppColors.textPrimary,
+              leading: IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            body: FutureBuilder<FormConfig?>(
+              future: _formConfigFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(child: CircularProgressIndicator(color: AppColors.brand));
+                }
+                if (snapshot.hasError || snapshot.data == null) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Chyba při načítání formuláře: ${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.libreFranklin(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  );
+                }
 
-            final config = snapshot.data!;
-            return _buildForm(context, config);
-          },
-        ),
+                final config = snapshot.data!;
+                return _buildForm(context, config);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -104,19 +137,22 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         if (config.steps.length > 1)
           LinearProgressIndicator(
             value: (_currentStep + 1) / config.steps.length,
-            backgroundColor: Colors.grey[200],
-            valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).primaryColor),
+            backgroundColor: const Color(0xFFE8E4DC).withValues(alpha: 0.5),
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.brand),
           ),
         
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   step.label,
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  style: AppTheme.editorialHeadline(
+                    color: AppColors.textPrimary,
+                    fontSize: 24,
+                  ).copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 16),
                 ...step.fields.map((field) => Padding(
@@ -129,10 +165,17 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         ),
         
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))],
+            color: const Color(0xFFFFFBF7),
+            border: Border(top: BorderSide(color: const Color(0xFFE8E4DC))),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, -4),
+              ),
+            ],
           ),
           child: Row(
             children: [

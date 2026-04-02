@@ -327,30 +327,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
             ),
           ),
         ),
-        Positioned.fill(
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 420),
-            curve: Curves.easeInOut,
-            opacity: _currentIndex == 0 ? 1.0 : 0.0,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.90),
-                    Colors.black.withOpacity(0.75),
-                    Colors.black.withOpacity(0.45),
-                    Colors.transparent,
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.2),
-                  ],
-                  stops: const [0.0, 0.15, 0.32, 0.45, 0.8, 1.0],
-                ),
-              ),
-            ),
-          ),
-        ),
+        // Home tab uses a light editorial background; no dark scrim.
         Positioned.fill(
           child: AnimatedOpacity(
             duration: AppAnimations.durationPageTransition,
@@ -368,30 +345,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
               child: IndexedStack(
                 index: _currentIndex,
                 children: [
-                  Stack(
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        height: double.infinity,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withOpacity(0.90),
-                              Colors.black.withOpacity(0.75),
-                              Colors.black.withOpacity(0.45),
-                              Colors.transparent,
-                              Colors.transparent,
-                              Colors.black.withOpacity(0.2),
-                            ],
-                            stops: const [0.0, 0.15, 0.32, 0.45, 0.8, 1.0],
-                          ),
-                        ),
-                      ),
-                      const ExploreTab(),
-                    ],
-                  ),
+                  const ExploreTab(),
                   const ResultsPage(),
                   const MapTab(),
                   const UserProfilePage(),
@@ -400,9 +354,43 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
             ),
             bottomNavigationBar: Material(
               color: Colors.transparent,
-              child: CustomBottomNavBar(
-                currentIndex: _currentIndex,
-                onTap: _onNavItemTapped,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.bottomCenter,
+                children: [
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 260,
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: (_currentIndex == 0 || _currentIndex == 3) ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 240),
+                        curve: Curves.easeOutCubic,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                Colors.white,
+                                Colors.white.withValues(alpha: 0.88),
+                                Colors.white.withValues(alpha: 0.45),
+                                Colors.white.withValues(alpha: 0),
+                              ],
+                              stops: const [0.0, 0.28, 0.58, 1.0],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  CustomBottomNavBar(
+                    currentIndex: _currentIndex,
+                    onTap: _onNavItemTapped,
+                  ),
+                ],
               ),
             ),
           ),

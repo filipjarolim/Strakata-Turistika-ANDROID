@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/haptic_service.dart';
 import '../config/app_colors.dart';
+import '../config/app_theme.dart';
 import '../animations/app_animations.dart';
-
+import '../widgets/strakata_editorial_background.dart';
 import '../widgets/ui/app_toast.dart';
 
 class LoginPage extends StatefulWidget {
@@ -212,137 +212,98 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // 1. Brand gradient shell (assets optional)
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.pageBg,
-                    AppColors.brandMuted,
-                    AppColors.brand.withValues(alpha: 0.35),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          
-          // 2. Dark Gradient Overlay (stronger for better text legibility)
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.30),
-                    Colors.black.withValues(alpha: 0.50),
-                    Colors.black.withValues(alpha: 0.70),
-                    Colors.black.withValues(alpha: 0.90), 
-                  ],
-                ),
-              ),
-            ),
-          ),
-          
-          // 3. Content
+          const Positioned.fill(child: StrakataEditorialBackground()),
           SafeArea(
             child: FadeTransition(
               opacity: _fadeAnimation,
               child: SlideTransition(
                 position: _slideAnimation,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 28.0),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end, // Push content to bottom/center
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Spacer(), 
-                      
-                      // Logo or Title
-                      // Assuming an app logo exists, if not using text
-                      Container(
-                         padding: const EdgeInsets.all(16),
-                         decoration: BoxDecoration(
-                           color: Colors.white.withValues(alpha: 0.1),
-                           shape: BoxShape.circle,
-                           border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                         ),
-                         child: const Icon(Icons.pets, size: 60, color: Colors.white), 
-                      ),
-                      
-                      const SizedBox(height: 32),
-                      
-                      const Text(
-                        'Strakatá Turistika',
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: -1.0,
-                          height: 1.1,
+                      const Spacer(),
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8D4BC).withValues(alpha: 0.65),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Icon(Icons.pets_rounded, size: 52, color: AppColors.textPrimary),
                         ),
+                      ),
+                      const SizedBox(height: 28),
+                      Text(
+                        'Strakatá Turistika',
+                        style: AppTheme.editorialHeadline(
+                          color: AppColors.textPrimary,
+                          fontSize: 30,
+                        ).copyWith(fontWeight: FontWeight.w700),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 12),
                       Text(
                         'Objevujte nová místa se svým psem a zaznamenávejte společná dobrodružství.',
-                        style: TextStyle(
+                        style: GoogleFonts.libreFranklin(
                           fontSize: 16,
-                          color: Colors.white.withValues(alpha: 0.8),
-                          height: 1.5,
+                          color: AppColors.textTertiary,
+                          height: 1.45,
+                          fontWeight: FontWeight.w500,
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      
                       const Spacer(),
-                      
-                      // Social Login Only
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      Container(
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBF7),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: const Color(0xFFE8E4DC)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 22,
+                              offset: const Offset(0, 10),
                             ),
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildGlassSocialButton(
-                                  text: 'Pokračovat s Google',
-                                  onPressed: _signInWithGoogle,
-                                ),
-                                
-                                // Biometric button if available
-                                if (_biometricAvailable) ...[
-                                  const SizedBox(height: 16),
-                                  _buildGlassBiometricButton(),
-                                ],
-                              ],
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildGlassSocialButton(
+                              text: 'Pokračovat s Google',
+                              onPressed: _signInWithGoogle,
                             ),
-                          ),
+                            if (_biometricAvailable) ...[
+                              const SizedBox(height: 16),
+                              _buildGlassBiometricButton(),
+                            ],
+                          ],
                         ),
                       ),
-                      
-                      const SizedBox(height: 48),
-                      
-                      // Terms and Conditions text
+                      const SizedBox(height: 28),
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
+                        padding: const EdgeInsets.only(bottom: 12.0),
                         child: Text(
                           'Pokračováním souhlasíte s našimi Podmínkami použití a Zásadami ochrany osobních údajů.',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
+                          style: GoogleFonts.libreFranklin(
+                            color: AppColors.textTertiary.withValues(alpha: 0.85),
                             fontSize: 12,
+                            height: 1.35,
+                            fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -359,9 +320,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   // --- Glass Widgets ---
-
-  // --- Glass Widgets ---
-
   
   Widget _buildGlassSocialButton({
     required String text,
@@ -376,11 +334,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           onPressed();
         },
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white, // Solid white background
-          foregroundColor: Colors.black87, // Dark text
-          side: BorderSide.none, // No border needed for pill
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.textPrimary,
+          side: BorderSide(color: const Color(0xFFE8E4DC)),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          elevation: 2,
+          elevation: 0,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -389,11 +347,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             const SizedBox(width: 12),
             Text(
               text,
-              style: const TextStyle(
+              style: GoogleFonts.libreFranklin(
                 fontSize: 16,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.2,
-                color: Colors.black87,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.1,
+                color: AppColors.textPrimary,
               ),
             ),
           ],
@@ -409,28 +367,28 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: _isBiometricEnabled 
-              ? AppColors.primary.withValues(alpha: 0.2) 
-              : Colors.transparent,
+            color: _isBiometricEnabled
+                ? AppColors.brand.withValues(alpha: 0.12)
+                : const Color(0xFFF7F4EF),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: _isBiometricEnabled ? AppColors.primary : Colors.white.withValues(alpha: 0.2),
+              color: _isBiometricEnabled ? AppColors.brand : const Color(0xFFE8E4DC),
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.fingerprint, 
-                size: 18, 
-                color: _isBiometricEnabled ? AppColors.primary : Colors.white.withValues(alpha: 0.6)
+                Icons.fingerprint,
+                size: 18,
+                color: _isBiometricEnabled ? AppColors.brand : AppColors.textTertiary,
               ),
               const SizedBox(width: 8),
               Text(
                 'Biometrické přihlášení ${_isBiometricEnabled ? "Zapnuto" : "Vypnuto"}',
-                style: TextStyle(
+                style: GoogleFonts.libreFranklin(
                   fontSize: 12,
-                  color: _isBiometricEnabled ? AppColors.primary : Colors.white.withValues(alpha: 0.6),
+                  color: _isBiometricEnabled ? AppColors.brand : AppColors.textTertiary,
                   fontWeight: FontWeight.w600,
                 ),
               ),

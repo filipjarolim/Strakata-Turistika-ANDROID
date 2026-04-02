@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import '../../config/app_colors.dart';
 import '../../services/database/database_service.dart';
+import '../../widgets/strakata_editorial_background.dart';
 import 'package:mongo_dart/mongo_dart.dart' as mongo;
 
 class AdminRawDataTab extends StatefulWidget {
@@ -72,45 +74,51 @@ class _AdminRawDataTabState extends State<AdminRawDataTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      body: _rawData.isEmpty && _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
-          : RefreshIndicator(
-              onRefresh: () => _loadRawData(refresh: true),
-              color: const Color(0xFF2E7D32),
-              child: ListView.builder(
-                padding: const EdgeInsets.all(24),
-                itemCount: _rawData.length + (_hasMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == _rawData.length) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator(color: Color(0xFF2E7D32))),
-                    );
-                  }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Positioned.fill(child: StrakataEditorialBackground()),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          body: _rawData.isEmpty && _isLoading
+              ? Center(child: CircularProgressIndicator(color: AppColors.brand))
+              : RefreshIndicator(
+                  onRefresh: () => _loadRawData(refresh: true),
+                  color: AppColors.brand,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(24),
+                    itemCount: _rawData.length + (_hasMore ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == _rawData.length) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator(color: AppColors.brand)),
+                        );
+                      }
 
-                  final doc = _rawData[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.grey[100]!),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                      final doc = _rawData[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBF7),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xFFE8E4DC)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: _buildRawDocCard(doc),
-                  );
-                },
-              ),
-            ),
+                        child: _buildRawDocCard(doc),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
     );
   }
 

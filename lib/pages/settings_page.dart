@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
@@ -8,6 +9,8 @@ import '../services/vector_tile_provider.dart';
 import '../services/mapy_cz_download_service.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/offline_ui_bridge.dart';
+import '../config/app_colors.dart';
+import '../config/app_theme.dart';
 import '../widgets/ui/glass_ui.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/ui/app_toast.dart';
@@ -27,21 +30,27 @@ class SettingsPage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
             child: Row(
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
-                    onPressed: () => Navigator.of(context).pop(),
+                Material(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    onTap: () => Navigator.of(context).pop(),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary, size: 22),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
-                const StrakataSectionTitle(
-                  'Nastavení',
-                  fontSize: 24,
-                  color: Color(0xFF1A1A1A),
+                Expanded(
+                  child: Text(
+                    'Nastavení',
+                    style: AppTheme.editorialHeadline(
+                      color: AppColors.textPrimary,
+                      fontSize: 26,
+                    ).copyWith(fontWeight: FontWeight.w700),
+                  ),
                 ),
               ],
             ),
@@ -60,45 +69,45 @@ class SettingsPage extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 40,
-                          backgroundColor: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                          backgroundColor: AppColors.brand.withValues(alpha: 0.12),
                           backgroundImage: user?.image != null ? NetworkImage(user!.image!) : null,
                           child: user?.image == null
-                              ? const Icon(Icons.person, color: Color(0xFF4CAF50), size: 40)
+                              ? Icon(Icons.person_rounded, color: AppColors.brand, size: 40)
                               : null,
                         ),
                         const SizedBox(height: 16),
                         if (user != null) ...[
                           Text(
                             user.name,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A1A1A),
-                            ),
+                            style: AppTheme.editorialHeadline(
+                              color: AppColors.textPrimary,
+                              fontSize: 22,
+                            ).copyWith(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             user.email,
-                            style: TextStyle(
+                            style: GoogleFonts.libreFranklin(
                               fontSize: 14,
-                              color: Colors.grey[700],
+                              color: AppColors.textTertiary,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ] else ...[
-                          const Text(
+                          Text(
                             'Nepřihlášen',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A1A1A),
-                            ),
+                            style: AppTheme.editorialHeadline(
+                              color: AppColors.textPrimary,
+                              fontSize: 22,
+                            ).copyWith(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Přihlaste se pro přístup ke všem funkcím',
-                            style: TextStyle(
+                            style: GoogleFonts.libreFranklin(
                               fontSize: 14,
-                              color: Colors.grey[700],
+                              color: AppColors.textTertiary,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
@@ -537,13 +546,14 @@ class SettingsPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        StrakataSectionTitle(
+        Text(
           title,
-          fontSize: 18,
-          color: const Color(0xFF333333),
-          letterSpacing: 0,
+          style: AppTheme.editorialHeadline(
+            color: AppColors.textPrimary,
+            fontSize: 19,
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         ...items,
       ],
     );
@@ -563,46 +573,47 @@ class SettingsPage extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+                color: AppColors.brand.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 icon,
-                color: const Color(0xFF4CAF50),
-                size: 20,
+                color: AppColors.brand,
+                size: 22,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: GoogleFonts.libreFranklin(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1A1A),
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(
+                    style: GoogleFonts.libreFranklin(
                       fontSize: 13,
-                      color: Colors.grey[700],
+                      color: AppColors.textTertiary,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right,
-              color: Color(0xFF9CA3AF),
-              size: 20,
+            Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textTertiary.withValues(alpha: 0.6),
+              size: 22,
             ),
           ],
         ),
