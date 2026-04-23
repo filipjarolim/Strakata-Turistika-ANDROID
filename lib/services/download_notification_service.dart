@@ -1,57 +1,60 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'notification_channels.dart';
 
 class DownloadNotificationService {
   static const int _downloadProgressId = 1001;
   static const int _downloadCompletedId = 1002;
   static const int _downloadFailedId = 1003;
-  
+
   static FlutterLocalNotificationsPlugin? _notificationsPlugin;
-  
+
   static Future<void> initialize() async {
     _notificationsPlugin = FlutterLocalNotificationsPlugin();
-    
+
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    
+
     const DarwinInitializationSettings initializationSettingsIOS =
         DarwinInitializationSettings();
-    
+
     const InitializationSettings initializationSettings =
         InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
-    );
-    
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsIOS,
+        );
+
     await _notificationsPlugin!.initialize(initializationSettings);
+    await NotificationChannels.ensureCreated(_notificationsPlugin!);
   }
-  
+
   static Future<void> showDownloadProgress({
     required String title,
     required int progress,
     required int total,
   }) async {
     if (_notificationsPlugin == null) return;
-    
+
     final percentage = ((progress / total) * 100).round();
-    
+
     final AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-      'download_progress',
-      'Download Progress',
-      channelDescription: 'Shows download progress',
-      importance: Importance.low,
-      priority: Priority.low,
-      showProgress: true,
-      maxProgress: 100,
-      progress: percentage,
-      ongoing: true,
-      autoCancel: false,
-      onlyAlertOnce: true,
+          NotificationChannels.downloads,
+          'Stahovani map',
+          channelDescription: 'Prubeh a vysledek stahovani offline map',
+          importance: Importance.low,
+          priority: Priority.low,
+          showProgress: true,
+          maxProgress: 100,
+          progress: percentage,
+          ongoing: true,
+          autoCancel: false,
+          onlyAlertOnce: true,
+        );
+
+    final NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
     );
-    
-    final NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-    
+
     await _notificationsPlugin!.show(
       _downloadProgressId,
       title,
@@ -60,25 +63,26 @@ class DownloadNotificationService {
       payload: 'download_progress',
     );
   }
-  
+
   static Future<void> showDownloadCompleted({
     required String title,
     required String message,
   }) async {
     if (_notificationsPlugin == null) return;
-    
+
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-      'download_completed',
-      'Download Completed',
-      channelDescription: 'Shows when downloads are completed',
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
+          NotificationChannels.downloads,
+          'Stahovani map',
+          channelDescription: 'Prubeh a vysledek stahovani offline map',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        );
+
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
     );
-    
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-    
+
     await _notificationsPlugin!.show(
       _downloadCompletedId,
       title,
@@ -87,25 +91,26 @@ class DownloadNotificationService {
       payload: 'download_completed',
     );
   }
-  
+
   static Future<void> showDownloadFailed({
     required String title,
     required String message,
   }) async {
     if (_notificationsPlugin == null) return;
-    
+
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-      'download_failed',
-      'Download Failed',
-      channelDescription: 'Shows when downloads fail',
-      importance: Importance.high,
-      priority: Priority.high,
+          NotificationChannels.downloads,
+          'Stahovani map',
+          channelDescription: 'Prubeh a vysledek stahovani offline map',
+          importance: Importance.high,
+          priority: Priority.high,
+        );
+
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
     );
-    
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-    
+
     await _notificationsPlugin!.show(
       _downloadFailedId,
       title,
@@ -114,14 +119,9 @@ class DownloadNotificationService {
       payload: 'download_failed',
     );
   }
-  
+
   static Future<void> cancelProgressNotification() async {
     if (_notificationsPlugin == null) return;
     await _notificationsPlugin!.cancel(_downloadProgressId);
   }
-  
-  static Future<void> startProgressNotifications() async {
-    // This method can be used to start periodic progress updates
-    // For now, it's just a placeholder
-  }
-} 
+}

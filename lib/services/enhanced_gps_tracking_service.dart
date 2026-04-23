@@ -382,15 +382,15 @@ class EnhancedGPSTrackingService {
     }
   }
   
-  // Start periodic location retrieval as backup
+  // Start periodic location retrieval
   void _startPeriodicLocationRetrieval() {
     _periodicLocationTimer?.cancel();
     final initialInterval = _hasFirstFix
-        ? GpsConfig.periodicFallbackInterval
-        : GpsConfig.fallbackUntilFirstFixInterval;
+        ? GpsConfig.periodicUpdateInterval
+        : GpsConfig.preFirstFixUpdateInterval;
     _periodicLocationTimer = Timer.periodic(initialInterval, (timer) async {
       if (_isTracking && !_backgroundServiceRunning) {
-        // If background service is not working, get location manually
+        // If background service is not running, get location manually
         try {
           final bool wantFast = !_hasFirstFix;
           final position = await Geolocator.getCurrentPosition(
@@ -612,7 +612,7 @@ class EnhancedGPSTrackingService {
       _maybeEngageStationaryLock(filteredPosition);
       if (!_hasFirstFix) {
         _hasFirstFix = true;
-        // After first fix, restart periodic fallback with normal interval if needed
+        // After first fix, restart periodic timer with the normal interval.
         if (_periodicLocationTimer != null) {
           _startPeriodicLocationRetrieval();
         }
@@ -975,7 +975,7 @@ class EnhancedGPSTrackingService {
         computedSpeed = distance / seconds; // m/s
       }
     }
-    // Prefer computed speed when present; otherwise fallback to reported
+    // Prefer computed speed when present; otherwise use reported speed
     double rawSpeed = computedSpeed > 0 ? computedSpeed : (position.speed.isFinite ? position.speed : 0.0);
     // If speedAccuracy is poor, trust computed speed when available
     if (position.speedAccuracy.isFinite && position.speedAccuracy > 1.5 && computedSpeed > 0) {

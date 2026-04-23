@@ -265,6 +265,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ),
                         textAlign: TextAlign.center,
                       ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: const [
+                          Expanded(child: _LoginFeatureChip(icon: Icons.route_rounded, label: 'Mapy a trasy')),
+                          SizedBox(width: 10),
+                          Expanded(child: _LoginFeatureChip(icon: Icons.emoji_events_outlined, label: 'Body a žebříček')),
+                        ],
+                      ),
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.all(22),
@@ -324,7 +332,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Widget _buildGlassSocialButton({
     required String text,
     required VoidCallback onPressed,
-  }) {
+  }) {  
     return SizedBox(
       width: double.infinity,
       height: 56,
@@ -395,6 +403,44 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LoginFeatureChip extends StatelessWidget {
+  const _LoginFeatureChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBF7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8E4DC)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.libreFranklin(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -5,12 +5,12 @@ import '../repositories/visit_repository.dart';
 import '../models/leaderboard_entry.dart';
 import '../services/error_recovery_service.dart';
 import 'user_visits_page.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../config/app_colors.dart';
 import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
 import '../widgets/strakata_editorial_background.dart';
 import '../widgets/ui/strakata_primitives.dart';
+import '../widgets/ui/web_mobile_section_card.dart';
 
 class ResultsPage extends StatefulWidget {
   const ResultsPage({super.key});
@@ -28,19 +28,19 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   // Leaderboard data for the selected season
   final List<LeaderboardEntry> _leaders = [];
 
-  bool _hasMore = true;
   bool _isInitialLoading = true;
   bool _isLoadingMore = false;
   String _searchQuery = '';
   Timer? _searchDebounce;
-  bool _sortLeaderboardByVisits = false;
   
   // Network state
   bool _isOnline = true;
   Timer? _networkTimer;
+  DateTime? _lastNetworkCheckAt;
 
   // UI
   late final ScrollController _scrollController;
+  late final TextEditingController _searchController;
   AnimationController? _animationController;
   Animation<double>? _fadeAnimation;
 
@@ -52,6 +52,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     WidgetsBinding.instance.addObserver(this);
     
     _scrollController = ScrollController()..addListener(_onScroll);
+    _searchController = TextEditingController();
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -74,6 +75,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
+    _searchController.dispose();
     _searchDebounce?.cancel();
     _networkTimer?.cancel();
     _animationController?.dispose();
@@ -84,29 +86,37 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     
-    // When app returns to foreground, reload seasons if we have no data
     if (state == AppLifecycleState.resumed) {
+      _startNetworkMonitor();
+      _checkNetworkOnce();
       if (availableSeasons.isEmpty && !_isInitialLoading) {
         print('📱 App resumed in ResultsPage, reloading seasons...');
         _loadSeasons();
       }
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _networkTimer?.cancel();
     }
   }
 
   void _startNetworkMonitor() {
-    // Initial check
-    ErrorRecoveryService().isNetworkAvailable().then((available) {
-      if (mounted) {
-        _updateOnlineState(available);
-      }
-    });
+    _checkNetworkOnce();
     _networkTimer?.cancel();
-    _networkTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
-      final available = await ErrorRecoveryService().isNetworkAvailable();
-      if (mounted) {
-        _updateOnlineState(available);
-      }
+    _networkTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
+      await _checkNetworkOnce();
     });
+  }
+
+  Future<void> _checkNetworkOnce() async {
+    final now = DateTime.now();
+    if (_lastNetworkCheckAt != null &&
+        now.difference(_lastNetworkCheckAt!).inSeconds < 8) {
+      return;
+    }
+    _lastNetworkCheckAt = now;
+    final available = await ErrorRecoveryService().isNetworkAvailable();
+    if (!mounted) return;
+    _updateOnlineState(available);
   }
 
   void _updateOnlineState(bool online) {
@@ -160,12 +170,22 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     return;
   }
 
+  void _onSearchChanged(String value) {
+    final next = value.trim();
+    if (next == _searchQuery) return;
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 320), () async {
+      if (!mounted) return;
+      setState(() => _searchQuery = next);
+      await _reloadForCurrentFilters(resetScroll: true);
+    });
+  }
+
   Future<void> _reloadForCurrentFilters({bool resetScroll = false}) async {
     if (selectedSeason == null) return;
     setState(() {
       _isInitialLoading = true;
       _leaders.clear();
-      _hasMore = true;
     });
     if (resetScroll) {
       if (_scrollController.hasClients) {
@@ -193,7 +213,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
         page: 1,
         limit: 10000, // Velký limit pro načtení všech záznamů
         searchQuery: _searchQuery.isEmpty ? null : _searchQuery,
-        sortByVisits: _sortLeaderboardByVisits,
       );
       final raw = (result['data'] as List<dynamic>).cast<Map<String, dynamic>>();
       final data = raw.map((m) => LeaderboardEntry.fromMap(m)).toList();
@@ -202,7 +221,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
       setState(() {
         _leaders.clear(); // Vymazat existující data
         _leaders.addAll(data);
-        _hasMore = false; // Už nejsou další data k načtení
         _isLoadingMore = false;
       });
     } catch (e) {
@@ -233,55 +251,15 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
         Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            toolbarHeight: 78,
+            toolbarHeight: 64,
             title: Padding(
-              padding: const EdgeInsets.fromLTRB(StrakataLayout.pageHorizontalInset, 12, 8, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Žebříček',
-                    style: AppTheme.editorialHeadline(
-                      color: AppColors.textPrimary,
-                      fontSize: 26,
-                    ).copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  if (selectedSeason != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(100),
-                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-                            ),
-                            child: Text(
-                              'Sezóna $selectedSeason',
-                              style: GoogleFonts.libreFranklin(
-                                color: AppColors.primary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '• Nejlepší turisti',
-                            style: GoogleFonts.libreFranklin(
-                              color: AppColors.textTertiary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                'Výsledky',
+                style: AppTheme.editorialHeadline(
+                  color: AppColors.textPrimary,
+                  fontSize: 24,
+                ).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
             backgroundColor: Colors.transparent,
@@ -290,27 +268,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
             elevation: 0,
             centerTitle: false,
             actions: [
-              TextButton.icon(
-                onPressed: () async {
-                  final url = Uri.parse('https://strakataturistika.vercel.app/pravidla');
-                  if (await canLaunchUrl(url)) {
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
-                  }
-                },
-                icon: Icon(Icons.description_outlined, size: 20, color: AppColors.textPrimary),
-                label: Text(
-                  'Pravidla',
-                  style: GoogleFonts.libreFranklin(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  backgroundColor: Colors.white.withValues(alpha: 0.85),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.9)),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                ),
-              ),
-              const SizedBox(width: 6),
               Container(
                 margin: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
@@ -340,7 +297,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                       },
                       color: AppColors.brand,
                       backgroundColor: Colors.white,
-                      child: _buildLeaderboardList(),
+                      child: _buildResultsContent(),
                     ),
         ),
       ],
@@ -401,42 +358,196 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   }
 
 
-  Widget _buildLeaderboardList() {
+  Widget _buildResultsContent() {
     return _fadeAnimation != null
         ? FadeTransition(
             opacity: _fadeAnimation!,
-            child: ListView.builder(
+            child: ListView(
               controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.fromLTRB(
                 StrakataLayout.pageHorizontalInset,
-                20,
+                8,
                 StrakataLayout.pageHorizontalInset,
                 120,
               ),
-              itemCount: _leaders.isEmpty ? 1 : _leaders.length + 1,
-              itemBuilder: (context, index) {
-                if (index < _leaders.length) {
-                  return _buildLeaderCard(index + 1, _leaders[index]);
-                }
-                if (_isLoadingMore) return _buildLoadMoreSkeleton();
-                if (!_hasMore && _leaders.isNotEmpty) return _buildEndOfList();
-                
-                 // Empty state for leaderboard
-                if (_leaders.isEmpty && !_isInitialLoading && !_isLoadingMore) {
-                   return SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.6,
-                    child: _buildEmptyState(),
-                  );
-                }
-                
-                return const SizedBox.shrink();
-              },
+              children: [
+                _buildTopSummary(),
+                _buildOverviewCard(),
+                if (_isLoadingMore) _buildLoadMoreSkeleton(),
+                _buildLeaderboardCard(),
+              ],
             ),
           )
         : Center(
             child: CircularProgressIndicator(color: AppColors.brand),
           );
+  }
+
+  Widget _buildTopSummary() {
+    final season = selectedSeason;
+    final isCurrent = season != null && season == DateTime.now().year;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: WebMobileSectionCard(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isCurrent)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(100),
+                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  'Probíhající',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF047857),
+                  ),
+                ),
+              ),
+            Text(
+              season != null ? 'Sezóna $season' : 'Sezóna',
+              style: AppTheme.editorialHeadline(
+                color: AppColors.textPrimary,
+                fontSize: 28,
+              ).copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Schválené výlety a žebříček soutěže Strakatá turistika.',
+              style: GoogleFonts.libreFranklin(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textTertiary,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewCard() {
+    return WebMobileSectionCard(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(
+            title: 'Přehled',
+            description: 'Prohlížejte žebříček podle bodů.',
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: _buildSearchOnlyActions(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeaderboardCard() {
+    return WebMobileSectionCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(
+            title: 'Žebříček',
+            description: 'Pořadí soutěžících podle pravidel sezóny.',
+          ),
+          if (_leaders.isEmpty && !_isInitialLoading && !_isLoadingMore)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  'Žádné výsledky v žebříčku',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+              child: Column(
+                children: [
+                  for (int i = 0; i < _leaders.length; i++) _buildLeaderCard(i + 1, _leaders[i]),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader({required String title, required String description}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: const Color(0xFFE8E4DC).withValues(alpha: 0.7),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.libreFranklin(
+              fontSize: 19,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            description,
+            style: GoogleFonts.libreFranklin(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchOnlyActions() {
+    return TextField(
+      controller: _searchController,
+      onChanged: _onSearchChanged,
+      decoration: InputDecoration(
+        hintText: 'Hledat…',
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: _searchQuery.isNotEmpty
+            ? IconButton(
+                onPressed: () {
+                  _searchController.clear();
+                  _onSearchChanged('');
+                },
+                icon: const Icon(Icons.close_rounded),
+              )
+            : null,
+      ),
+    );
   }
 
 
@@ -458,19 +569,8 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     final BoxBorder? rankBorder = rank <= 3 ? null : Border.all(color: const Color(0xFFE5E7EB), width: 2);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBF7),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-        border: Border.all(color: const Color(0xFFE8E4DC)),
-      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: WebMobileSectionCard.decoration(),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(24),
@@ -617,7 +717,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     );
   }
 
-
   Widget _buildInitialSkeleton() {
     return ListView.builder(
       padding: EdgeInsets.fromLTRB(
@@ -639,17 +738,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
           _skeletonCard(),
           _skeletonCard(),
         ],
-      ),
-    );
-  }
-
-  Widget _buildEndOfList() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Text(
-        '— Konec seznamu —',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.grey[600]),
       ),
     );
   }
@@ -721,6 +809,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
         builder: (context) => UserVisitsPage(
           userId: userId,
           userName: entry.userName,
+          seasonYear: selectedSeason,
         ),
       ),
     );
@@ -761,10 +850,8 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
               children: [
                 Text(
                   'Filtrovat výsledky',
-                  style: AppTheme.editorialHeadline(
-                    color: AppColors.textPrimary,
-                    fontSize: 22,
-                  ).copyWith(fontWeight: FontWeight.w700),
+                  style: AppTheme.editorialHeadline(color: AppColors.textPrimary, fontSize: 22)
+                      .copyWith(fontWeight: FontWeight.w700),
                 ),
                 Container(
                   decoration: BoxDecoration(
@@ -779,12 +866,12 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
               ],
             ),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               'Vyberte sezónu',
-              style: TextStyle(
+              style: GoogleFonts.libreFranklin(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF374151),
+                color: AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 16),

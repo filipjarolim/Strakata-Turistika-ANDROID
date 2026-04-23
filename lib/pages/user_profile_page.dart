@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/visit_data.dart';
 import '../models/tracking_summary.dart';
-import '../widgets/route_thumbnail.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/ui/app_toast.dart';
 import '../widgets/ui/strakata_primitives.dart';
@@ -23,6 +22,10 @@ import '../services/vector_tile_provider.dart';
 import '../services/mapy_cz_download_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../widgets/ui/web_mobile_section_card.dart';
+import '../widgets/ui/web_mobile_patterns.dart';
+import 'offline_maps_page.dart';
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({Key? key}) : super(key: key);
@@ -35,6 +38,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
   final VisitRepository _visitRepository = VisitRepository();
   List<VisitData> _userVisits = [];
   bool _isLoading = true;
+  VisitState? _activeState;
+  int _selectedYear = DateTime.now().year;
 
   @override
   void initState() {
@@ -58,8 +63,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
           return bd.compareTo(ad);
         });
         if (mounted) {
+          final years = visits.map((v) => v.year).where((y) => y > 0).toSet().toList()..sort((a, b) => b.compareTo(a));
           setState(() {
             _userVisits = visits;
+            if (years.isNotEmpty && !years.contains(_selectedYear)) {
+              _selectedYear = years.first;
+            }
             _isLoading = false;
           });
         }
@@ -82,30 +91,48 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  double _getTotalPoints() {
-    return _userVisits.fold(0.0, (sum, visit) => sum + visit.points);
+  List<int> _seasonYears() {
+    final years = _userVisits.map((v) => v.year).where((y) => y > 0).toSet().toList()..sort((a, b) => b.compareTo(a));
+    if (years.isEmpty) return [DateTime.now().year];
+    return years;
   }
 
-  double _getTotalDistance() {
-    return _userVisits.fold(0.0, (sum, visit) {
-          if (visit.route != null && visit.route!['totalDistance'] != null) {
-            return sum + (visit.route!['totalDistance'] as num);
-          }
-          return sum;
-        });
+  List<VisitData> _visitsForSelectedYear() {
+    return _userVisits.where((v) => v.year == _selectedYear).toList();
+  }
+
+  List<VisitData> _filteredVisits() {
+    final visits = _visitsForSelectedYear();
+    if (_activeState == null) return visits;
+    return visits.where((v) => v.state == _activeState).toList();
+  }
+
+  int _countForState(VisitState? state) {
+    final visits = _visitsForSelectedYear();
+    if (state == null) return visits.length;
+    return visits.where((v) => v.state == state).length;
+  }
+
+  double _approvedPointsForSelectedYear() {
+    return _visitsForSelectedYear()
+        .where((v) => v.state == VisitState.APPROVED)
+        .fold<double>(0.0, (sum, v) => sum + v.points);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Removed embedded login check as it is now gated in main.dart
     final currentUser = AuthService.currentUser;
-    // Fallback if somehow reached without auth (e.g. direct link in future)
     if (currentUser == null) {
-       return const SizedBox(); // Or a "Not Authorized" placeholder
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        }
+      });
+      return const SizedBox.shrink();
     }
 
-    final totalPoints = _getTotalPoints();
-    final totalDistance = _getTotalDistance() / 1000; // Convert to km
+    final filteredVisits = _filteredVisits();
+    final approvedPoints = _approvedPointsForSelectedYear();
 
     return Stack(
       fit: StackFit.expand,
@@ -152,62 +179,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildProfileHeaderCard(currentUser),
+                        const SizedBox(height: 18),
+                        _buildTripsAndStatsCard(filteredVisits, approvedPoints),
                         const SizedBox(height: 22),
-
-                    // Stats Section
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F4EF),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.75)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 18,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatItem('Celkem body', totalPoints.toStringAsFixed(1), Icons.star_rounded, Colors.amber[700]!),
-                          ),
-                          Container(width: 1, height: 40, color: Colors.grey[200]),
-                          Expanded(
-                            child: _buildStatItem('Najeto km', totalDistance.toStringAsFixed(1), Icons.route_rounded, Colors.blue[700]!),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    Text(
-                      'Moje trasy',
-                      style: AppTheme.editorialHeadline(
-                        color: AppColors.textPrimary,
-                        fontSize: 20,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _userVisits.isEmpty
-                        ? _buildEmptyRoutesState()
-                        : SizedBox(
-                            height: 248,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: _userVisits.length > 5 ? 5 : _userVisits.length,
-                              separatorBuilder: (context, index) => const SizedBox(width: 16),
-                              itemBuilder: (context, index) {
-                                final visit = _userVisits[index];
-                                return _buildRouteCard(visit);
-                              },
-                            ),
-                          ),
-
-                    const SizedBox(height: 28),
 
                     Text(
                       'Nastavení a akce',
@@ -218,34 +192,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     ),
                     const SizedBox(height: 16),
                     Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBF7),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: const Color(0xFFE8E4DC)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 14,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
+                      decoration: WebMobileSectionCard.decoration(),
                       clipBehavior: Clip.antiAlias,
                       child: Column(
                         children: [
                           _buildMenuItem(Icons.edit_outlined, 'Upravit profil', _showEditProfileSheet),
-                          _buildDivider(),
-                          _buildMenuItem(Icons.download_for_offline_outlined, 'Offline mapy', _showOfflineMapsSheet),
-                          _buildDivider(),
+                          _buildMenuItem(
+                            Icons.download_for_offline_outlined,
+                            'Offline mapy',
+                            () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const OfflineMapsPage(),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildMenuItem(Icons.description_outlined, 'Pravidla soutěže (web)', _openRulesWeb),
                           _buildMenuItem(Icons.help_outline_rounded, 'O aplikaci a podpora', _showHelpAndAboutSheet),
-                          if ((AuthService.currentUser?.role ?? '') == 'ADMIN') ...[
-                            _buildDivider(),
-                            _buildMenuItem(Icons.admin_panel_settings_outlined, 'Admin kontrola', () {
-                              Navigator.of(context).pushNamed('/admin-review');
-                            }, iconColor: Colors.purple[700]),
-                            _buildDivider(),
-                            _buildMenuItem(Icons.delete_forever_rounded, 'Resetovat aplikaci', _showResetConfirmation, iconColor: Colors.red[700]),
-                          ],
                         ],
                       ),
                     ),
@@ -286,99 +250,186 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   // --- UI Builders ---
 
-  Widget _buildProfileHeaderCard(User? user) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+  Widget _buildTripsAndStatsCard(List<VisitData> filteredVisits, double approvedPoints) {
+    final years = _seasonYears();
+    return WebMobileSectionCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            user?.name ?? 'Uživatel',
-            style: AppTheme.editorialHeadline(
+            'Výlety a statistiky',
+            style: GoogleFonts.libreFranklin(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
-              fontSize: 28,
-            ).copyWith(fontWeight: FontWeight.w700),
+            ),
           ),
-          if (user?.email != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                user!.email,
-                style: GoogleFonts.libreFranklin(
-                  fontSize: 15,
-                  color: AppColors.textTertiary,
-                  fontWeight: FontWeight.w500,
+          const SizedBox(height: 4),
+          Text(
+            'Zvolte sezónu a stav, sledujte metriky a otevřete detail karty.',
+            style: GoogleFonts.libreFranklin(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F0E8),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<int>(
+                      value: _selectedYear,
+                      isExpanded: true,
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                      items: years
+                          .map(
+                            (year) => DropdownMenuItem<int>(
+                              value: year,
+                              child: Text(
+                                'Sezóna $year',
+                                style: GoogleFonts.libreFranklin(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (year) {
+                        if (year == null) return;
+                        setState(() {
+                          _selectedYear = year;
+                        });
+                      },
+                    ),
+                  ),
                 ),
               ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF4F0E8),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Schválené body',
+                      style: GoogleFonts.libreFranklin(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                    Text(
+                      approvedPoints.toStringAsFixed(0),
+                      style: GoogleFonts.libreFranklin(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildStateFilterChip(null, 'Všechny', Icons.grid_view_rounded),
+              _buildStateFilterChip(VisitState.APPROVED, 'Schválené', Icons.check_circle_outline_rounded),
+              _buildStateFilterChip(VisitState.PENDING_REVIEW, 'Čeká', Icons.schedule_rounded),
+              _buildStateFilterChip(VisitState.REJECTED, 'Zamítnuté', Icons.cancel_outlined),
+              _buildStateFilterChip(VisitState.DRAFT, 'Koncepty', Icons.edit_note_rounded),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            height: 1,
+            color: const Color(0xFFE8E4DC).withValues(alpha: 0.7),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Výpis výletů',
+            style: GoogleFonts.libreFranklin(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Řazeno od nejnovějšího data výletu. Kliknutím otevřete detail.',
+            style: GoogleFonts.libreFranklin(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (filteredVisits.isEmpty)
+            _buildEmptyRoutesState()
+          else
+            Column(
+              children: filteredVisits
+                  .map(
+                    (visit) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _buildVisitListCard(visit),
+                    ),
+                  )
+                  .toList(),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String label, String value, IconData icon, Color iconColor) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: iconColor, size: 28),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          value,
-          style: GoogleFonts.libreFranklin(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: GoogleFonts.libreFranklin(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textTertiary,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMenuItem(IconData icon, String title, VoidCallback onTap, {Color? iconColor}) {
+  Widget _buildStateFilterChip(VisitState? state, String label, IconData icon) {
+    final isActive = _activeState == state;
+    final count = _countForState(state);
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => setState(() => _activeState = state),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive ? AppColors.primary.withValues(alpha: 0.12) : const Color(0xFFF4F0E8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isActive ? AppColors.primary.withValues(alpha: 0.35) : const Color(0xFFE8E4DC),
+            ),
+          ),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: (iconColor ?? AppColors.brand).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: iconColor ?? AppColors.brand, size: 22),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.libreFranklin(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+              Icon(icon, size: 14, color: isActive ? AppColors.primary : AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                '$label ($count)',
+                style: GoogleFonts.libreFranklin(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isActive ? AppColors.primary : AppColors.textSecondary,
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: Colors.grey[400], size: 24),
             ],
           ),
         ),
@@ -386,25 +437,154 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  Widget _buildDivider() {
-    return Divider(height: 1, thickness: 1, color: const Color(0xFFE8E4DC).withValues(alpha: 0.6), indent: 70);
+  Widget _buildVisitListCard(VisitData visit) {
+    return WebMobileSectionCard(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _showRouteDetailsSheet(visit),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _getStatusColor(visit.state).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _getStatusText(visit.state),
+                            style: GoogleFonts.libreFranklin(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _getStatusColor(visit.state),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          visit.visitDate != null
+                              ? '${visit.visitDate!.day}.${visit.visitDate!.month}.${visit.visitDate!.year}'
+                              : 'Bez data',
+                          style: GoogleFonts.libreFranklin(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      visit.routeTitle ?? visit.visitedPlaces,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.libreFranklin(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    visit.points.toStringAsFixed(0),
+                    style: GoogleFonts.libreFranklin(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'bodů',
+                    style: GoogleFonts.libreFranklin(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  Widget _buildEmptyRoutesState() {
-    return Container(
+  Widget _buildProfileHeaderCard(User? user) {
+    return WebMobileSectionCard(
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F4EF),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.75)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 28,
+            backgroundColor: const Color(0xFFF0EBE3),
+            backgroundImage: user?.image != null ? NetworkImage(user!.image!) : null,
+            child: user?.image == null
+                ? Icon(Icons.person_rounded, color: AppColors.textSecondary, size: 28)
+                : null,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  user?.name ?? 'Uživatel',
+                  style: AppTheme.editorialHeadline(
+                    color: AppColors.textPrimary,
+                    fontSize: 24,
+                  ).copyWith(fontWeight: FontWeight.w700),
+                ),
+                if (user?.email != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      user!.email,
+                      style: GoogleFonts.libreFranklin(
+                        fontSize: 14,
+                        color: AppColors.textTertiary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMenuItem(IconData icon, String title, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: WebMobileListItem(
+        icon: icon,
+        title: title,
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Widget _buildEmptyRoutesState() {
+    return WebMobileSectionCard(
+      width: double.infinity,
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -430,113 +610,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildRouteCard(VisitData visit) {
-    return Container(
-      width: 280,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBF7),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE8E4DC)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _showRouteDetailsSheet(visit),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 1. Hero Image / Map Preview
-              RouteThumbnail(
-                visit: visit,
-                height: 120,
-                borderRadius: 0,
-              ),
-              
-              // 2. Content
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // State Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _getStatusColor(visit.state).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _getStatusText(visit.state),
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: _getStatusColor(visit.state)),
-                          ),
-                        ),
-                        
-                        // Date
-                        if (visit.visitDate != null)
-                          Text(
-                            '${visit.visitDate!.day}.${visit.visitDate!.month}.${visit.visitDate!.year}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    
-                    // Title
-                    Text(
-                      visit.routeTitle ?? visit.visitedPlaces,
-                      style: GoogleFonts.libreFranklin(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                        height: 1.2,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Stats Row
-                    Row(
-                      children: [
-                        _buildMiniStat(Icons.star_rounded, '${visit.points.toStringAsFixed(0)} b', Colors.amber[700]!),
-                        const SizedBox(width: 16),
-                        if (visit.route != null && visit.route!['totalDistance'] != null)
-                           _buildMiniStat(Icons.directions_walk, '${((visit.route!['totalDistance'] as num) / 1000).toStringAsFixed(1)} km', Colors.blue[600]!),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMiniStat(IconData icon, String text, Color color) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 4),
-        Text(text, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.grey[700])),
-      ],
     );
   }
 
@@ -623,116 +696,281 @@ class _UserProfilePageState extends State<UserProfilePage> {
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Center(child: StrakataSheetHandle()),
-              const SizedBox(height: 20),
-              const StrakataSheetTitle('Offline mapy'),
-              const SizedBox(height: 16),
-              
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50], 
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.blue[100]!),
-                ),
-                child: FutureBuilder<Map<String, dynamic>>(
-                future: VectorTileProvider.getDetailedStats(),
-                builder: (context, snap) {
-                  final stats = snap.data ?? {};
-                  final total = stats['totalTiles'] ?? 0;
-                  final bytes = stats['totalCompressedBytes'] ?? 0;
-                  final mb = (bytes is int) ? (bytes / 1024 / 1024).toStringAsFixed(1) : '0.0';
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                       Column(
-                         children: [
-                           Text(total.toString(), style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.blue[900])),
-                           Text('Dlaždic', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blue[700])),
-                         ],
-                       ),
-                       Container(width: 1, height: 40, color: Colors.blue[200]),
-                       Column(
-                         children: [
-                           Text('$mb MB', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.blue[900])),
-                           Text('Velikost', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blue[700])),
-                         ],
-                       ),
-                    ],
-                  );
-                },
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
               ),
-              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Center(child: StrakataSheetHandle()),
+                    const SizedBox(height: 20),
+                    const StrakataSheetTitle('Offline mapy'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Spolehlivé stahování s průběhem, stopem a přehledem chyb.',
+                      style: GoogleFonts.libreFranklin(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    FutureBuilder<Map<String, dynamic>>(
+                      future: VectorTileProvider.getDetailedStats(),
+                      builder: (context, snap) {
+                        final stats = snap.data ?? {};
+                        final total = stats['totalTiles'] ?? 0;
+                        final bytes = stats['totalCompressedBytes'] ?? 0;
+                        final mb = (bytes is int) ? (bytes / 1024 / 1024).toStringAsFixed(1) : '0.0';
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFDBEAFE)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Column(
+                                children: [
+                                  Text(
+                                    total.toString(),
+                                    style: GoogleFonts.libreFranklin(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF1E3A8A),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Dlaždic',
+                                    style: GoogleFonts.libreFranklin(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF1D4ED8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(width: 1, height: 40, color: const Color(0xFFBFDBFE)),
+                              Column(
+                                children: [
+                                  Text(
+                                    '$mb MB',
+                                    style: GoogleFonts.libreFranklin(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF1E3A8A),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Velikost',
+                                    style: GoogleFonts.libreFranklin(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF1D4ED8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    StreamBuilder<Map<String, dynamic>>(
+                      stream: MapyCzDownloadService.progressStream,
+                      initialData: MapyCzDownloadService.getDownloadStats(),
+                      builder: (context, snapshot) {
+                        final progressData = snapshot.data ?? {};
+                        final isDownloading = progressData['isDownloading'] == true;
+                        final progress = (progressData['progress'] as num?)?.toDouble() ?? 0.0;
+                        final status = progressData['status']?.toString() ?? 'Připraveno';
+                        final success = progressData['successfulTiles'] ?? 0;
+                        final cached = progressData['cachedTiles'] ?? 0;
+                        final failed = progressData['failedTiles'] ?? 0;
 
-              const SizedBox(height: 24),
-              const Text('Stáhnout oblast', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-              const SizedBox(height: 12),
-              
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      onPressed: () async {
-                        final sw = const LatLng(48.9, 12.3);
-                        final ne = const LatLng(50.6, 16.0);
-                        await MapyCzDownloadService.downloadBounds(
-                          southwest: sw, northeast: ne, minZoom: 8, maxZoom: 12, concurrency: 24, batchSize: 800,
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBF7),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE8E4DC)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    isDownloading ? Icons.downloading_rounded : Icons.cloud_done_outlined,
+                                    color: isDownloading ? AppColors.primary : AppColors.textSecondary,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      status,
+                                      style: GoogleFonts.libreFranklin(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${(progress * 100).round()}%',
+                                    style: GoogleFonts.libreFranklin(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(100),
+                                child: LinearProgressIndicator(
+                                  value: progress.clamp(0.0, 1.0),
+                                  minHeight: 8,
+                                  backgroundColor: const Color(0xFFE8E4DC),
+                                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'Staženo: $success • V cache: $cached • Chyby: $failed',
+                                style: GoogleFonts.libreFranklin(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textTertiary,
+                                ),
+                              ),
+                              if (isDownloading) ...[
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: AppButton(
+                                    onPressed: MapyCzDownloadService.stopDownload,
+                                    icon: Icons.stop_circle_outlined,
+                                    text: 'Zastavit stahování',
+                                    type: AppButtonType.destructiveOutline,
+                                    size: AppButtonSize.medium,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         );
-                        if (mounted) Navigator.of(ctx).pop();
                       },
-                      icon: Icons.public,
-                      text: 'ČR (Základ)',
-                      type: AppButtonType.outline,
-                      size: AppButtonSize.medium,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      onPressed: () async {
-                        final sw = const LatLng(49.95, 14.15);
-                        final ne = const LatLng(50.25, 14.75);
-                        await MapyCzDownloadService.downloadBounds(
-                          southwest: sw, northeast: ne, minZoom: 10, maxZoom: 15, concurrency: 24, batchSize: 800,
+                    const SizedBox(height: 20),
+                    Text(
+                      'Stáhnout oblast',
+                      style: GoogleFonts.libreFranklin(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    StreamBuilder<Map<String, dynamic>>(
+                      stream: MapyCzDownloadService.progressStream,
+                      initialData: MapyCzDownloadService.getDownloadStats(),
+                      builder: (context, stateSnapshot) {
+                        final downloading = stateSnapshot.data?['isDownloading'] == true;
+                        return Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: AppButton(
+                                    onPressed: downloading
+                                        ? null
+                                        : () async {
+                                            final sw = const LatLng(48.55, 12.09);
+                                            final ne = const LatLng(51.06, 18.86);
+                                            await MapyCzDownloadService.downloadBounds(
+                                              southwest: sw,
+                                              northeast: ne,
+                                              minZoom: 8,
+                                              maxZoom: 12,
+                                              concurrency: 24,
+                                              batchSize: 900,
+                                            );
+                                            setSheetState(() {});
+                                          },
+                                    icon: Icons.public,
+                                    text: 'ČR (rychle)',
+                                    type: AppButtonType.outline,
+                                    size: AppButtonSize.medium,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: AppButton(
+                                    onPressed: downloading
+                                        ? null
+                                        : () async {
+                                            final sw = const LatLng(49.95, 14.15);
+                                            final ne = const LatLng(50.25, 14.75);
+                                            await MapyCzDownloadService.downloadBounds(
+                                              southwest: sw,
+                                              northeast: ne,
+                                              minZoom: 10,
+                                              maxZoom: 15,
+                                              concurrency: 24,
+                                              batchSize: 700,
+                                            );
+                                            setSheetState(() {});
+                                          },
+                                    icon: Icons.location_city,
+                                    text: 'Praha (detail)',
+                                    type: AppButtonType.outline,
+                                    size: AppButtonSize.medium,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
+                              child: AppButton(
+                                onPressed: downloading
+                                    ? null
+                                    : () async {
+                                        await MapyCzDownloadService.clearCache();
+                                        if (mounted) {
+                                          AppToast.showSuccess(context, 'Offline cache byla vymazána');
+                                        }
+                                        setSheetState(() {});
+                                      },
+                                icon: Icons.delete_outline,
+                                text: 'Vymazat stažené mapy',
+                                type: AppButtonType.destructiveOutline,
+                                size: AppButtonSize.medium,
+                              ),
+                            ),
+                          ],
                         );
-                        if (mounted) Navigator.of(ctx).pop();
                       },
-                      icon: Icons.location_city,
-                      text: 'Praha (Detail)',
-                      type: AppButtonType.outline,
-                      size: AppButtonSize.medium,
                     ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: AppButton(
-                  onPressed: () async {
-                    await MapyCzDownloadService.clearCache();
-                    if (mounted) Navigator.of(ctx).pop();
-                  },
-                  icon: Icons.delete_outline,
-                  text: 'Vymazat stažené mapy',
-                  type: AppButtonType.destructiveOutline,
-                  size: AppButtonSize.medium,
+                  ],
                 ),
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -1151,23 +1389,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
     ));
   }
 
-  void _showResetConfirmation() {
-    showDialog(context: context, builder: (c) => AlertDialog(
-      title: const Text('Resetovat aplikaci'), 
-      content: const Text('Opravdu chcete vymazat všechna lokální data a nastavení? Aplikace se uvede do stavu po instalaci a budete odhlášeni.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Zrušit')), 
-        TextButton(onPressed: () async { 
-          Navigator.pop(c); 
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.clear();
-          await AuthService.signOut(); 
-          if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false); 
-        }, child: const Text('RESETOVAT', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)))
-      ],
-    ));
-  }
-
   void _showDeleteAccountConfirmation() {
     showDialog(context: context, builder: (c) => AlertDialog(
       title: const Text('Smazat účet'), content: const Text('Tato akce je nevratná. Opravdu chcete smazat účet?'),
@@ -1188,5 +1409,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
      } catch (e) {
        AppToast.showError(context, 'Chyba: $e');
      }
+  }
+
+  Future<void> _openRulesWeb() async {
+    final url = Uri.parse('https://www.strakata.cz/pravidla');
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 }

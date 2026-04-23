@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import '../../services/error_recovery_service.dart';
 import '../../services/vector_tile_provider.dart';
 
 class SharedMapWidget extends StatelessWidget {
@@ -48,21 +47,12 @@ class SharedMapWidget extends StatelessWidget {
         onMapReady: onMapReady,
       ),
       children: [
-        // Tile Layer with Offline support check
-        FutureBuilder<bool>(
-          future: ErrorRecoveryService().isNetworkAvailable(),
-          initialData: true,
-          builder: (context, snapshot) {
-            // In a real app, we might want to check offline storage first.
-            // For now, we rely on cached network tiles or network.
-            return TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'cz.strakata.turistika.strakataturistikaandroidapp',
-              tileProvider: VectorTileProvider(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              ), 
-            );
-          },
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'cz.strakata.turistika.strakataturistikaandroidapp',
+          tileProvider: VectorTileProvider(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          ),
         ),
         
         if (polylines.isNotEmpty)

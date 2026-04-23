@@ -20,7 +20,7 @@ class TypeConverter {
     }
   }
 
-  /// Safely converts a dynamic value to an int with a default fallback.
+  /// Safely converts a dynamic value to an int with a default value.
   static int toIntWithDefault(dynamic value, int defaultValue) {
     return toInt(value) ?? defaultValue;
   }
@@ -40,7 +40,7 @@ class TypeConverter {
     }
   }
 
-  /// Safely converts a dynamic value to a double with a default fallback.
+  /// Safely converts a dynamic value to a double with a default value.
   static double toDoubleWithDefault(dynamic value, double defaultValue) {
     return toDouble(value) ?? defaultValue;
   }
@@ -58,7 +58,7 @@ class TypeConverter {
     return null;
   }
 
-  /// Safely converts a dynamic value to a boolean with a default fallback.
+  /// Safely converts a dynamic value to a boolean with a default value.
   static bool toBoolWithDefault(dynamic value, bool defaultValue) {
     return toBool(value) ?? defaultValue;
   }

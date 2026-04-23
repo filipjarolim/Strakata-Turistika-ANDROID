@@ -12,13 +12,29 @@ class FormConfig {
   });
 
   factory FormConfig.fromJson(Map<String, dynamic> json) {
+    final dynamic definition = json['definition'];
+    final dynamic rawSteps = definition is Map<String, dynamic>
+        ? definition['steps']
+        : json['steps'];
+    final List<FormStep> parsedSteps = (rawSteps as List<dynamic>? ?? const [])
+        .asMap()
+        .entries
+        .map(
+          (entry) => FormStep.fromJson(
+            entry.value as Map<String, dynamic>,
+            defaultOrder: entry.key,
+          ),
+        )
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+
     return FormConfig(
       slug: json['slug']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      steps: (json['steps'] as List<dynamic>)
-          .map((v) => FormStep.fromJson(v as Map<String, dynamic>))
-          .toList()
-        ..sort((a, b) => a.order.compareTo(b.order)),
+      name: json['name']?.toString() ??
+          (definition is Map<String, dynamic>
+              ? definition['name']?.toString() ?? ''
+              : ''),
+      steps: parsedSteps,
     );
   }
 }
@@ -36,15 +52,28 @@ class FormStep {
     required this.fields,
   });
 
-  factory FormStep.fromJson(Map<String, dynamic> json) {
+  factory FormStep.fromJson(
+    Map<String, dynamic> json, {
+    int defaultOrder = 0,
+  }) {
+    final dynamic rawFields = json['fields'];
+    final List<FormFieldWidget> parsedFields = (rawFields as List<dynamic>? ?? const [])
+        .asMap()
+        .entries
+        .map(
+          (entry) => FormFieldWidget.fromJson(
+            entry.value as Map<String, dynamic>,
+            defaultOrder: entry.key,
+          ),
+        )
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+
     return FormStep(
       id: json['id']?.toString() ?? '',
-      label: json['label']?.toString() ?? '',
-      order: TypeConverter.toIntWithDefault(json['order'], 0),
-      fields: (json['fields'] as List<dynamic>)
-          .map((v) => FormFieldWidget.fromJson(v as Map<String, dynamic>))
-          .toList()
-        ..sort((a, b) => a.order.compareTo(b.order)),
+      label: json['label']?.toString() ?? json['title']?.toString() ?? '',
+      order: TypeConverter.toIntWithDefault(json['order'], defaultOrder),
+      fields: parsedFields,
     );
   }
 }
@@ -66,14 +95,20 @@ class FormFieldWidget {
     this.metadata = const {},
   });
 
-  factory FormFieldWidget.fromJson(Map<String, dynamic> json) {
+  factory FormFieldWidget.fromJson(
+    Map<String, dynamic> json, {
+    int defaultOrder = 0,
+  }) {
     return FormFieldWidget(
-      id: json['id']?.toString() ?? '',
+      id: json['id']?.toString() ?? json['name']?.toString() ?? '',
       type: json['type']?.toString() ?? '',
       label: json['label']?.toString() ?? '',
-      order: TypeConverter.toIntWithDefault(json['order'], 0),
+      order: TypeConverter.toIntWithDefault(json['order'], defaultOrder),
       required: json['required'] == true,
-      metadata: json['metadata'] as Map<String, dynamic>? ?? {},
+      metadata: {
+        ...(json['metadata'] as Map<String, dynamic>? ?? {}),
+        if (json['name'] != null) 'name': json['name'].toString(),
+      },
     );
   }
 }

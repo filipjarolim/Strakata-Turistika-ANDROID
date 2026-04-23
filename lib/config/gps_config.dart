@@ -22,7 +22,7 @@ class GpsConfig {
 
   // Watchdog / recovery
   static const Duration staleUpdateThreshold = Duration(seconds: 12);
-  static const Duration periodicFallbackInterval = Duration(seconds: 5);
+  static const Duration periodicUpdateInterval = Duration(seconds: 5);
 
   // Fast first fix (FFF) bootstrap
   // Allow a looser initial accuracy to show location quickly on weak signal devices
@@ -33,7 +33,7 @@ class GpsConfig {
   static const Duration firstFixLowAccuracyTimeout = Duration(seconds: 2);
   static const Duration firstFixHighAccuracyTimeout = Duration(seconds: 6);
   // Polling interval before first fix is established
-  static const Duration fallbackUntilFirstFixInterval = Duration(seconds: 2);
+  static const Duration preFirstFixUpdateInterval = Duration(seconds: 2);
 
   // Stationary lock and hysteresis
   static const Duration stationaryLockWindow = Duration(seconds: 8); // time below speed threshold before lock

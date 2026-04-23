@@ -21,6 +21,11 @@ class MapyCzDownloadService {
   static int _currentZoomLevel = 0;
   static IOClient? _pooledClient;
   static DateTime? _lastDownloadCompletedAt;
+  static int _runToken = 0;
+  static int _successfulTiles = 0;
+  static int _cachedTiles = 0;
+  static int _failedTiles = 0;
+  static String _lastErrorMessage = '';
   
   // Stream controllers for real-time updates
   static final StreamController<Map<String, dynamic>> _progressController = 
@@ -42,6 +47,28 @@ class MapyCzDownloadService {
   static String get currentLayer => _currentLayer;
   static int get currentZoomLevel => _currentZoomLevel;
 
+  static Map<String, dynamic> _snapshot() {
+    return {
+      'status': _currentStatus,
+      'progress': _currentProgress,
+      'downloadedTiles': _downloadedTiles,
+      'totalTiles': _totalTilesToDownload,
+      'currentZoom': _currentZoomLevel,
+      'currentLayer': _currentLayer,
+      'currentFileSize': _currentFileSize,
+      'totalFileSize': _totalFileSize,
+      'successfulTiles': _successfulTiles,
+      'cachedTiles': _cachedTiles,
+      'failedTiles': _failedTiles,
+      'lastError': _lastErrorMessage,
+      'isDownloading': _isDownloading,
+    };
+  }
+
+  static void _emitProgress() {
+    _progressController.add(_snapshot());
+  }
+
   /// Download Czech Republic with Mapy.cz-style functionality
   static Future<void> downloadCzechRepublic() async {
     if (_isDownloading) {
@@ -57,11 +84,17 @@ class MapyCzDownloadService {
     try {
       _isDownloading = true;
       _downloadStateController.add(true);
+      final int token = ++_runToken;
       _currentStatus = 'Initializing Mapy.cz-style download...';
       _currentProgress = 0.0;
       _downloadedTiles = 0;
       _currentFileSize = 0;
       _totalFileSize = 0;
+      _successfulTiles = 0;
+      _cachedTiles = 0;
+      _failedTiles = 0;
+      _lastErrorMessage = '';
+      _emitProgress();
       
       // Fixed configuration for Czech Republic
       const String configName = 'Czech Republic';
@@ -108,16 +141,8 @@ class MapyCzDownloadService {
       } catch (e) {
         print('❌ Network connectivity test failed: $e');
         _currentStatus = 'Network unavailable';
-        _progressController.add({
-          'status': _currentStatus,
-          'progress': 0.0,
-          'downloadedTiles': 0,
-          'totalTiles': 0,
-          'currentZoom': 0,
-          'currentLayer': 'default',
-          'currentFileSize': 0,
-          'totalFileSize': 0,
-        });
+        _lastErrorMessage = 'Network unavailable';
+        _emitProgress();
         return; // Exit early if no network
       }
       
@@ -146,19 +171,8 @@ class MapyCzDownloadService {
         print('🧮 Zoom $z estimate: $tilesAtZ tiles (step=$step)');
       }
 
-      // Fallback: if somehow zero, use full range estimate without CZ filter (very conservative)
       if (_totalTilesToDownload == 0) {
-        print('⚠️ Tile estimate returned 0; using conservative fallback');
-        for (int z = minZoom; z <= maxZoom; z++) {
-          final range = _getTileRangeForBounds(southwest, northeast, z);
-          final int minX = range['minX']!;
-          final int maxX = range['maxX']!;
-          final int minY = range['minY']!;
-          final int maxY = range['maxY']!;
-          final countX = (maxX - minX + 1).clamp(0, 1 << 20);
-          final countY = (maxY - minY + 1).clamp(0, 1 << 20);
-          _totalTilesToDownload += (countX * countY * 3);
-        }
+        throw Exception('Tile estimate is zero for selected bounds and zooms');
       }
       
       print('🗺️ Total tiles to download: $_totalTilesToDownload');
@@ -167,7 +181,7 @@ class MapyCzDownloadService {
       final layers = ['base'];
       
       for (int z = minZoom; z <= maxZoom; z++) {
-        if (!_isDownloading) break;
+        if (!_isDownloading || token != _runToken) break;
         
         _currentZoomLevel = z;
         _currentStatus = 'Downloading zoom level $z...';
@@ -180,7 +194,7 @@ class MapyCzDownloadService {
         
         // Download all layers for this zoom level
         for (final layer in layers) {
-          if (!_isDownloading) break;
+          if (!_isDownloading || token != _runToken) break;
           
           _currentLayer = layer;
           _currentStatus = 'Downloading $layer layer (zoom $z)...';
@@ -195,6 +209,7 @@ class MapyCzDownloadService {
             batchSize: batchSize,
             batchDelayMs: batchDelayMs,
             concurrency: concurrency,
+            token: token,
           );
         }
         
@@ -204,16 +219,7 @@ class MapyCzDownloadService {
             : 0.0;
         _currentProgress = progress;
         
-        _progressController.add({
-          'status': _currentStatus,
-          'progress': _currentProgress,
-          'downloadedTiles': _downloadedTiles,
-          'totalTiles': _totalTilesToDownload,
-          'currentZoom': z,
-          'currentLayer': _currentLayer,
-          'currentFileSize': _currentFileSize,
-          'totalFileSize': _totalFileSize,
-        });
+        _emitProgress();
         
         final percent = (progress * 100).clamp(0, 100).round();
         await DownloadNotificationService.showDownloadProgress(
@@ -224,44 +230,33 @@ class MapyCzDownloadService {
         print('🗺️ Zoom level $z completed - Progress: ${percent.toString()}%');
         
         // No delay between zoom levels
-        if (!_isDownloading) break;
+        if (!_isDownloading || token != _runToken) break;
       }
-      
-      _currentStatus = 'Download completed!';
-      _currentProgress = 1.0;
-              _progressController.add({
-          'status': _currentStatus,
-          'progress': _currentProgress,
-          'downloadedTiles': _downloadedTiles,
-          'totalTiles': _totalTilesToDownload,
-          'currentZoom': maxZoom,
-          'currentLayer': 'all',
-          'currentFileSize': _currentFileSize,
-          'totalFileSize': _totalFileSize,
-        });
-        
+
+      if (_isDownloading && token == _runToken) {
+        _currentStatus = 'Download completed!';
+        _currentProgress = 1.0;
+        _emitProgress();
+        _lastDownloadCompletedAt = DateTime.now();
+
         // Show completion notification
         await DownloadNotificationService.showDownloadCompleted(
           title: '✅ Download Completed',
           message: '🗺️ $configName downloaded successfully!\n'
-                   '📊 Total tiles: $_downloadedTiles\n'
+                   '📊 Saved: $_successfulTiles, Cached: $_cachedTiles, Failed: $_failedTiles\n'
                    '💾 Size: ${(_currentFileSize / 1024 / 1024).toStringAsFixed(1)} MB',
         );
+      } else {
+        _currentStatus = 'Download stopped';
+        _emitProgress();
+      }
       
       print('🗺️ Mapy.cz-style Czech Republic download completed!');
       
     } catch (e) {
       _currentStatus = 'Download failed: $e';
-      _progressController.add({
-        'status': _currentStatus,
-        'progress': _currentProgress,
-        'downloadedTiles': _downloadedTiles,
-        'totalTiles': _totalTilesToDownload,
-        'currentZoom': _currentZoomLevel,
-        'currentLayer': _currentLayer,
-        'currentFileSize': _currentFileSize,
-        'totalFileSize': _totalFileSize,
-      });
+      _lastErrorMessage = e.toString();
+      _emitProgress();
       
       // Show failure notification
       await DownloadNotificationService.showDownloadFailed(
@@ -274,7 +269,7 @@ class MapyCzDownloadService {
       _isDownloading = false;
       _downloadStateController.add(false);
       await DownloadNotificationService.cancelProgressNotification();
-      _lastDownloadCompletedAt = DateTime.now();
+      _emitProgress();
     }
   }
 
@@ -294,11 +289,17 @@ class MapyCzDownloadService {
     try {
       _isDownloading = true;
       _downloadStateController.add(true);
+      final int token = ++_runToken;
       _currentStatus = 'Initializing custom area download...';
       _currentProgress = 0.0;
       _downloadedTiles = 0;
       _currentFileSize = 0;
       _totalFileSize = 0;
+      _successfulTiles = 0;
+      _cachedTiles = 0;
+      _failedTiles = 0;
+      _lastErrorMessage = '';
+      _emitProgress();
 
       // Initialize storage and networking
       await VectorTileProvider.initialize();
@@ -323,16 +324,8 @@ class MapyCzDownloadService {
       } catch (e) {
         _currentStatus = 'Network unavailable';
         _currentProgress = 0.0;
-        _progressController.add({
-          'status': _currentStatus,
-          'progress': 0.0,
-          'downloadedTiles': 0,
-          'totalTiles': 0,
-          'currentZoom': 0,
-          'currentLayer': 'base',
-          'currentFileSize': 0,
-          'totalFileSize': 0,
-        });
+        _lastErrorMessage = 'Network unavailable';
+        _emitProgress();
         return;
       }
 
@@ -353,10 +346,10 @@ class MapyCzDownloadService {
       print('🗺️ Custom area: total tiles to download (estimate): $_totalTilesToDownload');
 
       final layers = ['base'];
-      for (int z = minZoom; z <= maxZoom && _isDownloading; z++) {
+      for (int z = minZoom; z <= maxZoom && _isDownloading && token == _runToken; z++) {
         _currentZoomLevel = z;
         for (final layer in layers) {
-          if (!_isDownloading) break;
+          if (!_isDownloading || token != _runToken) break;
           _currentLayer = layer;
           final range = _getTileRangeForBounds(southwest, northeast, z);
           await _downloadLayerRange(
@@ -369,52 +362,33 @@ class MapyCzDownloadService {
             batchSize: batchSize,
             batchDelayMs: 0,
             concurrency: concurrency,
+            token: token,
           );
         }
         _currentProgress = _totalTilesToDownload > 0
             ? _downloadedTiles / _totalTilesToDownload
             : 0.0;
-        _progressController.add({
-          'status': 'Downloading zoom $z...',
-          'progress': _currentProgress,
-          'downloadedTiles': _downloadedTiles,
-          'totalTiles': _totalTilesToDownload,
-          'currentZoom': z,
-          'currentLayer': _currentLayer,
-          'currentFileSize': _currentFileSize,
-          'totalFileSize': _totalFileSize,
-        });
+        _emitProgress();
       }
 
-      _currentStatus = 'Download completed!';
-      _currentProgress = 1.0;
-      _progressController.add({
-        'status': _currentStatus,
-        'progress': _currentProgress,
-        'downloadedTiles': _downloadedTiles,
-        'totalTiles': _totalTilesToDownload,
-        'currentZoom': maxZoom,
-        'currentLayer': 'base',
-        'currentFileSize': _currentFileSize,
-        'totalFileSize': _totalFileSize,
-      });
+      if (_isDownloading && token == _runToken) {
+        _currentStatus = 'Download completed!';
+        _currentProgress = 1.0;
+        _lastDownloadCompletedAt = DateTime.now();
+      } else {
+        _currentStatus = 'Download stopped';
+      }
+      _emitProgress();
       print('✅ Custom area download finished');
     } catch (e) {
       _currentStatus = 'Download failed: $e';
-      _progressController.add({
-        'status': _currentStatus,
-        'progress': _currentProgress,
-        'downloadedTiles': _downloadedTiles,
-        'totalTiles': _totalTilesToDownload,
-        'currentZoom': _currentZoomLevel,
-        'currentLayer': _currentLayer,
-        'currentFileSize': _currentFileSize,
-        'totalFileSize': _totalFileSize,
-      });
+      _lastErrorMessage = e.toString();
+      _emitProgress();
       print('❌ Failed to download custom area: $e');
     } finally {
       _isDownloading = false;
       _downloadStateController.add(false);
+      _emitProgress();
     }
   }
   
@@ -453,16 +427,17 @@ class MapyCzDownloadService {
     required int batchSize,
     required int batchDelayMs,
     required int concurrency,
+    required int token,
   }) async {
     List<Map<String, int>> batch = [];
     final int step = _getStepForZoom(zoom);
 
-    for (int x = minX; x <= maxX && _isDownloading; x += step) {
-      for (int y = minY; y <= maxY && _isDownloading; y += step) {
+    for (int x = minX; x <= maxX && _isDownloading && token == _runToken; x += step) {
+      for (int y = minY; y <= maxY && _isDownloading && token == _runToken; y += step) {
         if (!_isTileCenterInCzechRepublic(x, y, zoom)) continue;
         batch.add({'x': x, 'y': y});
         if (batch.length >= batchSize) {
-          await _processBatch(batch, zoom, layer, concurrency);
+          await _processBatch(batch, zoom, layer, concurrency, token);
           batch = [];
           if (batchDelayMs > 0) {
             await Future.delayed(Duration(milliseconds: batchDelayMs));
@@ -472,8 +447,8 @@ class MapyCzDownloadService {
     }
 
     // Flush remaining
-    if (_isDownloading && batch.isNotEmpty) {
-      await _processBatch(batch, zoom, layer, concurrency);
+    if (_isDownloading && token == _runToken && batch.isNotEmpty) {
+      await _processBatch(batch, zoom, layer, concurrency, token);
     }
   }
 
@@ -482,31 +457,25 @@ class MapyCzDownloadService {
     int zoom,
     String layer,
     int concurrency,
+    int token,
   ) async {
-    for (int i = 0; i < batch.length && _isDownloading; i += concurrency) {
+    for (int i = 0; i < batch.length && _isDownloading && token == _runToken; i += concurrency) {
       final end = (i + concurrency < batch.length) ? i + concurrency : batch.length;
       final slice = batch.sublist(i, end);
-      final futures = <Future<void>>[];
+      final futures = <Future<_TileOutcome>>[];
       for (final tile in slice) {
         futures.add(_downloadTile(tile['x']!, tile['y']!, zoom, layer));
       }
-      await Future.wait(futures);
-      
-      _downloadedTiles += slice.length;
+      final results = await Future.wait(futures);
+      _downloadedTiles += results.length;
+      _successfulTiles += results.where((r) => r == _TileOutcome.downloaded).length;
+      _cachedTiles += results.where((r) => r == _TileOutcome.cached).length;
+      _failedTiles += results.where((r) => r == _TileOutcome.failed).length;
       _currentProgress = _totalTilesToDownload > 0
           ? _downloadedTiles / _totalTilesToDownload
           : 0.0;
-
-      _progressController.add({
-        'status': 'Downloading $layer layer (zoom $zoom)...',
-        'progress': _currentProgress,
-        'downloadedTiles': _downloadedTiles,
-        'totalTiles': _totalTilesToDownload,
-        'currentZoom': zoom,
-        'currentLayer': layer,
-        'currentFileSize': _currentFileSize,
-        'totalFileSize': _totalFileSize,
-      });
+      _currentStatus = 'Downloading $layer layer (zoom $zoom)...';
+      _emitProgress();
       
       final percent = (_currentProgress * 100).clamp(0, 100).round();
       await DownloadNotificationService.showDownloadProgress(
@@ -518,14 +487,14 @@ class MapyCzDownloadService {
   }
   
   /// Download a single tile
-  static Future<void> _downloadTile(int x, int y, int z, String layer) async {
+  static Future<_TileOutcome> _downloadTile(int x, int y, int z, String layer) async {
     try {
       final tileKey = '${z}_${x}_${y}';
       
       // Check if already cached
       final cachedTile = await VectorTileProvider.getCachedTile(tileKey, layer);
       if (cachedTile != null && cachedTile.isValid) {
-        return; // Already cached and valid
+        return _TileOutcome.cached; // Already cached and valid
       }
       
       // Get layer-specific URL
@@ -553,9 +522,12 @@ class MapyCzDownloadService {
         });
         
         print('🗺️ Downloaded and cached tile: $tileKey ($layer) - Compression: ${(tileData.compressionRatio * 100).toStringAsFixed(1)}%');
+        return _TileOutcome.downloaded;
       }
+      return _TileOutcome.failed;
     } catch (e) {
       print('❌ Failed to download tile ${z}/${x}/${y} ($layer): $e');
+      return _TileOutcome.failed;
     }
   }
   
@@ -565,9 +537,9 @@ class MapyCzDownloadService {
       case 'base':
         return 'https://tile.openstreetmap.org/$z/$x/$y.png';
       case 'transport':
-        return 'https://tile.openstreetmap.org/$z/$x/$y.png'; // Same for now
+        return 'https://tile.openstreetmap.org/$z/$x/$y.png';
       case 'labels':
-        return 'https://tile.openstreetmap.org/$z/$x/$y.png'; // Same for now
+        return 'https://tile.openstreetmap.org/$z/$x/$y.png';
       default:
         return 'https://tile.openstreetmap.org/$z/$x/$y.png';
     }
@@ -640,6 +612,9 @@ class MapyCzDownloadService {
   /// Stop download
   static void stopDownload() {
     _isDownloading = false;
+    _runToken++;
+    _currentStatus = 'Stopping download...';
+    _emitProgress();
     print('🗺️ Mapy.cz-style download stopped');
   }
   
@@ -657,6 +632,10 @@ class MapyCzDownloadService {
       'totalFileSize': _totalFileSize,
       'currentLayer': _currentLayer,
       'currentZoomLevel': _currentZoomLevel,
+      'successfulTiles': _successfulTiles,
+      'cachedTiles': _cachedTiles,
+      'failedTiles': _failedTiles,
+      'lastError': _lastErrorMessage,
       'cacheStats': cacheStats,
       'compressionEnabled': true,
       'layeringEnabled': true,
@@ -670,3 +649,9 @@ class MapyCzDownloadService {
     print('🗺️ Mapy.cz-style cache cleared');
   }
 } 
+
+enum _TileOutcome {
+  downloaded,
+  cached,
+  failed,
+}

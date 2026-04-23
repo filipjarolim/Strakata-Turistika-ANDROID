@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
+import '../form_design.dart';
 
 class MapPreviewWidget extends StatelessWidget {
   final FormFieldWidget field;
@@ -16,54 +17,51 @@ class MapPreviewWidget extends StatelessWidget {
     final summary = formContext.trackingSummary;
     
     if (summary == null || summary.trackPoints.isEmpty) {
-      return Container(
-        height: 200,
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
+      return const FormSectionCard(
+        title: 'Náhled trasy',
+        icon: Icons.map_outlined,
+        child: SizedBox(
+          height: 120,
+          child: Center(child: Text('Žádná trasa k zobrazení')),
         ),
-        child: const Center(child: Text('Žádná trasa k zobrazení')),
       );
     }
 
     final points = summary.trackPoints.map((p) => LatLng(p.latitude, p.longitude)).toList();
     
-    return Container(
-      height: 250,
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: FlutterMap(
-          options: MapOptions(
-            initialCenter: _calculateCenter(points),
-            initialZoom: _calculateZoom(points),
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.strakataturistika.app',
+    return FormSectionCard(
+      title: 'Náhled trasy',
+      subtitle: 'Kontrola, že je stopa kompletní a vede správně.',
+      icon: Icons.map_outlined,
+      child: Container(
+        height: 250,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE8E4DC)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: FlutterMap(
+            options: MapOptions(
+              initialCenter: _calculateCenter(points),
+              initialZoom: _calculateZoom(points),
             ),
-            PolylineLayer(
-              polylines: [
-                Polyline(
-                  points: points,
-                  strokeWidth: 4,
-                  color: Colors.blue,
-                ),
-              ],
-            ),
-          ],
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.strakataturistika.app',
+              ),
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: points,
+                    strokeWidth: 4,
+                    color: const Color(0xFF2563EB),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

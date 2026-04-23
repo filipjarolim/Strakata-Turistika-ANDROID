@@ -16,6 +16,7 @@ class TrackingStateService {
   bool _isTracking = false;
   Timer? _updateTimer;
   static const int _trackingNotificationId = 2001;
+  String? _lastTrackingInfo;
   
   // Stream controllers for state changes
   final StreamController<bool> _trackingStateController = StreamController<bool>.broadcast();
@@ -102,7 +103,7 @@ class TrackingStateService {
   // Start periodic updates
   void _startTrackingUpdates() {
     _updateTimer?.cancel();
-    _updateTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    _updateTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (_isTracking) {
         final summary = _trackingService.getSummary();
         final duration = summary.duration;
@@ -115,7 +116,10 @@ class TrackingStateService {
         
         final info = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')} • ${distance.toStringAsFixed(2)} km • ${speed.toStringAsFixed(1)} km/h';
         
-        _trackingInfoController.add(info);
+        if (info != _lastTrackingInfo) {
+          _lastTrackingInfo = info;
+          _trackingInfoController.add(info);
+        }
         _updateTrackingNotification(info);
       } else {
         timer.cancel();
@@ -130,24 +134,6 @@ class TrackingStateService {
   
   // Show tracking notification
   Future<void> _showTrackingNotification() async {
-    const androidDetails = AndroidNotificationDetails(
-      'tracking_status',
-      'Tracking Status',
-      channelDescription: 'Shows tracking status across all pages',
-      importance: Importance.low,
-      priority: Priority.low,
-      ongoing: true,
-      autoCancel: false,
-      showWhen: false,
-      enableLights: false,
-      playSound: false,
-      enableVibration: false,
-      icon: '@mipmap/ic_launcher',
-      largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-    );
-    
-    const notificationDetails = NotificationDetails(android: androidDetails);
-    
     // Disabled persistent tracking notification title per request
   }
   
@@ -155,25 +141,7 @@ class TrackingStateService {
   Future<void> _updateTrackingNotification(String info) async {
     if (!_isTracking) return;
     if (Platform.isAndroid) return; // Skip on Android to prevent duplicates
-    
-    const androidDetails = AndroidNotificationDetails(
-      'tracking_status',
-      'Tracking Status',
-      channelDescription: 'Shows tracking status across all pages',
-      importance: Importance.low,
-      priority: Priority.low,
-      ongoing: true,
-      autoCancel: false,
-      showWhen: false,
-      enableLights: false,
-      playSound: false,
-      enableVibration: false,
-      icon: '@mipmap/ic_launcher',
-      largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
-    );
-    
-    const notificationDetails = NotificationDetails(android: androidDetails);
-    
+
     // Disabled tracking notification update per request
   }
   

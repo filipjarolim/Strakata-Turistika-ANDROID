@@ -163,9 +163,10 @@ class ErrorRecoveryService {
       final backupData = _prefs.getString(latestBackupKey);
       
       if (backupData != null) {
-        // Minimal restoration stub: just log that a backup exists for now
-        print('🧩 Found backup to restore: $latestBackupKey');
-        return true;
+        await logError(
+          'Backup restore is not supported in strict mode (latest backup: $latestBackupKey)',
+          context: '_restoreFromBackup',
+        );
       }
 
       return false;

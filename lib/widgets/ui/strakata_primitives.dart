@@ -1,7 +1,7 @@
 // Strakatá shared UI primitives (main app shell).
 //
 // Use for: modal sheet shape/handle, white elevated cards, section/sheet titles.
-// Admin screens may use `admin_theme.dart` / `admin_page_template.dart` instead.
+// Shared primitives for all non-GPS mobile screens.
 import 'package:flutter/material.dart';
 
 import '../../config/app_colors.dart';

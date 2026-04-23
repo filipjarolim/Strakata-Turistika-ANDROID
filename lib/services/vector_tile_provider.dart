@@ -234,7 +234,12 @@ class VectorTileProvider extends TileProvider {
   /// Update tile metadata
   static Future<void> updateTileMetadata(String tileKey, Map<String, dynamic> metadata) async {
     try {
-      await _metadataBox?.put(tileKey, metadata);
+      final existing = _metadataBox?.get(tileKey) as Map?;
+      final merged = <String, dynamic>{
+        if (existing != null) ...Map<String, dynamic>.from(existing),
+        ...metadata,
+      };
+      await _metadataBox?.put(tileKey, merged);
     } catch (e) {
       print('❌ Failed to update tile metadata: $e');
     }
@@ -306,6 +311,56 @@ class VectorTileProvider extends TileProvider {
           }
         }
       }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final recentTiles = <Map<String, dynamic>>[];
+      final sourceHistogram = <String, int>{};
+      int minZoom = 99;
+      int maxZoom = -1;
+      int? newestTs;
+      int? oldestTs;
+      double? minLat;
+      double? maxLat;
+      double? minLng;
+      double? maxLng;
+
+      if (_metadataBox != null) {
+        for (final key in _metadataBox!.keys) {
+          final meta = _metadataBox!.get(key) as Map?;
+          if (meta == null) continue;
+          final z = (meta['zoom'] ?? 0) as int;
+          final x = (meta['x'] ?? 0) as int;
+          final y = (meta['y'] ?? 0) as int;
+          final ts = (meta['timestamp'] ?? 0) as int;
+          final source = (meta['source']?.toString() ?? 'unknown');
+          sourceHistogram[source] = (sourceHistogram[source] ?? 0) + 1;
+          if (z < minZoom) minZoom = z;
+          if (z > maxZoom) maxZoom = z;
+          if (newestTs == null || ts > newestTs) newestTs = ts;
+          if (oldestTs == null || ts < oldestTs) oldestTs = ts;
+
+          final bounds = _tileBounds(z, x, y);
+          minLat = minLat == null ? bounds['south'] : min(minLat, bounds['south']!);
+          maxLat = maxLat == null ? bounds['north'] : max(maxLat, bounds['north']!);
+          minLng = minLng == null ? bounds['west'] : min(minLng, bounds['west']!);
+          maxLng = maxLng == null ? bounds['east'] : max(maxLng, bounds['east']!);
+
+          recentTiles.add({
+            'key': key.toString(),
+            'zoom': z,
+            'x': x,
+            'y': y,
+            'layer': meta['layer']?.toString() ?? 'base',
+            'source': source,
+            'timestamp': ts,
+            'ageMinutes': ((now - ts) / 60000).round(),
+            'compressedSize': (meta['compressedSize'] ?? 0) as int,
+          });
+        }
+      }
+
+      recentTiles.sort((a, b) => (b['timestamp'] as int).compareTo(a['timestamp'] as int));
+      final recent = recentTiles.take(8).toList();
+
       return {
         'totalTiles': totalTiles,
         'totalCompressedBytes': totalCompressedBytes,
@@ -313,11 +368,48 @@ class VectorTileProvider extends TileProvider {
         'baseLayer': baseCount,
         'transportLayer': transportCount,
         'labelLayer': labelCount,
+        'sourceHistogram': sourceHistogram,
+        'recentTiles': recent,
+        'minZoom': minZoom == 99 ? null : minZoom,
+        'maxZoom': maxZoom == -1 ? null : maxZoom,
+        'newestTimestamp': newestTs,
+        'oldestTimestamp': oldestTs,
+        'bounds': {
+          'south': minLat,
+          'north': maxLat,
+          'west': minLng,
+          'east': maxLng,
+        },
       };
     } catch (e) {
       print('❌ Failed to compute detailed stats: $e');
       return {};
     }
+  }
+
+  static Map<String, double> _tileBounds(int z, int x, int y) {
+    final n = pow(2, z).toDouble();
+    final west = x / n * 360.0 - 180.0;
+    final east = (x + 1) / n * 360.0 - 180.0;
+    final north = _tileYToLat(y, n);
+    final south = _tileYToLat(y + 1, n);
+    return {
+      'west': west,
+      'east': east,
+      'north': north,
+      'south': south,
+    };
+  }
+
+  static double _tileYToLat(int y, double n) {
+    final r = pi * (1.0 - 2.0 * y / n);
+    return 180.0 / pi * atan(_sinh(r));
+  }
+
+  static double _sinh(double x) {
+    final ex = exp(x);
+    final enx = exp(-x);
+    return (ex - enx) / 2.0;
   }
 }
 
@@ -360,31 +452,34 @@ class ResilientCachedTileImageProvider extends ImageProvider<ResilientCachedTile
         try {
           final data = VectorTileData.compress(response.bodyBytes, key.layer);
           await VectorTileProvider.cacheTile(key.tileKey, data, key.layer);
+          final parts = key.tileKey.split('_');
+          if (parts.length == 3) {
+            final z = int.tryParse(parts[0]) ?? 0;
+            final x = int.tryParse(parts[1]) ?? 0;
+            final y = int.tryParse(parts[2]) ?? 0;
+            await VectorTileProvider.updateTileMetadata(key.tileKey, {
+              'layer': key.layer,
+              'zoom': z,
+              'x': x,
+              'y': y,
+              'timestamp': DateTime.now().millisecondsSinceEpoch,
+              'compressedSize': data.compressedSize,
+              'compressionRatio': data.compressionRatio,
+              'source': 'browsing',
+            });
+          }
         } catch (_) {}
         return await ui.instantiateImageCodec(response.bodyBytes);
       }
     } catch (_) {}
 
-    // Fallback to cached tile
     final cached = VectorTileProvider.getCachedTileSync(key.tileKey, key.layer);
     if (cached != null && cached.isValid) {
       final bytes = cached.decompress();
       return await ui.instantiateImageCodec(bytes);
     }
 
-    // As a last resort, return a 1x1 transparent pixel instead of failing to avoid blanks
-    final transparentPng = Uint8List.fromList([
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-      0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
-      0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
-      0x54, 0x78, 0x9C, 0x63, 0x60, 0x00, 0x00, 0x00,
-      0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, 0x33, 0x00,
-      0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
-      0x42, 0x60, 0x82,
-    ]);
-    return await ui.instantiateImageCodec(transparentPng);
+    throw Exception('Tile unavailable: ${key.url}');
   }
 
   @override

@@ -199,8 +199,10 @@ class GPSTrackingService : Service() {
     }
     
     private fun createNotification(): Notification {
+        // Do NOT use FLAG_ACTIVITY_CLEAR_TASK: it wipes the task and restarts the app,
+        // which drops in-memory GPS track state in Flutter while the user only meant to return to the app.
         val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         
         val pendingIntent = PendingIntent.getActivity(
@@ -210,7 +212,7 @@ class GPSTrackingService : Service() {
         
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("")
-            .setContentText("Tap to view tracking details")
+            .setContentText("Klepnutím se vrátíte do aplikace")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

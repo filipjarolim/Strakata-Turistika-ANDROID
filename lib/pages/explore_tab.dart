@@ -11,6 +11,8 @@ import '../models/visit_data.dart';
 import '../widgets/tab_switch.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/strakata_editorial_background.dart';
+import '../widgets/ui/web_mobile_section_card.dart';
+import '../widgets/ui/web_mobile_patterns.dart';
 
 /// Domů — editorial layout: pale wash background, large rounded story cards.
 class ExploreTab extends StatelessWidget {
@@ -39,6 +41,8 @@ class ExploreTab extends StatelessWidget {
               children: [
                 const _HomeTitleBlock(),
                 const SizedBox(height: 28),
+                const _QuickSeasonStats(),
+                const SizedBox(height: 20),
                 _HeroCompetitionCard(radius: _cardRadius, dogAsset: _dogAsset),
                 const SizedBox(height: 20),
                 _AboutUsCard(radius: _cardRadius, mountainsAsset: _mountainsAsset),
@@ -52,6 +56,64 @@ class ExploreTab extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _QuickSeasonStats extends StatelessWidget {
+  const _QuickSeasonStats();
+
+  @override
+  Widget build(BuildContext context) {
+    return WebMobileSectionCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Expanded(child: _StatPill(label: 'Aktivní sezóna', value: DateTime.now().year.toString())),
+          const SizedBox(width: 10),
+          Expanded(child: _StatPill(label: 'Výzva týdne', value: '3 km + vrchol')),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  const _StatPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F0E8),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.libreFranklin(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.libreFranklin(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -409,23 +471,6 @@ class _TintedHomeCard extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: AppTheme.editorialHeadline(
-        color: AppColors.textPrimary,
-        fontSize: 20,
-      ),
-    );
-  }
-}
-
 class RecentActivitySection extends StatefulWidget {
   const RecentActivitySection({super.key});
 
@@ -483,7 +528,7 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const _SectionTitle('Poslední aktivita'),
+            const WebMobileSectionTitle('Poslední aktivita'),
             AppButton(
               text: 'Zobrazit vše',
               onPressed: () => TabSwitch.of(context)?.switchTo(1),
@@ -523,21 +568,9 @@ class _EmptyHomePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return WebMobileSectionCard(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F4EF),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
       child: Center(
         child: Text(
           message,
@@ -558,23 +591,14 @@ class ActivityItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFFFFBF7),
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(24),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => TabSwitch.of(context)?.switchTo(1),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFE8E4DC)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
+        borderRadius: BorderRadius.circular(24),
+        child: WebMobileSectionCard(
+          padding: EdgeInsets.zero,
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             leading: Container(
@@ -619,7 +643,7 @@ class ManualUploadSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('Ruční nahrání'),
+        const WebMobileSectionTitle('Ruční nahrání'),
         const SizedBox(height: 16),
         Row(
           children: [

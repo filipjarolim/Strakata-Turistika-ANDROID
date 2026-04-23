@@ -180,7 +180,6 @@ class AuthService {
         
         // Save session
         await _saveSessionToStorage();
-        _saveSessionInMemory(); // Fallback
         
         return AuthResult(
           success: true,
@@ -222,8 +221,6 @@ class AuthService {
       // Normalize email to lowercase for case-insensitive comparison
       final normalizedEmail = email.trim().toLowerCase();
       
-      // For now, we'll use a simple mock authentication
-      // In a real app, you would validate credentials against your backend
       if (normalizedEmail.isEmpty || password.isEmpty) {
         return AuthResult(
           success: false,
@@ -231,7 +228,6 @@ class AuthService {
         );
       }
       
-      // Mock validation - in real app, check against database
       if (password.length < 6) {
         return AuthResult(
           success: false,
@@ -339,60 +335,16 @@ class AuthService {
     }
   }
   
-  // Mock Sign In for testing (when Google Sign-In is not configured)
-  static Future<AuthResult> signInWithMock() async {
-    try {
-      // Create a mock user for testing
-      final user = User(
-        id: 'mock_user_${DateTime.now().millisecondsSinceEpoch}',
-        email: 'test@example.com'.toLowerCase(),
-        name: 'Test User',
-        image: null,
-        isOAuth: true,
-        provider: 'mock',
-        providerAccountId: 'mock_provider_id',
-      );
-      
-      // Check if user exists in database
-      final existingUser = await _findUserByEmail(user.email);
-      
-      if (existingUser != null) {
-        _currentUser = existingUser;
-      } else {
-        // Create new user
-        final createdUser = await _createUser(user);
-        _currentUser = createdUser;
-      }
-      
-      // Save session
-      await _saveSessionToStorage();
-      
-      return AuthResult(
-        success: true,
-        user: _currentUser,
-      );
-      
-    } catch (e) {
-      print('❌ Mock Sign In Error: $e');
-      return AuthResult(
-        success: false,
-        error: 'Failed to sign in with mock: $e',
-      );
-    }
-  }
-  
   // Sign Out
   static Future<void> signOut() async {
     try {
       await _googleSignIn.signOut();
       _currentUser = null;
       await _clearSessionFromStorage();
-      _clearSessionInMemory(); // Fallback
     } catch (e) {
       print('❌ Sign Out Error: $e');
-      // Still clear the session even if plugins fail
+      // Always clear in-memory session even if plugin call failed.
       _currentUser = null;
-      _clearSessionInMemory();
     }
   }
   
@@ -461,19 +413,7 @@ class AuthService {
          return User.fromMap(createdUsers.first);
       }
       
-      // Fallback: return user with role set manually
-      return User(
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        image: user.image,
-        isOAuth: user.isOAuth,
-        provider: user.provider,
-        providerAccountId: user.providerAccountId,
-        role: 'UZIVATEL',
-        isTwoFactorEnabled: false,
-        dogName: null,
-      );
+      throw Exception('Created user could not be loaded back from database');
       
     } catch (e) {
       print('❌ Error creating user: $e');
@@ -604,18 +544,6 @@ class AuthService {
       print('⚠️ Could not clear session from storage (this is normal during development): $e');
       // Don't rethrow - session clearing is not critical for core functionality
     }
-  }
-  
-  // Simple in-memory session management (fallback)
-  static void _saveSessionInMemory() {
-    if (_currentUser != null) {
-      print('✅ Session saved in memory (fallback)');
-    }
-  }
-  
-  static void _clearSessionInMemory() {
-    _currentUser = null;
-    print('✅ Session cleared from memory');
   }
   
   // Generate unique ID

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
+import '../../../config/app_colors.dart';
+import '../form_design.dart';
 
 class CalendarInputWidget extends StatelessWidget {
   final FormFieldWidget field;
@@ -11,9 +14,10 @@ class CalendarInputWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final formContext = Provider.of<FormContext>(context);
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+
+    return FormSectionCard(
+      title: field.label,
+      icon: Icons.calendar_today_rounded,
       child: InkWell(
         onTap: () async {
           final DateTime? picked = await showDatePicker(
@@ -26,12 +30,19 @@ class CalendarInputWidget extends StatelessWidget {
             formContext.updateField('visitDate', picked);
           }
         },
+        borderRadius: BorderRadius.circular(14),
         child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: field.label,
-            border: const OutlineInputBorder(),
+          decoration: FormDesign.inputDecoration(
+            label: field.label,
+            prefixIcon: const Icon(Icons.event_rounded),
           ),
-          child: Text('${formContext.visitDate.day}.${formContext.visitDate.month}.${formContext.visitDate.year}'),
+          child: Text(
+            '${formContext.visitDate.day}.${formContext.visitDate.month}.${formContext.visitDate.year}',
+            style: GoogleFonts.libreFranklin(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
         ),
       ),
     );

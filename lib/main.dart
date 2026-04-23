@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'config/app_theme.dart';
 import 'config/app_colors.dart';
@@ -17,21 +18,17 @@ import 'services/notifications_service.dart';
 import 'pages/webview_page.dart';
 import 'services/database/database_service.dart';
 
-
 import 'services/auth_service.dart';
 
 import 'pages/onboarding/auth_gate.dart';
 import 'pages/login_page.dart';
 import 'pages/settings_page.dart';
-import 'pages/admin/admin_dashboard_home.dart';
-import 'pages/admin/admin_news_list_page.dart';
-import 'pages/admin/admin_visit_list_page.dart';
 import 'pages/user_profile_page.dart';
+import 'pages/offline_maps_page.dart';
 
 import 'pages/dynamic_form_page.dart';
 import 'pages/results_page.dart';
 
-import 'models/tracking_summary.dart';
 import 'services/haptic_service.dart';
 
 import 'services/error_recovery_service.dart';
@@ -42,16 +39,17 @@ import 'services/app_update_service.dart';
 import 'services/gps_services.dart'; // Added
 import 'services/tracking_state_service.dart'; // Added
 import 'services/vector_tile_provider.dart';
+import 'services/app_shortcuts_service.dart';
+import 'services/gps_shortcut_bridge.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize App Colors & Theme dependencies if needed (none for now)
-  
+
   // Initialize Firebase
   try {
     await Firebase.initializeApp();
-    
+
     // Initialize Crashlytics and Flutter error forwarding
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
     PlatformDispatcher.instance.onError = (error, stack) {
@@ -59,14 +57,22 @@ void main() async {
       return true;
     };
   } catch (e, st) {
-    FirebaseCrashlytics.instance.recordError(e, st, reason: 'Firebase init failed');
+    FirebaseCrashlytics.instance.recordError(
+      e,
+      st,
+      reason: 'Firebase init failed',
+    );
   }
-  
+
   // Initialize MongoDB connection
   try {
     await DatabaseService().connect();
   } catch (e, st) {
-    FirebaseCrashlytics.instance.recordError(e, st, reason: 'Mongo init failed');
+    FirebaseCrashlytics.instance.recordError(
+      e,
+      st,
+      reason: 'Mongo init failed',
+    );
   }
 
   // Initialize Auth service
@@ -81,10 +87,12 @@ void main() async {
     // Parallelize independent service initialization
     await Future.wait([
       ErrorRecoveryService().initialize(),
-      
+
       // Notifications: background handler and service init
       (() async {
-        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        FirebaseMessaging.onBackgroundMessage(
+          firebaseMessagingBackgroundHandler,
+        );
         await NotificationsService().initialize();
       })(),
 
@@ -102,9 +110,14 @@ void main() async {
           print('⚠️ Extended GPS init failed in main: $e');
         }
       })(),
+      AppShortcutsService().initialize(),
     ]);
   } catch (e, st) {
-    FirebaseCrashlytics.instance.recordError(e, st, reason: 'Local services init failed');
+    FirebaseCrashlytics.instance.recordError(
+      e,
+      st,
+      reason: 'Local services init failed',
+    );
   }
 
   runApp(const MyApp());
@@ -119,10 +132,7 @@ class MyApp extends StatelessWidget {
       title: 'Strakatá Turistika',
       debugShowCheckedModeBanner: false,
       locale: const Locale('cs', 'CZ'),
-      supportedLocales: const [
-        Locale('cs', 'CZ'),
-        Locale('en', 'US'),
-      ],
+      supportedLocales: const [Locale('cs', 'CZ'), Locale('en', 'US')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -135,35 +145,17 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginPage(),
         '/settings': (context) => const SettingsPage(),
-        '/admin-review': (context) => const AdminDashboardHome(), // Replaced historic route
-        '/admin-news': (context) => const AdminNewsListPage(), // New route
-        '/admin-visits': (context) => const AdminVisitListPage(), // New route
         '/user-profile': (context) => const UserProfilePage(),
-        '/visit-data-form': (context) {
-          // Create a default tracking summary for the route
-          final defaultSummary = TrackingSummary(
-            isTracking: false,
-            startTime: DateTime.now(),
-            duration: const Duration(minutes: 30),
-            totalDistance: 2500.0, // 2.5 km
-            averageSpeed: 1.4, // m/s
-            maxSpeed: 2.0, // m/s
-            totalElevationGain: 0.0,
-            totalElevationLoss: 0.0,
-            minAltitude: null,
-            maxAltitude: null,
-            trackPoints: [],
-          );
-          return DynamicFormPage(slug: 'gps-tracking', trackingSummary: defaultSummary);
-        },
+        '/offline-maps': (context) => const OfflineMapsPage(),
+        '/visit-data-form': (context) => const DynamicFormPage(slug: 'gps-tracking'),
         '/tos': (context) => const WebViewPage(
-              title: 'Podmínky použití',
-              url: 'https://www.strakata.cz/terms',
-            ),
+          title: 'Podmínky použití',
+          url: 'https://www.strakata.cz/terms',
+        ),
         '/privacy': (context) => const WebViewPage(
-              title: 'Zásady ochrany osobních údajů',
-              url: 'https://www.strakata.cz/privacy',
-            ),
+          title: 'Zásady ochrany osobních údajů',
+          url: 'https://www.strakata.cz/privacy',
+        ),
       },
     );
   }
@@ -176,40 +168,42 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, WidgetsBindingObserver {
+class _MyHomePageState extends State<MyHomePage>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   int _currentIndex = 0;
+  final TrackingStateService _trackingStateService = TrackingStateService();
+  StreamSubscription<AppShortcutAction>? _shortcutSubscription;
+  late final List<Widget?> _tabCache;
+  late final VoidCallback _offlineOpenListener;
 
   // Notification handling
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
-  
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
+
   @override
   void initState() {
     super.initState();
-    
+    _tabCache = List<Widget?>.filled(4, null, growable: false);
+    _ensureTabInitialized(0);
+
     // Add lifecycle observer to handle app resume
     WidgetsBinding.instance.addObserver(this);
-    
+    _initializeAppShortcuts();
 
-    
     // Create animations
 
-    
     // Initialize notification handling
     _initializeNotificationHandling();
     // Listen for offline manager open requests
-    OfflineUiBridge.openManager.addListener(() {
+    _offlineOpenListener = () {
       if (OfflineUiBridge.openManager.value && mounted) {
-
-        // Open settings and show the offline sheet
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const SettingsPage()),
-        ).then((_) {
-          // consume flag just in case
-          OfflineUiBridge.consumeOpenManager();
-        });
+        OfflineUiBridge.consumeOpenManager();
+        Navigator.of(context)
+            .push(MaterialPageRoute(builder: (context) => const OfflineMapsPage()));
       }
-    });
-    
+    };
+    OfflineUiBridge.openManager.addListener(_offlineOpenListener);
+
     // Check for app updates after the first frame is rendered
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -217,53 +211,80 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
       }
     });
   }
-  
+
   @override
   void dispose() {
     // Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
+    _shortcutSubscription?.cancel();
+    OfflineUiBridge.openManager.removeListener(_offlineOpenListener);
 
     super.dispose();
   }
-  
+
+  void _initializeAppShortcuts() {
+    final shortcuts = AppShortcutsService();
+    _shortcutSubscription = shortcuts.actions.listen(_handleShortcutAction);
+    final pending = shortcuts.consumePendingAction();
+    if (pending != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleShortcutAction(pending);
+      });
+    }
+  }
+
+  Future<void> _handleShortcutAction(AppShortcutAction action) async {
+    if (!mounted) return;
+    switch (action) {
+      case AppShortcutAction.openMap:
+        await _onNavItemTapped(2);
+        break;
+      case AppShortcutAction.startTracking:
+        await _onNavItemTapped(2);
+        GpsShortcutBridge.requestStartTracking();
+        break;
+      case AppShortcutAction.openOffline:
+        OfflineUiBridge.requestOpenManager();
+        break;
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
+
     // When app returns to foreground, reconnect to MongoDB
     if (state == AppLifecycleState.resumed) {
       _reconnectToDatabase();
     }
   }
-  
+
   Future<void> _reconnectToDatabase() async {
     try {
-
-      
       // Test if database is still connected
       final isConnected = DatabaseService().isConnected;
-      
+
       if (!isConnected) {
         await DatabaseService().close();
         await DatabaseService().connect();
       }
-      
+
       // Always refresh user data from database when app resumes
       if (AuthService.isLoggedIn) {
         await AuthService.refreshCurrentUser();
       }
-      
+
       // Refresh current page to reload data
-      if (mounted) {
-        setState(() {
-          // Trigger rebuild to reload data on current page
-        });
-      }
+      // Intentionally avoid forced rebuild on resume to reduce UI jank.
     } catch (e) {
-      FirebaseCrashlytics.instance.recordError(e, null, reason: 'Database reconnection failed');
+      FirebaseCrashlytics.instance.recordError(
+        e,
+        null,
+        reason: 'Database reconnection failed',
+      );
     }
   }
-  
+
   void _initializeNotificationHandling() {
     // Handle notification taps
     _notifications.initialize(
@@ -276,7 +297,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
       },
     );
   }
-  
+
   void _handleNotificationTap(NotificationResponse response) {
     if (response.payload == 'gps_tracking_page') {
       // Switch to GPS tab instead of pushing a separate page
@@ -284,7 +305,11 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
     }
   }
 
-  void _onNavItemTapped(int index) async {
+  Future<void> _onNavItemTapped(int index) async {
+    if (index == 3) {
+      await _showProfileQuickMenu();
+      return;
+    }
     if (index == _currentIndex) return;
     // Gate GPS tab (2) and Profile tab (3) for unauthenticated users
     if ((index == 2 || index == 3) && AuthService.currentUser == null) {
@@ -297,15 +322,151 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
       }
       return;
     }
-    
 
-    
     // Provide haptic feedback for navigation
     await HapticService.navigationTap();
-    
+
+    _ensureTabInitialized(index);
     setState(() {
       _currentIndex = index;
     });
+  }
+
+  void _ensureTabInitialized(int index) {
+    if (_tabCache[index] != null) return;
+    switch (index) {
+      case 0:
+        _tabCache[index] = const ExploreTab();
+        break;
+      case 1:
+        _tabCache[index] = const ResultsPage();
+        break;
+      case 2:
+        _tabCache[index] = const MapTab();
+        break;
+      case 3:
+        _tabCache[index] = const UserProfilePage();
+        break;
+    }
+  }
+
+  Future<void> _showProfileQuickMenu() async {
+    if (!mounted) return;
+    await HapticService.lightImpact();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFBF7),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: const Color(0xFFE8E4DC)),
+          ),
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey[350],
+                  borderRadius: BorderRadius.circular(100),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _profileMenuItem(
+                icon: Icons.person_outline_rounded,
+                title: 'Profil',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  if (!mounted) return;
+                  _ensureTabInitialized(3);
+                  setState(() {
+                    _currentIndex = 3;
+                  });
+                },
+              ),
+              _profileMenuItem(
+                icon: Icons.download_for_offline_outlined,
+                title: 'Offline mapy',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  if (!mounted) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const OfflineMapsPage()),
+                  );
+                },
+              ),
+              _profileMenuItem(
+                icon: Icons.description_outlined,
+                title: 'Pravidla soutěže',
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  final url = Uri.parse('https://www.strakata.cz/pravidla');
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                },
+              ),
+              _profileMenuItem(
+                icon: Icons.info_outline_rounded,
+                title: 'O aplikaci',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  showAboutDialog(
+                    context: context,
+                    applicationName: 'Strakatá Turistika',
+                    applicationVersion: '1.1.0',
+                    applicationIcon: const Icon(Icons.hiking, size: 44, color: Color(0xFF2E7D32)),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _profileMenuItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F0E8),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.textSecondary, size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                const Spacer(),
+                const Icon(Icons.chevron_right_rounded, color: Color(0xFF9CA3AF)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -319,7 +480,8 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  context.strakataTokens?.heroOverlayTop ?? AppColors.heroOverlayTop,
+                  context.strakataTokens?.heroOverlayTop ??
+                      AppColors.heroOverlayTop,
                   AppColors.pageBg,
                   AppColors.surfaceMuted,
                 ],
@@ -338,17 +500,18 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
         ),
         Positioned.fill(
           child: Scaffold(
-            extendBody: true, // Fixes navbar transparency issue by extending content behind it
+            extendBody:
+                true, // Fixes navbar transparency issue by extending content behind it
             backgroundColor: Colors.transparent,
             body: TabSwitch(
               switchTo: _onNavItemTapped,
               child: IndexedStack(
                 index: _currentIndex,
                 children: [
-                  const ExploreTab(),
-                  const ResultsPage(),
-                  const MapTab(),
-                  const UserProfilePage(),
+                  _tabCache[0] ?? const SizedBox.shrink(),
+                  _tabCache[1] ?? const SizedBox.shrink(),
+                  _tabCache[2] ?? const SizedBox.shrink(),
+                  _tabCache[3] ?? const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -365,7 +528,9 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
                     height: 260,
                     child: IgnorePointer(
                       child: AnimatedOpacity(
-                        opacity: (_currentIndex == 0 || _currentIndex == 3) ? 1.0 : 0.0,
+                        opacity: (_currentIndex == 0 || _currentIndex == 3)
+                            ? 1.0
+                            : 0.0,
                         duration: const Duration(milliseconds: 240),
                         curve: Curves.easeOutCubic,
                         child: DecoratedBox(
@@ -386,9 +551,25 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
                       ),
                     ),
                   ),
-                  CustomBottomNavBar(
-                    currentIndex: _currentIndex,
-                    onTap: _onNavItemTapped,
+                  StreamBuilder<bool>(
+                    stream: _trackingStateService.trackingStateStream,
+                    initialData: _trackingStateService.isTracking,
+                    builder: (context, trackingSnapshot) {
+                      final isTracking = trackingSnapshot.data ?? false;
+                      return StreamBuilder<String>(
+                        stream: _trackingStateService.trackingInfoStream,
+                        initialData: null,
+                        builder: (context, infoSnapshot) {
+                          return CustomBottomNavBar(
+                            currentIndex: _currentIndex,
+                            onTap: _onNavItemTapped,
+                            isTracking: isTracking,
+                            trackingInfo: infoSnapshot.data,
+                            onTrackingTap: () => _onNavItemTapped(2),
+                          );
+                        },
+                      );
+                    },
                   ),
                 ],
               ),
@@ -399,8 +580,3 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin, 
     );
   }
 }
-
-
-
-
-

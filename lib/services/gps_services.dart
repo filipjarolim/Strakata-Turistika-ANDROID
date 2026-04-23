@@ -217,41 +217,6 @@ class GpsServices {
           final repo = VisitRepository();
           await repo.saveVisit(visit);
           
-          // Show summary with clear actions, pass draft id (which is technically not set in 'visit.id' because saveVisit upserts but doesn't return ID directly in object unless we generated it?
-          // Actually saveVisit in repo generates ID if missing and updates the map for insert, but doesn't update the object passed?
-          // Wait, repo.saveVisit logic:
-          /*
-            if (visit.id.isEmpty) {
-                data['_id'] = ObjectId().toHexString();
-                ...
-            }
-          */
-          // The `visit` object itself is immutable, so it won't have the new ID.
-          // I should generate ID here if I want to pass it.
-          // Or update repo to return String id?
-          // Repository returns bool.
-          // I can generate ID locally using mongo_dart's ObjectId().toHexString() or simplified.
-          // Or just don't pass ID for now if not critical. 
-          // If I pass null ID, user might create duplicate if they hit save elsewhere?
-          // Let's generate ID locally. ObjectId depends on mongo_dart.
-          // Or simpler: use repo but I can't easily get ID back.
-          // I will skip passing ID for now or implement ID generation if import available.
-          // `import 'package:mongo_dart/mongo_dart.dart';` is not in this file. 
-          // I'll skip the draft ID for now or assume user goes to form which creates new/updates.
-          // Actually `showTrackingSummary` likely uses ID to open form with existing visit?
-          // If I don't pass ID, the form might create a NEW visit instead of editing this draft. That leads to duplicates.
-          // Use a placeholder or don't save draft automatically?
-          // The previous code did: `visit = await service.create...` which returned object with ID.
-          // I should probably generate an ID here.
-          // I'll add `import 'package:mongo_dart/mongo_dart.dart';` to generate ObjectId.
-          
-          // Actually, I'll allow `saveVisit` to take a visit with pre-generated ID.
-          // Let's modify `GpsServices` imports to include mongo_dart.
-          
-          // Wait, adding mongo_dart import might cause conflicts if not careful.
-          // I'll just skip the auto-save draft functionality for this "restore" phase if it's too complex, OR just accept I can't pass ID back yet.
-          // BUT: The original code passed `visit.id`.
-          // I will skip the auto-save draft for now to avoid complexity, OR just pass null.
           showTrackingSummary(trackingSummary, null);
           
         } catch (e) {

@@ -1,8 +1,18 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:xml/xml.dart';
+
+import '../../../config/app_colors.dart';
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
 import '../../../models/tracking_summary.dart';
+import '../../../widgets/ui/app_button.dart';
+import '../form_design.dart';
 
 class GpxUploadWidget extends StatefulWidget {
   final FormFieldWidget field;
@@ -14,90 +24,208 @@ class GpxUploadWidget extends StatefulWidget {
 }
 
 class _GpxUploadWidgetState extends State<GpxUploadWidget> {
-  bool _isFileselected = false;
-  String? _fileName;
+  bool _isLoading = false;
+  String? _selectedFileName;
 
   @override
   Widget build(BuildContext context) {
-    final formContext = Provider.of<FormContext>(context);
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blue.withOpacity(0.3), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.05),
-            blurRadius: 10,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
+    final formContext = context.watch<FormContext>();
+    final summary = formContext.trackingSummary;
+    return FormSectionCard(
+      title: widget.field.label,
+      subtitle: 'Importujte reálný GPX soubor a doplňte trasu bez GPS záznamu.',
+      icon: Icons.upload_file_rounded,
       child: Column(
         children: [
-          const Icon(Icons.upload_file, size: 48, color: Colors.blue),
-          const SizedBox(height: 16),
-          Text(
-            widget.field.label,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          Icon(Icons.upload_file_rounded, size: 42, color: AppColors.brand),
           const SizedBox(height: 8),
           Text(
-            _isFileselected ? 'Vybráno: $_fileName' : 'Vyberte GPX soubor s vaší trasou',
+            'Vyberte GPX soubor s vaší trasou',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => _pickGpxFile(formContext),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            style: GoogleFonts.libreFranklin(
+              color: AppColors.textTertiary,
+              fontWeight: FontWeight.w500,
             ),
-            child: Text(_isFileselected ? 'Změnit soubor' : 'Vybrat soubor'),
+          ),
+          if (_selectedFileName != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _selectedFileName!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.libreFranklin(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (summary != null && summary.trackPoints.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Načteno ${summary.trackPoints.length} bodů · ${(summary.totalDistance / 1000).toStringAsFixed(2)} km',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.libreFranklin(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          AppButton(
+            onPressed: _isLoading ? null : () => _pickGpxFile(context),
+            text: _isLoading ? 'Načítám…' : 'Vybrat soubor',
+            type: AppButtonType.primary,
+            size: AppButtonSize.medium,
           ),
         ],
       ),
     );
   }
 
-  Future<void> _pickGpxFile(FormContext formContext) async {
-    // In a real app, use file_picker package:
-    // FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['gpx']);
-    
-    // Mock parsing for demonstration
-    setState(() {
-      _isFileselected = true;
-      _fileName = 'moje_trasa.gpx';
-    });
+  Future<void> _pickGpxFile(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final formContext = context.read<FormContext>();
+    setState(() => _isLoading = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final selected = result.files.first;
+      final selectedName = selected.name;
+      if (!selected.name.toLowerCase().endsWith('.gpx')) {
+        throw Exception('Vyberte prosím soubor ve formátu .gpx');
+      }
+      final path = selected.path;
 
-    // Create a mock tracking summary
-    final mockPoints = [
-      TrackPoint(latitude: 50.0755, longitude: 14.4378, timestamp: DateTime.now(), speed: 5.0, accuracy: 10.0),
-      TrackPoint(latitude: 50.0760, longitude: 14.4385, timestamp: DateTime.now(), speed: 5.2, accuracy: 10.0),
-      TrackPoint(latitude: 50.0765, longitude: 14.4390, timestamp: DateTime.now(), speed: 4.8, accuracy: 10.0),
-    ];
+      if (path == null || path.isEmpty) {
+        throw Exception('Soubor GPX nemá platnou cestu.');
+      }
 
-    final summary = TrackingSummary(
+      final summary = await _parseGpxToSummary(File(path));
+      if (!mounted) return;
+      formContext.setTrackingSummary(summary);
+      formContext.updateField('visitDate', summary.startTime ?? DateTime.now());
+      setState(() => _selectedFileName = selectedName);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('GPX se nepodařilo načíst: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<TrackingSummary> _parseGpxToSummary(File file) async {
+    final raw = await file.readAsString();
+    final doc = XmlDocument.parse(raw);
+    final trkptNodes = doc.findAllElements('trkpt').toList();
+    if (trkptNodes.length < 2) {
+      throw Exception('Soubor GPX neobsahuje dost bodů trasy.');
+    }
+
+    final points = <TrackPoint>[];
+    DateTime? startTime;
+    double minAltitude = double.infinity;
+    double maxAltitude = -double.infinity;
+    double elevationGain = 0.0;
+    double elevationLoss = 0.0;
+    final distance = const Distance();
+    double totalDistance = 0.0;
+    double maxSpeed = 0.0;
+
+    double? prevLat;
+    double? prevLon;
+    double? prevEle;
+    DateTime? prevTime;
+
+    for (int i = 0; i < trkptNodes.length; i++) {
+      final node = trkptNodes[i];
+      final lat = double.tryParse(node.getAttribute('lat') ?? '');
+      final lon = double.tryParse(node.getAttribute('lon') ?? '');
+      if (lat == null || lon == null) continue;
+
+      final eleText = node.getElement('ele')?.innerText;
+      final timeText = node.getElement('time')?.innerText;
+      final altitude = double.tryParse(eleText ?? '');
+      final timestamp = DateTime.tryParse(timeText ?? '') ?? DateTime.now().toUtc().add(Duration(seconds: i));
+      startTime ??= timestamp;
+
+      if (altitude != null) {
+        if (altitude < minAltitude) minAltitude = altitude;
+        if (altitude > maxAltitude) maxAltitude = altitude;
+      }
+
+      double segmentDistance = 0.0;
+      double speed = 0.0;
+
+      if (prevLat != null && prevLon != null) {
+        segmentDistance = distance.as(
+          LengthUnit.Meter,
+          LatLng(prevLat, prevLon),
+          LatLng(lat, lon),
+        );
+        totalDistance += segmentDistance;
+      }
+
+      if (prevTime != null) {
+        final dt = timestamp.difference(prevTime).inMilliseconds / 1000.0;
+        if (dt > 0 && segmentDistance > 0) {
+          speed = segmentDistance / dt;
+          if (speed > maxSpeed) maxSpeed = speed;
+        }
+      }
+
+      if (prevEle != null && altitude != null) {
+        final delta = altitude - prevEle;
+        if (delta > 0) {
+          elevationGain += delta;
+        } else if (delta < 0) {
+          elevationLoss += -delta;
+        }
+      }
+
+      points.add(
+        TrackPoint(
+          latitude: lat,
+          longitude: lon,
+          timestamp: timestamp.toLocal(),
+          speed: speed,
+          accuracy: 5.0,
+          altitude: altitude,
+          heading: null,
+          verticalAccuracy: null,
+        ),
+      );
+
+      prevLat = lat;
+      prevLon = lon;
+      prevEle = altitude;
+      prevTime = timestamp;
+    }
+
+    if (points.length < 2) {
+      throw Exception('GPX neobsahuje validní body trasy.');
+    }
+
+    final endTime = points.last.timestamp;
+    final start = points.first.timestamp;
+    final duration = endTime.isAfter(start) ? endTime.difference(start) : const Duration(seconds: 1);
+    final averageSpeed = duration.inSeconds > 0 ? totalDistance / duration.inSeconds : 0.0;
+
+    return TrackingSummary(
       isTracking: false,
-      startTime: DateTime.now().subtract(const Duration(hours: 2)),
-      duration: const Duration(hours: 2),
-      totalDistance: 5.4,
-      averageSpeed: 2.7,
-      maxSpeed: 6.0,
-      totalElevationGain: 120,
-      totalElevationLoss: 110,
-      minAltitude: 200,
-      maxAltitude: 320,
-      trackPoints: mockPoints,
+      startTime: start,
+      duration: duration,
+      totalDistance: totalDistance,
+      averageSpeed: averageSpeed,
+      maxSpeed: maxSpeed,
+      totalElevationGain: elevationGain,
+      totalElevationLoss: elevationLoss,
+      minAltitude: minAltitude.isFinite ? minAltitude : null,
+      maxAltitude: maxAltitude.isFinite ? maxAltitude : null,
+      trackPoints: points,
     );
-
-    formContext.setTrackingSummary(summary);
-    formContext.updateField('routeTitle', 'Trasa z ${_fileName}');
   }
 }

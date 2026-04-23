@@ -3,14 +3,17 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification_item.dart';
+import 'notification_channels.dart';
 
 class NotificationsService {
-  static final NotificationsService _instance = NotificationsService._internal();
+  static final NotificationsService _instance =
+      NotificationsService._internal();
   factory NotificationsService() => _instance;
   NotificationsService._internal();
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _local =
+      FlutterLocalNotificationsPlugin();
 
   static const String _storageKey = 'notifications_list_v1';
   List<NotificationItem> _items = [];
@@ -29,6 +32,7 @@ class NotificationsService {
         _handleLocalTap(response.payload);
       },
     );
+    await NotificationChannels.ensureCreated(_local);
 
     // Request FCM permissions (iOS/macOS); on Android it's granted by default
     await _messaging.requestPermission(
@@ -74,7 +78,8 @@ class NotificationsService {
   }
 
   NotificationItem? _fromMessage(RemoteMessage message) {
-    final id = message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final id =
+        message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString();
     final title = message.notification?.title ?? message.data['title'] ?? '';
     final body = message.notification?.body ?? message.data['body'] ?? '';
     if (title.isEmpty && body.isEmpty) return null;
@@ -84,16 +89,18 @@ class NotificationsService {
       body: body,
       type: message.data['type'] ?? 'generic',
       timestamp: message.sentTime ?? DateTime.now(),
-      data: message.data.isNotEmpty ? Map<String, dynamic>.from(message.data) : null,
+      data: message.data.isNotEmpty
+          ? Map<String, dynamic>.from(message.data)
+          : null,
       read: false,
     );
   }
 
   Future<void> _showLocal(NotificationItem item) async {
-    const androidDetails = AndroidNotificationDetails(
-      'main_channel',
-      'General Notifications',
-      channelDescription: 'General notifications',
+    final androidDetails = AndroidNotificationDetails(
+      _channelFor(item),
+      _channelNameFor(item),
+      channelDescription: _channelDescriptionFor(item),
       importance: Importance.high,
       priority: Priority.high,
     );
@@ -102,9 +109,25 @@ class NotificationsService {
       item.hashCode,
       item.title,
       item.body,
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
-      payload: jsonEncode({'id': item.id, 'type': item.type, 'data': item.data}),
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: jsonEncode({
+        'id': item.id,
+        'type': item.type,
+        'data': item.data,
+      }),
     );
+  }
+
+  String _channelFor(NotificationItem item) {
+    return NotificationChannels.general;
+  }
+
+  String _channelNameFor(NotificationItem item) {
+    return 'Obecne aktuality';
+  }
+
+  String _channelDescriptionFor(NotificationItem item) {
+    return 'Bezne notifikace aplikace';
   }
 
   Future<void> _handleLocalTap(String? payload) async {
@@ -122,10 +145,15 @@ class NotificationsService {
   Future<void> _loadStored() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_storageKey) ?? [];
-    _items = raw
-        .map((s) => NotificationItem.fromMap(jsonDecode(s) as Map<String, dynamic>))
-        .toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    _items =
+        raw
+            .map(
+              (s) => NotificationItem.fromMap(
+                jsonDecode(s) as Map<String, dynamic>,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
 
   Future<void> _persist() async {
@@ -163,8 +191,7 @@ class NotificationsService {
   }
 
   void _handleDeepLink(NotificationItem item) {
-    // Based on item.type or item.data navigate inside the app
-    // For now, leave as no-op; UI will show the center
+    // TODO: Add explicit route handling for notification types.
   }
 }
 
@@ -173,5 +200,3 @@ class NotificationsService {
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // We keep it minimal; local storage will be handled on next app resume.
 }
-
-

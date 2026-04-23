@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
+import '../form_design.dart';
 
 class DescriptionInputWidget extends StatelessWidget {
   final FormFieldWidget field;
@@ -11,18 +12,22 @@ class DescriptionInputWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final formContext = Provider.of<FormContext>(context);
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+
+    return FormSectionCard(
+      title: field.label,
+      subtitle: 'Krátce popište trasu, zážitek nebo důležité detaily.',
+      icon: Icons.notes_rounded,
       child: TextFormField(
         initialValue: formContext.routeDescription,
-        maxLines: 3,
-        decoration: InputDecoration(
-          labelText: field.label,
-          border: const OutlineInputBorder(),
+        maxLines: 4,
+        decoration: FormDesign.inputDecoration(
+          label: field.label,
+          hint: 'Popište trasu...',
         ),
         onChanged: (value) => formContext.updateField('routeDescription', value),
-        validator: field.required ? (value) => (value == null || value.isEmpty) ? 'Povinné pole' : null : null,
+        validator: field.required
+            ? (value) => (value == null || value.isEmpty) ? 'Povinné pole' : null
+            : null,
       ),
     );
   }

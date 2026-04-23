@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../../config/app_colors.dart';
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
+import '../form_design.dart';
 
 class RouteSummaryWidget extends StatelessWidget {
   final FormFieldWidget field;
@@ -12,36 +15,31 @@ class RouteSummaryWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final formContext = Provider.of<FormContext>(context);
     final summary = formContext.trackingSummary;
-    
+
     if (summary == null) {
-      return const Card(
+      return const FormSectionCard(
+        title: 'Souhrn trasy',
+        icon: Icons.summarize_rounded,
         child: Padding(
-          padding: EdgeInsets.all(16.0),
+          padding: EdgeInsets.symmetric(vertical: 8),
           child: Text('Žádná data k zobrazení'),
         ),
       );
     }
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              field.label,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _buildStatRow(Icons.straighten, 'Vzdálenost', '${summary.totalDistance.toStringAsFixed(2)} km'),
-            _buildStatRow(Icons.timer_outlined, 'Doba trvání', _formatDuration(summary.duration)),
-            _buildStatRow(Icons.speed, 'Průměrná rychlost', '${summary.averageSpeed.toStringAsFixed(1)} km/h'),
-            const Divider(height: 32),
-            _buildStatRow(Icons.place_outlined, 'Navštívená místa', '${formContext.places.length}'),
-          ],
-        ),
+    return FormSectionCard(
+      title: field.label,
+      subtitle: 'Přehled metrik před finálním uložením.',
+      icon: Icons.summarize_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildStatRow(Icons.straighten, 'Vzdálenost', '${(summary.totalDistance / 1000).toStringAsFixed(2)} km'),
+          _buildStatRow(Icons.timer_outlined, 'Doba trvání', _formatDuration(summary.duration)),
+          _buildStatRow(Icons.speed, 'Průměrná rychlost', '${(summary.averageSpeed * 3.6).toStringAsFixed(1)} km/h'),
+          const Divider(height: 28),
+          _buildStatRow(Icons.place_outlined, 'Navštívená místa', '${formContext.places.length}'),
+        ],
       ),
     );
   }
@@ -53,9 +51,22 @@ class RouteSummaryWidget extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: Colors.grey[600]),
           const SizedBox(width: 12),
-          Text(label, style: TextStyle(color: Colors.grey[600])),
+          Text(
+            label,
+            style: GoogleFonts.libreFranklin(
+              color: AppColors.textTertiary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
           const Spacer(),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(
+            value,
+            style: GoogleFonts.libreFranklin(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+              color: AppColors.textPrimary,
+            ),
+          ),
         ],
       ),
     );

@@ -51,7 +51,39 @@ class AppButton extends StatelessWidget {
   
   Widget _buildButton() {
     final style = _getStyle();
-    
+    final isGradientPrimary = type == AppButtonType.primary;
+
+    if (isGradientPrimary) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.primary,
+              AppColors.primary.withValues(alpha: 0.88),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(100),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.32),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: isLoading ? null : onPressed,
+          style: style.copyWith(
+            backgroundColor: WidgetStateProperty.all(Colors.transparent),
+            shadowColor: WidgetStateProperty.all(Colors.transparent),
+          ),
+          child: _buildContent(),
+        ),
+      );
+    }
+
     if (type == AppButtonType.outline || type == AppButtonType.destructiveOutline) {
       return OutlinedButton(
         onPressed: isLoading ? null : onPressed,
@@ -112,14 +144,14 @@ class AppButton extends StatelessWidget {
   
   ButtonStyle _getStyle() {
     final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(100),
+      borderRadius: BorderRadius.circular(12),
     );
     final padding = _getPadding();
     
     switch (type) {
       case AppButtonType.primary:
         return ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
+          backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: shape,
@@ -185,8 +217,8 @@ class AppButton extends StatelessWidget {
   
   double _getHeight() {
     switch (size) {
-      case AppButtonSize.small: return 40; // Increased from 36 for better a11y
-      case AppButtonSize.medium: return 48;
+      case AppButtonSize.small: return 44;
+      case AppButtonSize.medium: return 52;
       case AppButtonSize.large: return 56;
     }
   }

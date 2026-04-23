@@ -3,21 +3,23 @@ import 'package:google_fonts/google_fonts.dart';
 import '../repositories/visit_repository.dart';
 import '../models/visit_data.dart';
 import '../widgets/ui/app_toast.dart';
-import '../widgets/route_thumbnail.dart';
-import '../widgets/ui/strakata_primitives.dart';
 import '../config/app_colors.dart';
 import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
 import '../widgets/strakata_editorial_background.dart';
+import '../widgets/ui/web_mobile_section_card.dart';
+import 'results_visit_detail_page.dart';
 
 class UserVisitsPage extends StatefulWidget {
   final String userId;
   final String userName;
+  final int? seasonYear;
 
   const UserVisitsPage({
     super.key,
     required this.userId,
     required this.userName,
+    this.seasonYear,
   });
 
   @override
@@ -50,6 +52,7 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
          page: 1,
          limit: 1000,
          userId: widget.userId,
+         seasonYear: widget.seasonYear,
          onlyApproved: onlyApproved,
       );
 
@@ -97,157 +100,296 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
               ? Center(
                   child: CircularProgressIndicator(color: AppColors.brand),
                 )
-              : _visits.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.hiking_outlined,
-                              size: 64,
-                              color: AppColors.textTertiary.withValues(alpha: 0.4),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'Žádné schválené návštěvy',
-                              textAlign: TextAlign.center,
-                              style: AppTheme.editorialHeadline(
-                                color: AppColors.textPrimary,
-                                fontSize: 22,
-                              ).copyWith(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tento uživatel zatím nemá veřejné záznamy.',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.libreFranklin(
-                                fontSize: 15,
-                                color: AppColors.textTertiary,
-                                fontWeight: FontWeight.w500,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: EdgeInsets.fromLTRB(
-                        StrakataLayout.pageHorizontalInset,
-                        8,
-                        StrakataLayout.pageHorizontalInset,
-                        120,
-                      ),
-                      itemCount: _visits.length,
-                      itemBuilder: (context, index) {
-                        final visit = _visits[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 14),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFBF7),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: const Color(0xFFE8E4DC)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                blurRadius: 12,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => _showRouteDetailsSheet(visit),
-                              borderRadius: BorderRadius.circular(24),
-                              child: Padding(
-                                padding: const EdgeInsets.all(18),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            _getShortVisitTitle(visit),
-                                            style: GoogleFonts.libreFranklin(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.textPrimary,
-                                            ),
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.brand.withValues(alpha: 0.12),
-                                            borderRadius: BorderRadius.circular(100),
-                                          ),
-                                          child: Text(
-                                            '${visit.points.toStringAsFixed(1)} bodů',
-                                            style: GoogleFonts.libreFranklin(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.brand,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                const SizedBox(height: 8),
-                                if (visit.visitedPlaces.isNotEmpty)
-                                  _buildPlaceTags(visit.visitedPlaces),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    if (visit.visitDate != null) ...[
-                                      const Icon(Icons.calendar_today, size: 14, color: Color(0xFF9E9E9E)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${visit.visitDate!.day}.${visit.visitDate!.month}.${visit.visitDate!.year}',
-                                        style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
-                                      ),
-                                      const SizedBox(width: 12),
-                                    ],
-                                    if (visit.year != 0) ...[
-                                      const Icon(Icons.calendar_month, size: 14, color: Color(0xFF9E9E9E)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Sezóna ${visit.year}',
-                                        style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
-                                      ),
-                                    ],
-                                    const Spacer(),
-                                    if (visit.route != null && (visit.route!['trackPoints'] as List?)?.isNotEmpty == true)
-                                      Row(
-                                        children: [
-                                          Icon(Icons.route, size: 14, color: AppColors.brand),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Trasa',
-                                            style: GoogleFonts.libreFranklin(
-                                              fontSize: 12,
-                                              color: AppColors.brand,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+              : RefreshIndicator(
+                  onRefresh: _loadUserVisits,
+                  color: AppColors.brand,
+                  backgroundColor: Colors.white,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
+                      StrakataLayout.pageHorizontalInset,
+                      8,
+                      StrakataLayout.pageHorizontalInset,
+                      120,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildProfileSeasonHeader(),
+                        const SizedBox(height: 16),
+                        _buildStatsGrid(),
+                        const SizedBox(height: 16),
+                        _buildHistoryCard(),
+                      ],
+                    ),
+                  ),
                 ),
         ),
       ],
     );
+  }
+
+  Widget _buildProfileSeasonHeader() {
+    return WebMobileSectionCard(
+      padding: const EdgeInsets.all(18),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 28,
+            backgroundColor: const Color(0xFFF0EBE3),
+            child: Text(
+              widget.userName.isNotEmpty ? widget.userName.trim().characters.first.toUpperCase() : '?',
+              style: GoogleFonts.libreFranklin(
+                fontWeight: FontWeight.w800,
+                fontSize: 22,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.seasonYear != null ? 'Sezóna ${widget.seasonYear}' : 'Sezóna',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.userName,
+                  style: AppTheme.editorialHeadline(
+                    color: AppColors.textPrimary,
+                    fontSize: 24,
+                  ).copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Statistiky a historie výprav ve Strakaté turistice.',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsGrid() {
+    final totalPoints = _visits.fold<double>(0.0, (sum, v) => sum + v.points);
+    final totalDistance = _visits.fold<double>(0.0, (sum, v) => sum + _distanceFromVisit(v));
+    final uniqueDays = _visits
+        .map((v) => v.visitDate)
+        .whereType<DateTime>()
+        .map((d) => '${d.year}-${d.month}-${d.day}')
+        .toSet()
+        .length;
+
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 1.55,
+      children: [
+        _buildMiniStatCard('Celkem bodů', totalPoints.toStringAsFixed(0), Icons.emoji_events_outlined),
+        _buildMiniStatCard('Výlety', _visits.length.toString(), Icons.map_outlined),
+        _buildMiniStatCard('Naplánováno', '${totalDistance.round()} km', Icons.trending_up_rounded),
+        _buildMiniStatCard('Aktivních dní', uniqueDays.toString(), Icons.calendar_month_outlined),
+      ],
+    );
+  }
+
+  Widget _buildMiniStatCard(String label, String value, IconData icon) {
+    return WebMobileSectionCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: AppColors.primary),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: GoogleFonts.libreFranklin(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.libreFranklin(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryCard() {
+    final sorted = [..._visits]..sort((a, b) {
+      final ad = a.visitDate ?? a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bd = b.visitDate ?? b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bd.compareTo(ad);
+    });
+
+    return WebMobileSectionCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: const Color(0xFFE8E4DC).withValues(alpha: 0.7),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Historie výprav',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Chronologicky seřazené schválené výlety.',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (sorted.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(22),
+              child: Center(
+                child: Text(
+                  'Zatím žádné výpravy v této sezóně.',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Column(
+                children: sorted.map(_buildVisitRow).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVisitRow(VisitData visit) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: WebMobileSectionCard.decoration(),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () => _openVisitDetail(visit),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _getShortVisitTitle(visit),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.libreFranklin(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatDate(visit.visitDate),
+                        style: GoogleFonts.libreFranklin(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0EBE3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '+${visit.points.toStringAsFixed(0)}',
+                    style: GoogleFonts.libreFranklin(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  double _distanceFromVisit(VisitData visit) {
+    final dynamic raw = visit.extraPoints['distanceKm'] ??
+        visit.extraPoints['distance'] ??
+        visit.extraPoints['DistanceKm'] ??
+        visit.extraPoints['Vzdálenost'];
+    if (raw is num) return raw.toDouble();
+    if (raw is String) return double.tryParse(raw.replaceAll(',', '.')) ?? 0.0;
+    return 0.0;
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'Datum neznámé';
+    return '${date.day}.${date.month}.${date.year}';
   }
 
   String _getShortVisitTitle(VisitData visit) {
@@ -265,91 +407,13 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
     }
   }
 
-  Widget _buildPlaceTags(String places) {
-    final placeList = places.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
-    if (placeList.isEmpty) return const SizedBox.shrink();
-    
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: placeList.map((place) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.brand.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.brand.withValues(alpha: 0.28)),
-        ),
-        child: Text(
-          place,
-          style: GoogleFonts.libreFranklin(
-            fontSize: 12,
-            color: AppColors.brand,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      )).toList(),
-    );
-  }
-
-  void _showRouteDetailsSheet(VisitData visit) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            const StrakataSheetHandle(margin: EdgeInsets.only(top: 12)),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                   // ... (Icon logic could be better but simplified)
-                  const Icon(Icons.hiking, color: Color(0xFF4CAF50), size: 28),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _getShortVisitTitle(visit),
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Detailed Thumbnail
-                    RouteThumbnail(
-                       visit: visit,
-                       height: 200,
-                       borderRadius: 16,
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    Text('Podrobnosti', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                    const SizedBox(height: 10),
-                    Text('Body: ${visit.points}'),
-                    if (visit.visitDate != null) Text('Datum: ${visit.visitDate}'),
-                    // ... More details if needed
-                  ],
-                ),
-              ),
-            ),
-          ],
+  void _openVisitDetail(VisitData visit) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ResultsVisitDetailPage(
+          visit: visit,
+          seasonYear: widget.seasonYear ?? visit.year,
+          userName: widget.userName,
         ),
       ),
     );

@@ -9,6 +9,7 @@ import 'widgets/map_preview_widget.dart';
 import 'widgets/image_upload_widget.dart';
 import 'widgets/places_manager_widget.dart';
 import 'widgets/route_summary_widget.dart';
+import 'widgets/strakata_route_selector_widget.dart';
 
 class FormWidgetFactory {
   static Widget build(FormFieldWidget field) {
@@ -31,6 +32,8 @@ class FormWidgetFactory {
         return PlacesManagerWidget(field: field);
       case 'route_summary':
         return RouteSummaryWidget(field: field);
+      case 'strakata_route_selector':
+        return StrakataRouteSelectorWidget(field: field);
       default:
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),

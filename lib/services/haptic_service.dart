@@ -6,7 +6,6 @@ class HapticService {
     try {
       await HapticFeedback.lightImpact();
     } catch (e) {
-      // Fallback for devices without haptic support
       print('Haptic feedback not available: $e');
     }
   }

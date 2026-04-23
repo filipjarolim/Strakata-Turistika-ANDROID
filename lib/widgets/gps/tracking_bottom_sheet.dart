@@ -44,10 +44,10 @@ class TrackingBottomSheet extends StatelessWidget {
     // Calculate opacities/sizes based on sheetPosition
     // If sheetPosition is low (collapsed ~0.15), show collapsed view
     // If high (>0.3), show expanded view
-    
-    // Simplification for initial implementation: 
+
+    // Simplification for initial implementation:
     // consistently use the scroll view, but list elements change visibility/opacity
-    
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -66,23 +66,25 @@ class TrackingBottomSheet extends StatelessWidget {
           ListView(
             controller: scrollController,
             padding: EdgeInsets.zero,
-            physics: const ClampingScrollPhysics(), // Prevent overscroll bounce at top
+            physics:
+                const ClampingScrollPhysics(), // Prevent overscroll bounce at top
             children: [
-               // Grip handle area
-               // Grip handle area or Close button
-               _buildDragHandleOrCloseButton(),
-              
+              // Grip handle area
+              // Grip handle area or Close button
+              _buildDragHandleOrCloseButton(),
+
               const SizedBox(height: 4),
-              
+
               // Collapsed Header View (Always visible/pinned logic handled by layout or just first item)
               _buildCompactHeader(context),
-              
+
               // Expanded Content (Stats Grid, Tools, Manual Entry)
               // We use sheetPosition to animate opacity
               // 0.18 -> 0.5 expand creates space for this content
-              
-              const SizedBox(height: 32), // Increased padding to prevent header cut-off by drag handle
-              
+              const SizedBox(
+                height: 32,
+              ), // Increased padding to prevent header cut-off by drag handle
+
               AnimatedOpacity(
                 duration: const Duration(milliseconds: 200),
                 opacity: (sheetPosition > 0.25) ? 1.0 : 0.0,
@@ -101,56 +103,44 @@ class TrackingBottomSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       _buildStatsGrid(),
-                      
+
                       const SizedBox(height: 32),
-                      
+
                       // Manual Entry Button - Only visible when fully expanded (approx > 0.9)
                       AnimatedContainer(
-                         duration: const Duration(milliseconds: 300),
-                         height: (sheetPosition > 0.9) ? 60 : 0,
-                         margin: EdgeInsets.only(bottom: (sheetPosition > 0.9) ? 32 : 0),
-                         child: SingleChildScrollView(
-                           physics: const NeverScrollableScrollPhysics(),
-                           child: AnimatedOpacity(
-                             duration: const Duration(milliseconds: 300),
-                             opacity: (sheetPosition > 0.9) ? 1.0 : 0.0,
-                             child: SizedBox(
-                               height: 60,
-                               width: double.infinity,
-                               child: AppButton(
-                                  text: 'Zadat aktivitu ručně',
-                                  icon: Icons.edit_note,
-                                  type: AppButtonType.secondary,
-                                  onPressed: () {
-                                    final defaultSummary = TrackingSummary(
-                                      isTracking: false,
-                                      startTime: DateTime.now(),
-                                      duration: const Duration(minutes: 0),
-                                      totalDistance: 0.0,
-                                      averageSpeed: 0.0,
-                                      maxSpeed: 0.0,
-                                      totalElevationGain: 0.0,
-                                      totalElevationLoss: 0.0,
-                                      minAltitude: null,
-                                      maxAltitude: null,
-                                      trackPoints: [],
-                                    );
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => DynamicFormPage(
-                                          slug: 'gps-tracking',
-                                          trackingSummary: defaultSummary,
-                                        ),
+                        duration: const Duration(milliseconds: 300),
+                        height: (sheetPosition > 0.9) ? 60 : 0,
+                        margin: EdgeInsets.only(
+                          bottom: (sheetPosition > 0.9) ? 32 : 0,
+                        ),
+                        child: SingleChildScrollView(
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 300),
+                            opacity: (sheetPosition > 0.9) ? 1.0 : 0.0,
+                            child: SizedBox(
+                              height: 60,
+                              width: double.infinity,
+                              child: AppButton(
+                                text: 'Zadat aktivitu ručně',
+                                icon: Icons.edit_note,
+                                type: AppButtonType.secondary,
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => DynamicFormPage(
+                                        slug: 'gps-tracking',
                                       ),
-                                    );
-                                  },
-                               ),
-                             ),
-                           ),
-                         ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                      
+
                       const Text(
                         'Nástroje mapy',
                         style: TextStyle(
@@ -161,7 +151,7 @@ class TrackingBottomSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       _buildMapTools(context),
-                      
+
                       const SizedBox(height: 100), // Bottom padding for scroll
                     ],
                   ),
@@ -169,10 +159,10 @@ class TrackingBottomSheet extends StatelessWidget {
               ),
             ],
           ),
-          
+
           // Floating Action Button (Start/Stop) - Custom positioned or part of header
-          // The user wants "dynamic" feel. 
-          // We can place the main button in the header for collapsed state, 
+          // The user wants "dynamic" feel.
+          // We can place the main button in the header for collapsed state,
           // and morph it or keep it there.
         ],
       ),
@@ -183,7 +173,9 @@ class TrackingBottomSheet extends StatelessWidget {
     // Dynamic transition between "Start Tracking" big button and "Active Tracking" pill
     return AnimatedCrossFade(
       duration: const Duration(milliseconds: 400),
-      crossFadeState: isTracking ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+      crossFadeState: isTracking
+          ? CrossFadeState.showSecond
+          : CrossFadeState.showFirst,
       // First Child: Big "Start Tracking" Button
       firstChild: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -191,19 +183,21 @@ class TrackingBottomSheet extends StatelessWidget {
           width: double.infinity,
           height: 56,
           child: ElevatedButton.icon(
-             key: const ValueKey('start_button'),
-             onPressed: onToggleTracking,
-             icon: const Icon(Icons.play_arrow_rounded, size: 28),
-             label: const Text(
-               'Spustit sledování',
-               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-             ),
-             style: ElevatedButton.styleFrom(
-               backgroundColor: AppColors.primary,
-               foregroundColor: Colors.white,
-               elevation: 4,
-               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-             ),
+            key: const ValueKey('start_button'),
+            onPressed: onToggleTracking,
+            icon: const Icon(Icons.play_arrow_rounded, size: 28),
+            label: const Text(
+              'Spustit sledování',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
           ),
         ),
       ),
@@ -223,7 +217,9 @@ class TrackingBottomSheet extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: isPaused ? Colors.orange.shade800 : AppColors.textSecondary,
+                      color: isPaused
+                          ? Colors.orange.shade800
+                          : AppColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -241,11 +237,7 @@ class TrackingBottomSheet extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Container(
-                        height: 24,
-                        width: 1,
-                        color: Colors.grey[300],
-                      ),
+                      Container(height: 24, width: 1, color: Colors.grey[300]),
                       const SizedBox(width: 12),
                       Text(
                         '${((summary?.totalDistance ?? 0) / 1000).toStringAsFixed(2)} km',
@@ -278,7 +270,11 @@ class TrackingBottomSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: Colors.red.shade200),
                     ),
-                    child: Icon(Icons.stop_rounded, color: Colors.red.shade700, size: 26),
+                    child: Icon(
+                      Icons.stop_rounded,
+                      color: Colors.red.shade700,
+                      size: 26,
+                    ),
                   ),
                 ),
               ),
@@ -286,27 +282,34 @@ class TrackingBottomSheet extends StatelessWidget {
             const SizedBox(width: 8),
             Tooltip(
               message: isPaused ? 'Pokračovat' : 'Pauza',
-              child: GestureDetector(
-                onTap: onToggleTracking,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: isPaused ? Colors.orange : Colors.red,
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (isPaused ? Colors.orange : Colors.red).withOpacity(0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onToggleTracking,
+                  borderRadius: BorderRadius.circular(16),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 240),
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isPaused
+                          ? Colors.green.shade50
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isPaused
+                            ? Colors.green.shade200
+                            : Colors.orange.shade200,
                       ),
-                    ],
-                  ),
-                  child: Icon(
-                    isPaused ? Icons.play_arrow : Icons.pause,
-                    color: Colors.white,
-                    size: 28,
+                    ),
+                    child: Icon(
+                      isPaused ? Icons.play_arrow : Icons.pause,
+                      color: isPaused
+                          ? Colors.green.shade700
+                          : Colors.orange.shade700,
+                      size: 24,
+                    ),
                   ),
                 ),
               ),
@@ -323,7 +326,7 @@ class TrackingBottomSheet extends StatelessWidget {
     final seconds = (d.inSeconds % 60).toString().padLeft(2, '0');
     return '$hours:$minutes:$seconds';
   }
-  
+
   Widget _buildStatsGrid() {
     final speed = (currentSpeed ?? 0) * 3.6; // m/s to km/h
     final altitude = currentAltitude ?? 0;
@@ -333,25 +336,48 @@ class TrackingBottomSheet extends StatelessWidget {
       children: [
         Row(
           children: [
-             Expanded(child: _buildStatItem('Rychlost', speed.toStringAsFixed(1), 'km/h', Icons.speed)),
-             const SizedBox(width: 12),
-             Expanded(child: _buildStatItem('Výška', altitude.toStringAsFixed(0), 'm n.m.', Icons.landscape)),
+            Expanded(
+              child: _buildStatItem(
+                'Rychlost',
+                speed.toStringAsFixed(1),
+                'km/h',
+                Icons.speed,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatItem(
+                'Výška',
+                altitude.toStringAsFixed(0),
+                'm n.m.',
+                Icons.landscape,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-             Expanded(child: _buildStatItem('Průměrná', avgSpeed.toStringAsFixed(1), 'km/h', Icons.timelapse)),
-             // Add more stats or placeholder
-             const SizedBox(width: 12),
-             Expanded(child: Container()), 
+            Expanded(
+              child: _buildStatItem(
+                'Průměrná',
+                avgSpeed.toStringAsFixed(1),
+                'km/h',
+                Icons.timelapse,
+              ),
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildStatItem(String label, String value, String unit, IconData icon) {
+  Widget _buildStatItem(
+    String label,
+    String value,
+    String unit,
+    IconData icon,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -404,7 +430,7 @@ class TrackingBottomSheet extends StatelessWidget {
       ),
     );
   }
-  
+
   Widget _buildMapTools(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -437,13 +463,15 @@ class TrackingBottomSheet extends StatelessWidget {
 
   Widget _buildDragHandleOrCloseButton() {
     final showClose = sheetPosition > 0.8;
-    
+
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 8),
       child: Center(
         child: AnimatedCrossFade(
           duration: const Duration(milliseconds: 300),
-          crossFadeState: showClose ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          crossFadeState: showClose
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
           firstChild: const StrakataSheetHandle(),
           secondChild: GestureDetector(
             onTap: onClose,

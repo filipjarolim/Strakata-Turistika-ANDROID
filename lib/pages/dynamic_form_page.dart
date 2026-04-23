@@ -9,13 +9,12 @@ import '../models/visit_data.dart';
 import '../models/tracking_summary.dart';
 import '../services/form_service.dart';
 import '../widgets/forms/form_widget_factory.dart';
-import '../widgets/ui/app_button.dart';
+import '../widgets/forms/form_design.dart';
 import '../repositories/visit_repository.dart';
 import '../services/auth_service.dart';
 import '../services/scoring_config_service.dart';
 import '../services/cloudinary_service.dart'; // Ensure this exists or use appropriate service
 import '../models/place_type_config.dart';
-import '../widgets/strakata_editorial_background.dart';
 
 class DynamicFormPage extends StatefulWidget {
   final String slug;
@@ -57,41 +56,18 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<FormContext>.value(
       value: _formContext,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          const Positioned.fill(child: StrakataEditorialBackground()),
-          Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              title: FutureBuilder<FormConfig?>(
-                future: _formConfigFuture,
-                builder: (context, snapshot) {
-                  final name = snapshot.data?.name ?? 'Načítání...';
-                  return Text(
-                    name,
-                    style: GoogleFonts.libreFranklin(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 17,
-                      color: AppColors.textPrimary,
-                    ),
-                  );
-                },
-              ),
-              centerTitle: true,
-              backgroundColor: Colors.transparent,
-              surfaceTintColor: Colors.transparent,
-              scrolledUnderElevation: 0,
-              elevation: 0,
-              foregroundColor: AppColors.textPrimary,
-              leading: IconButton(
-                icon: const Icon(Icons.close_rounded),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
+      child: FutureBuilder<FormConfig?>(
+        future: _formConfigFuture,
+        builder: (context, snapshot) {
+          final title = snapshot.data?.name ?? 'Načítání...';
+          return FormPageShell(
+            title: title,
+            leading: IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-            body: FutureBuilder<FormConfig?>(
-              future: _formConfigFuture,
-              builder: (context, snapshot) {
+            body: Builder(
+              builder: (context) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator(color: AppColors.brand));
                 }
@@ -115,8 +91,8 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
                 return _buildForm(context, config);
               },
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -124,12 +100,9 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   Widget _buildForm(BuildContext context, FormConfig config) {
     if (config.steps.isEmpty) return const Center(child: Text('Prázdný formulář'));
 
-    // If only one step, show it without stepper navigation
-    // But usually we have upload/edit/finish
-    // For now, simple logic: Render current step
-    
     final step = config.steps[_currentStep];
     final isLastStep = _currentStep == config.steps.length - 1;
+    final isUploadStep = step.id == 'upload';
 
     return Column(
       children: [
@@ -143,17 +116,22 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            padding: FormDesign.pagePadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  step.label,
-                  style: AppTheme.editorialHeadline(
-                    color: AppColors.textPrimary,
-                    fontSize: 24,
-                  ).copyWith(fontWeight: FontWeight.w700),
+                FormStepHeaderCard(
+                  title: step.label,
+                  subtitle: 'Vyplňte údaje pečlivě, ovlivní body i vyhodnocení trasy.',
+                  stepIndex: _currentStep + 1,
+                  totalSteps: config.steps.length,
                 ),
+                if (isUploadStep) ...[
+                  const SizedBox(height: 12),
+                  _buildUploadStepHero(config.slug),
+                  const SizedBox(height: 12),
+                  _buildUploadRulesOverview(),
+                ],
                 const SizedBox(height: 16),
                 ...step.fields.map((field) => Padding(
                   padding: const EdgeInsets.only(bottom: 16),
@@ -164,52 +142,97 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           ),
         ),
         
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFFBF7),
-            border: Border(top: BorderSide(color: const Color(0xFFE8E4DC))),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 12,
-                offset: const Offset(0, -4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              if (_currentStep > 0)
-                Expanded(
-                  child: AppButton(
-                    onPressed: () => setState(() => _currentStep--),
-                    text: 'Zpět',
-                    type: AppButtonType.secondary,
-                  ),
-                ),
-              if (_currentStep > 0) const SizedBox(width: 16),
-              Expanded(
-                child: AppButton(
-                  onPressed: _isSubmitting 
-                    ? null 
-                    : () {
-                        if (isLastStep) {
-                          _handleSubmit();
-                        } else {
-                          // Validate requirements here if needed
-                          setState(() => _currentStep++);
-                        }
-                      },
-                  text: isLastStep ? 'Dokončit' : 'Další',
-                  type: AppButtonType.primary,
-                  isLoading: _isSubmitting,
-                ),
-              ),
-            ],
-          ),
+        FormBottomActionBar(
+          primaryLabel: isLastStep ? 'Dokončit' : 'Další',
+          onPrimaryPressed: _isSubmitting
+              ? null
+              : () {
+                  final validationError = _validateStep(step);
+                  if (validationError != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(validationError)),
+                    );
+                    return;
+                  }
+                  if (isLastStep) {
+                    _handleSubmit();
+                  } else {
+                    setState(() => _currentStep++);
+                  }
+                },
+          secondaryLabel: _currentStep > 0 ? 'Zpět' : null,
+          onSecondaryPressed: _currentStep > 0
+              ? () => setState(() => _currentStep--)
+              : null,
+          isLoading: _isSubmitting,
         ),
       ],
     );
+  }
+
+  String? _validateStep(FormStep step) {
+    for (final field in step.fields) {
+      if (!field.required) continue;
+      final err = _validateField(field);
+      if (err != null) return err;
+    }
+    if (step.id == 'edit') {
+      final title = (_formContext.routeTitle ?? '').trim();
+      if (title.length < 3) {
+        return 'Název trasy musí mít alespoň 3 znaky.';
+      }
+      if (_formContext.visitDate.isAfter(
+        DateTime.now().add(const Duration(days: 1)),
+      )) {
+        return 'Datum návštěvy nemůže být v budoucnosti.';
+      }
+      final hasUnnamedPlaces = _formContext.places.any(
+        (p) => p.name.trim().isEmpty,
+      );
+      if (hasUnnamedPlaces) {
+        return 'Doplňte název u všech přidaných míst.';
+      }
+    }
+    return null;
+  }
+
+  String? _validateField(FormFieldWidget field) {
+    switch (field.type) {
+      case 'gpx_upload':
+        if (_formContext.trackingSummary == null ||
+            _formContext.trackingSummary!.trackPoints.length < 2) {
+          return 'Nahrajte platný GPX soubor s body trasy.';
+        }
+        return null;
+      case 'image_upload':
+        if (_formContext.selectedImages.isEmpty) {
+          return 'Nahrajte alespoň jednu fotografii.';
+        }
+        return null;
+      case 'strakata_route_selector':
+        final id = _formContext.extraData['strakataRouteId']?.toString() ?? '';
+        if (id.trim().isEmpty) {
+          return 'Vyberte kategorii Strakaté trasy.';
+        }
+        return null;
+      case 'title_input':
+        final title = (_formContext.routeTitle ?? '').trim();
+        if (title.isEmpty) {
+          return 'Pole "${field.label}" je povinné.';
+        }
+        return null;
+      case 'calendar':
+        return null;
+      default:
+        final name = field.metadata['name']?.toString() ?? field.id;
+        final value =
+            _formContext.extraData[name] ?? _formContext.extraData[field.id];
+        final missing = value == null ||
+            (value is String && value.trim().isEmpty) ||
+            (value is List && value.isEmpty);
+        if (missing) return 'Pole "${field.label}" je povinné.';
+        return null;
+    }
   }
 
   Future<void> _handleSubmit() async {
@@ -229,20 +252,11 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
       // Place points
       for (var place in _formContext.places) {
-        final typeConfig = placeTypeConfigs.firstWhere(
-          (c) => c.name == place.type.name,
-          orElse: () => PlaceTypeConfig(
-            id: 'unknown',
-            name: place.type.name,
-            label: 'Neznámé',
-            icon: Icons.help_outline,
-            points: 0,
-            color: Colors.grey,
-            order: 99,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          )
-        );
+        final matches = placeTypeConfigs.where((c) => c.name == place.type.name);
+        if (matches.isEmpty) {
+          throw Exception('Konfigurace typu místa "${place.type.name}" nebyla nalezena v databázi.');
+        }
+        final typeConfig = matches.first;
         points += typeConfig.points;
       }
 
@@ -259,9 +273,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
              'uploadedAt': DateTime.now().toIso8601String(),
            }).toList();
          } catch (e) {
-           print("Error uploading images: $e");
-           // Fallback or continue without images? user requested robust flow.
-           // For now, we continue without them or with local paths if offline support is needed.
+           throw Exception('Nahrání fotografií selhalo: $e');
          }
       }
 
@@ -287,32 +299,163 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
            'trackPoints': _formContext.trackingSummary!.trackPoints.map((p) => p.toJson()).toList(),
         } : null,
         places: _formContext.places,
-        extraPoints: {},
+        extraPoints: {
+          'source': widget.slug == 'strakata-upload'
+              ? 'strakata_route'
+              : (widget.slug == 'gpx-upload'
+                  ? 'gpx_upload'
+                  : (widget.slug == 'screenshot-upload'
+                      ? 'screenshot'
+                      : 'gps_tracking')),
+          if (widget.slug == 'strakata-upload')
+            'strakataRouteId': _formContext.extraData['strakataRouteId'],
+          if (widget.slug == 'strakata-upload')
+            'strakataRouteLabel': _formContext.extraData['strakataRouteLabel'],
+        },
       );
 
       final success = await VisitRepository().saveVisit(visit);
       
       if (success) {
         if (mounted) {
-           Navigator.of(context).popUntil((route) => route.isFirst);
-           // Show success dialog or snackbar
-           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Návštěva úspěšně uložena')));
+          await showFormStatusDialog(
+            context,
+            title: 'Návštěva uložena',
+            message: 'Vaše návštěva byla úspěšně odeslána ke kontrole.',
+            onConfirm: () => Navigator.of(context).popUntil((route) => route.isFirst),
+          );
         }
       } else {
-         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Chyba při ukládání')));
-         }
+        if (mounted) {
+          await showFormStatusDialog(
+            context,
+            title: 'Uložení selhalo',
+            message: 'Při ukládání došlo k chybě. Zkuste to znovu.',
+          );
+        }
       }
 
     } catch (e) {
       print('Submission error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Chyba: $e')));
+        await showFormStatusDialog(
+          context,
+          title: 'Chyba',
+          message: 'Došlo k neočekávané chybě: $e',
+        );
       }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  Widget _buildUploadStepHero(String slug) {
+    final isGpx = slug == 'gpx-upload';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: isGpx
+              ? const [Color(0xFFD5F8E4), Color(0xFF59DF87)]
+              : const [Color(0xFFF2F9C4), Color(0xFFB6DB2E)],
+        ),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.82),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              'Nahrání trasy',
+              style: GoogleFonts.libreFranklin(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.4,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isGpx ? 'Nahrát z appky' : 'Nahrát screenshot',
+            style: AppTheme.editorialHeadline(
+              color: AppColors.textPrimary,
+              fontSize: 30,
+            ).copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isGpx
+                ? 'Export trasy z hodinek nebo aplikace (Mapy.cz, Strava a další).'
+                : 'Nahrajte screenshot mapy a navazující důkazní fotky z výletu.',
+            style: GoogleFonts.libreFranklin(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textPrimary.withValues(alpha: 0.78),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUploadRulesOverview() {
+    return FormSectionCard(
+      title: 'Rychlý přehled',
+      subtitle: 'Stejné kontrolní body jako na webu před pokračováním.',
+      icon: Icons.info_outline_rounded,
+      child: Column(
+        children: const [
+          _RuleRow(
+            icon: Icons.photo_camera_back_outlined,
+            text: 'Důkazní fotky mají být v časové návaznosti k datu návštěvy.',
+          ),
+          SizedBox(height: 8),
+          _RuleRow(
+            icon: Icons.directions_walk_rounded,
+            text: 'Body se počítají jen pro chůzi a korektně vyplněná bodovaná místa.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RuleRow extends StatelessWidget {
+  const _RuleRow({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.libreFranklin(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

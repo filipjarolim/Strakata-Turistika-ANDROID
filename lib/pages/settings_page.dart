@@ -15,6 +15,10 @@ import '../widgets/ui/glass_ui.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/ui/app_toast.dart';
 import '../widgets/ui/strakata_primitives.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../widgets/ui/web_mobile_section_card.dart';
+import '../widgets/ui/web_mobile_patterns.dart';
+import 'offline_maps_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -63,7 +67,7 @@ class SettingsPage extends StatelessWidget {
               child: Column(
                 children: [
                   // User profile section
-                  GlassCard(
+                  WebMobileSectionCard(
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
@@ -91,6 +95,22 @@ class SettingsPage extends StatelessWidget {
                               fontSize: 14,
                               color: AppColors.textTertiary,
                               fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0EBE3),
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                            child: Text(
+                              'Účet aktivní',
+                              style: GoogleFonts.libreFranklin(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ),
                         ] else ...[
@@ -143,7 +163,11 @@ class SettingsPage extends StatelessWidget {
                           title: 'Offline mapy',
                           subtitle: 'Správa cache, pokrytí, stažení oblastí',
                           onTap: () {
-                            _showOfflineMapsSheet(context);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const OfflineMapsPage(),
+                              ),
+                            );
                           },
                         ),
                         _buildSettingsItem(
@@ -159,59 +183,14 @@ class SettingsPage extends StatelessWidget {
                             );
                           },
                         ),
+                        _buildSettingsItem(
+                          icon: Icons.description_outlined,
+                          title: 'Pravidla soutěže',
+                          subtitle: 'Otevřít oficiální pravidla na webu',
+                          onTap: _openRulesWeb,
+                        ),
                       ],
                     ),
-                    
-                    if (user.role == 'ADMIN') ...[
-                      const SizedBox(height: 32),
-                      _buildSettingsSection(
-                        title: 'Admin Zóna',
-                        items: [
-                          _buildSettingsItem(
-                            icon: Icons.delete_forever,
-                            title: 'Resetovat aplikaci',
-                            subtitle: 'Vymaže všechna data a odhlásí se',
-                            onTap: () async {
-                               // Show confirmation
-                               final confirm = await showDialog<bool>(
-                                 context: context,
-                                 builder: (ctx) => AlertDialog(
-                                   title: const Text('Resetovat aplikaci?'),
-                                   content: const Text(
-                                     'Opravdu chcete vymazat všechna lokální data a nastavení? '
-                                     'Aplikace se uvede do stavu po instalaci a budete odhlášeni.'
-                                   ),
-                                   actions: [
-                                     TextButton(
-                                       onPressed: () => Navigator.pop(ctx, false),
-                                       child: const Text('Zrušit'),
-                                     ),
-                                     TextButton(
-                                       onPressed: () => Navigator.pop(ctx, true),
-                                       style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                       child: const Text('Resetovat'),
-                                     ),
-                                   ],
-                                 ),
-                               );
-
-                               if (confirm == true && context.mounted) {
-                                 // Clear everything
-                                 final prefs = await SharedPreferences.getInstance();
-                                 await prefs.clear();
-                                 
-                                 // Sign out
-                                 await AuthService.signOut();
-                                 
-                                 if (context.mounted) {
-                                   Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-                                 }
-                               }
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
                     
                     const SizedBox(height: 32),
                     
@@ -268,6 +247,12 @@ class SettingsPage extends StatelessWidget {
                               applicationIcon: const Icon(Icons.hiking),
                             );
                           },
+                        ),
+                        _buildSettingsItem(
+                          icon: Icons.description_outlined,
+                          title: 'Pravidla soutěže',
+                          subtitle: 'Otevřít oficiální pravidla na webu',
+                          onTap: _openRulesWeb,
                         ),
                       ],
                     ),
@@ -546,14 +531,8 @@ class SettingsPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: AppTheme.editorialHeadline(
-            color: AppColors.textPrimary,
-            fontSize: 19,
-          ),
-        ),
-        const SizedBox(height: 14),
+        WebMobileSectionTitle(title),
+        const SizedBox(height: 12),
         ...items,
       ],
     );
@@ -567,58 +546,18 @@ class SettingsPage extends StatelessWidget {
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
+      child: WebMobileListItem(
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
         onTap: onTap,
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.brand.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(
-                icon,
-                color: AppColors.brand,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.libreFranklin(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.libreFranklin(
-                      fontSize: 13,
-                      color: AppColors.textTertiary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textTertiary.withValues(alpha: 0.6),
-              size: 22,
-            ),
-          ],
-        ),
       ),
     );
+  }
+
+  Future<void> _openRulesWeb() async {
+    final url = Uri.parse('https://www.strakata.cz/pravidla');
+    await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
 }

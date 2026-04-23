@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
 import '../../image_picker_widget.dart';
+import '../form_design.dart';
 
 class ImageUploadWidget extends StatelessWidget {
   final FormFieldWidget field;
@@ -12,9 +13,11 @@ class ImageUploadWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final formContext = Provider.of<FormContext>(context);
-    
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+
+    return FormSectionCard(
+      title: field.label,
+      subtitle: 'Přidejte fotky jako důkaz návštěvy místa.',
+      icon: Icons.photo_library_outlined,
       child: ImagePickerWidget(
         title: field.label,
         initialImages: formContext.selectedImages,

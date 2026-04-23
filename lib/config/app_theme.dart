@@ -8,12 +8,13 @@ import 'strakata_design_tokens.dart';
 class AppTheme {
   AppTheme._();
 
-  /// Libre Baskerville for editorial / hero titles (use sparingly).
+  /// Sans-serif editorial / hero title style.
   static TextStyle editorialHeadline({Color? color, double fontSize = 28}) {
-    return GoogleFonts.libreBaskerville(
+    return GoogleFonts.inter(
       fontSize: fontSize,
-      fontWeight: FontWeight.w400,
-      height: 1.25,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.2,
+      height: 1.2,
       color: color ?? AppColors.textPrimary,
     );
   }

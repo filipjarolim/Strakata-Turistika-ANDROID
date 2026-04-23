@@ -140,7 +140,6 @@ class PlaceTypeConfig {
       final parsed = int.tryParse(value);
       return parsed ?? 0;
     }
-    // Fallback for Int64 which might not be num but has toInt
     try {
       return (value as dynamic).toInt();
     } catch (_) {
@@ -163,9 +162,7 @@ class PlaceTypeConfigService {
       final configs = await collection.find().toList();
       
       if (configs.isEmpty) {
-        await _createDefaultPlaceTypeConfigs();
-        final refreshed = await collection.find().toList();
-        configs.addAll(refreshed);
+        throw Exception('Kolekce place_type_configs je prázdná.');
       }
       
       configs.sort((a, b) => PlaceTypeConfig.safeIntFromMap(a['order']).compareTo(PlaceTypeConfig.safeIntFromMap(b['order'])));
@@ -174,65 +171,6 @@ class PlaceTypeConfigService {
     }).catchError((e) {
       print('❌ Error loading place type configs: $e');
       return <PlaceTypeConfig>[];
-    });
-  }
-
-  Future<void> _createDefaultPlaceTypeConfigs() async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
-      final now = DateTime.now();
-      final defaultConfigs = [
-        PlaceTypeConfig(
-          id: 'PEAK',
-          name: 'PEAK',
-          label: 'Vrchol',
-          icon: Icons.terrain,
-          points: 1,
-          color: Colors.orange,
-          order: 0,
-          createdAt: now,
-          updatedAt: now,
-        ),
-        PlaceTypeConfig(
-          id: 'TOWER',
-          name: 'TOWER',
-          label: 'Rozhledna',
-          icon: Icons.attractions,
-          points: 1,
-          color: Colors.blue,
-          order: 1,
-          createdAt: now,
-          updatedAt: now,
-        ),
-        PlaceTypeConfig(
-          id: 'TREE',
-          name: 'TREE',
-          label: 'Památný strom',
-          icon: Icons.park,
-          points: 1,
-          color: Colors.green,
-          order: 2,
-          createdAt: now,
-          updatedAt: now,
-        ),
-        PlaceTypeConfig(
-          id: 'OTHER',
-          name: 'OTHER',
-          label: 'Jiné',
-          icon: Icons.place_outlined,
-          points: 0,
-          color: Colors.grey,
-          order: 3,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      ];
-
-      final configsToSave = defaultConfigs.map((config) => config.toMap()).toList();
-      await collection.insertAll(configsToSave);
-      print('✅ Default place type configs created successfully');
-    }).catchError((e) {
-      print('❌ Error creating default configs: $e');
     });
   }
 
