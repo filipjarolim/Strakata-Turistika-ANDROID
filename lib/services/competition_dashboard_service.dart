@@ -49,8 +49,8 @@ class CompetitionDashboardService {
           .where((e) => e.isNotEmpty)
           .toList();
       return MonthlyThemeData(
-              year: TypeConverter.toInt(doc['year']) ?? now.year,
-              month: TypeConverter.toInt(doc['month']) ?? now.month,
+        year: TypeConverter.toInt(doc['year']) ?? now.year,
+        month: TypeConverter.toInt(doc['month']) ?? now.month,
         keywords: keywords,
       );
     }).catchError((_) => null);

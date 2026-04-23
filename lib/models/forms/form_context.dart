@@ -2,23 +2,30 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../visit_data.dart';
 import '../tracking_summary.dart';
+import 'form_image_attachment.dart';
 
 class FormContext extends ChangeNotifier {
-  // System Fields
   String? routeTitle;
   String? routeDescription;
   DateTime visitDate = DateTime.now();
   bool dogNotAllowed = false;
-  
-  // Data Objects
+
   TrackingSummary? trackingSummary;
-  List<File> selectedImages = [];
+  List<FormImageAttachment> photoAttachments = [];
   List<Place> places = [];
-  
-  // Dynamic Fields
+
   Map<String, dynamic> extraData = {};
 
-  // Initialization
+  int? monthlyThemeKeywordCount;
+
+  /// Zvýší se po [initializeWith], aby se znovu postavily pole závislá na `extraData`.
+  int _dataVersion = 0;
+  int get dataVersion => _dataVersion;
+
+  /// Soubory nahraných fotek (kompatibilita se starým kódem).
+  List<File> get selectedImages =>
+      photoAttachments.map((e) => e.file).toList();
+
   void initializeWith({
     TrackingSummary? summary,
     VisitData? existingVisit,
@@ -26,18 +33,31 @@ class FormContext extends ChangeNotifier {
     if (summary != null) {
       trackingSummary = summary;
       visitDate = summary.startTime ?? DateTime.now();
+    } else if (existingVisit?.route != null) {
+      final reh = TrackingSummary.fromPersistedRoute(existingVisit!.route!);
+      if (reh != null) {
+        trackingSummary = reh;
+        visitDate = reh.startTime ?? visitDate;
+      }
     }
-    
+
     if (existingVisit != null) {
       routeTitle = existingVisit.routeTitle;
       routeDescription = existingVisit.routeDescription;
       visitDate = existingVisit.visitDate ?? DateTime.now();
-      dogNotAllowed = existingVisit.dogNotAllowed == 'true' || existingVisit.dogNotAllowed == 'on'; // web often sends string check
+      dogNotAllowed =
+          existingVisit.dogNotAllowed == 'true' || existingVisit.dogNotAllowed == 'on';
       places = List.from(existingVisit.places);
       extraData = Map.from(existingVisit.extraData ?? {});
-      // Photos handling would ideally go here if we had File objects, 
-      // but existing photos are usually URLs. We might need a separate 'existingPhotos' list.
     }
+    monthlyThemeKeywordCount = null;
+    _dataVersion++;
+    notifyListeners();
+  }
+
+  void setMonthlyThemeKeywordCount(int count) {
+    if (monthlyThemeKeywordCount == count) return;
+    monthlyThemeKeywordCount = count;
     notifyListeners();
   }
 
@@ -61,13 +81,18 @@ class FormContext extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addPhoto(File file) {
-    selectedImages.add(file);
+  void replacePhotoAttachments(List<FormImageAttachment> next) {
+    photoAttachments = List.from(next);
+    notifyListeners();
+  }
+
+  void addPhoto(File file, {bool adminBypassPhotoDate = false}) {
+    photoAttachments.add(FormImageAttachment(file, adminBypassPhotoDate: adminBypassPhotoDate));
     notifyListeners();
   }
 
   void removePhoto(File file) {
-    selectedImages.remove(file);
+    photoAttachments.removeWhere((e) => e.file.path == file.path);
     notifyListeners();
   }
 

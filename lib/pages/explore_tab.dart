@@ -6,6 +6,8 @@ import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
 import '../services/auth_service.dart';
 import '../pages/dynamic_upload_page.dart';
+import '../pages/results_visit_detail_page.dart';
+import '../pages/user_visits_page.dart';
 import '../repositories/visit_repository.dart';
 import '../models/visit_data.dart';
 import '../widgets/tab_switch.dart';
@@ -68,12 +70,9 @@ class _QuickSeasonStats extends StatelessWidget {
   Widget build(BuildContext context) {
     return WebMobileSectionCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          Expanded(child: _StatPill(label: 'Aktivní sezóna', value: DateTime.now().year.toString())),
-          const SizedBox(width: 10),
-          Expanded(child: _StatPill(label: 'Výzva týdne', value: '3 km + vrchol')),
-        ],
+      child: _StatPill(
+        label: 'Aktivní sezóna',
+        value: DateTime.now().year.toString(),
       ),
     );
   }
@@ -88,6 +87,7 @@ class _StatPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF4F0E8),
@@ -531,7 +531,20 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
             const WebMobileSectionTitle('Poslední aktivita'),
             AppButton(
               text: 'Zobrazit vše',
-              onPressed: () => TabSwitch.of(context)?.switchTo(1),
+              onPressed: () {
+                final u = AuthService.currentUser;
+                if (u == null || u.id.isEmpty) return;
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => UserVisitsPage(
+                      userId: u.id,
+                      userName: u.name,
+                      seasonYear: DateTime.now().year,
+                      onlyApproved: false,
+                    ),
+                  ),
+                );
+              },
               type: AppButtonType.ghost,
               size: AppButtonSize.small,
             ),
@@ -595,7 +608,19 @@ class ActivityItem extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => TabSwitch.of(context)?.switchTo(1),
+        onTap: () {
+          final u = AuthService.currentUser;
+          final season = visit.year > 0 ? visit.year : DateTime.now().year;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => ResultsVisitDetailPage(
+                visit: visit,
+                seasonYear: season,
+                userName: u?.name ?? 'Já',
+              ),
+            ),
+          );
+        },
         borderRadius: BorderRadius.circular(24),
         child: WebMobileSectionCard(
           padding: EdgeInsets.zero,

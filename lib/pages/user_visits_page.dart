@@ -15,11 +15,15 @@ class UserVisitsPage extends StatefulWidget {
   final String userName;
   final int? seasonYear;
 
+  /// `true` = jen schválené (žebříček). `false` = i rozpracované / ke schválení (např. Moje výlety z domů).
+  final bool onlyApproved;
+
   const UserVisitsPage({
     super.key,
     required this.userId,
     required this.userName,
     this.seasonYear,
+    this.onlyApproved = true,
   });
 
   @override
@@ -46,14 +50,12 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
       // Get all visits for this user
       // Assuming this page is for public viewing of a user's approved visits?
       // Since it's parameterized with userId, it implies looking at another user.
-      const onlyApproved = true;
-
       final result = await _visitRepository.getVisits(
-         page: 1,
-         limit: 1000,
-         userId: widget.userId,
-         seasonYear: widget.seasonYear,
-         onlyApproved: onlyApproved,
+        page: 1,
+        limit: 1000,
+        userId: widget.userId,
+        seasonYear: widget.seasonYear,
+        onlyApproved: widget.onlyApproved,
       );
 
       if (mounted) {
@@ -169,7 +171,9 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Statistiky a historie výprav ve Strakaté turistice.',
+                  widget.onlyApproved
+                      ? 'Statistiky a historie výprav ve Strakaté turistice.'
+                      : 'Včetně výletů čekajících na schválení.',
                   style: GoogleFonts.libreFranklin(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,

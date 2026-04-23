@@ -21,6 +21,8 @@ import 'package:strakataturistikaandroidapp/services/scoring_config_service.dart
 import 'package:strakataturistikaandroidapp/services/error_recovery_service.dart';
 import 'package:strakataturistikaandroidapp/services/gps_shortcut_bridge.dart';
 import 'package:strakataturistikaandroidapp/pages/dynamic_upload_page.dart';
+import 'package:strakataturistikaandroidapp/pages/dynamic_form_page.dart';
+import 'package:strakataturistikaandroidapp/models/visit_data.dart';
 import 'package:strakataturistikaandroidapp/services/competition_dashboard_service.dart';
 
 import 'package:strakataturistikaandroidapp/config/app_colors.dart';
@@ -616,17 +618,15 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    Row(
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
                                       children: [
                                         _chip('${p.km.toStringAsFixed(1)} km'),
-                                        const SizedBox(width: 6),
                                         _chip(
                                           'Body za vzd.: ${distancePoints.toStringAsFixed(1)}',
                                         ),
-                                        if (p.useSmart) ...[
-                                          const SizedBox(width: 6),
-                                          _chip('Křivkovaná trasa'),
-                                        ],
+                                        if (p.useSmart) _chip('Křivkovaná trasa'),
                                       ],
                                     ),
                                   ],
@@ -661,6 +661,9 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
       ),
       child: Text(
         text,
+        maxLines: 2,
+        softWrap: true,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           fontSize: 11,
           color: Color(0xFF374151),
@@ -746,16 +749,16 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     return pts;
   }
 
-  void _showTrackingSummary(TrackingSummary summary, [String? draftId]) {
+  void _showTrackingSummary(TrackingSummary summary, [VisitData? draftVisit]) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _buildSummarySheet(summary, draftId),
+      builder: (context) => _buildSummarySheet(summary, draftVisit),
     );
   }
 
-  Widget _buildSummarySheet(TrackingSummary summary, String? draftId) {
+  Widget _buildSummarySheet(TrackingSummary summary, VisitData? draftVisit) {
     final duration = summary.duration;
     final hours = duration.inHours;
     final minutes = duration.inMinutes % 60;
@@ -776,7 +779,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
           const SizedBox(height: 10),
           Center(child: StrakataSheetHandle(color: AppColors.border)),
           const SizedBox(height: 16),
-          if (draftId != null)
+          if (draftVisit != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
@@ -805,7 +808,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                 ),
               ),
             ),
-          if (draftId != null) const SizedBox(height: 12),
+          if (draftVisit != null) const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
@@ -880,9 +883,12 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                     onPressed: () {
                       Navigator.of(context).pop();
                       Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              const DynamicUploadPage(slug: 'gps-tracking'),
+                        MaterialPageRoute<void>(
+                          builder: (context) => DynamicFormPage(
+                            slug: 'gps-tracking',
+                            trackingSummary: summary,
+                            existingVisit: draftVisit,
+                          ),
                         ),
                       );
                     },
@@ -1697,31 +1703,10 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(999),
-                      onTap: () => _animateTopQuickSheet(
-                        expand: _topQuickSheetController.value < 0.5,
-                      ),
-                      child: Container(
-                        width: 52,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0EBE3),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Icon(
-                          isExpandedEnough ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   Row(
                     children: [
                       const Icon(Icons.upload_file_rounded, size: 18, color: AppColors.textPrimary),
@@ -1770,6 +1755,45 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                               subtitle: 'Screenshot trasy z mobilu',
                               onTap: () => _openUploadFromTopSheet('screenshot-upload'),
                             ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Úchyt dole — ve sbaleném stavu je vidět jen spodek panelu (~46 px).
+                  Center(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(999),
+                      onTap: () => _animateTopQuickSheet(
+                        expand: _topQuickSheetController.value < 0.5,
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          top: isExpandedEnough ? 6 : 2,
+                          bottom: isExpandedEnough ? 4 : 2,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isExpandedEnough
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: isExpandedEnough ? 24 : 22,
+                              color: AppColors.textPrimary,
+                            ),
+                            if (isExpandedEnough)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 1),
+                                child: Text(
+                                  'Sbalit',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textTertiary,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),

@@ -10,6 +10,8 @@ import 'widgets/image_upload_widget.dart';
 import 'widgets/places_manager_widget.dart';
 import 'widgets/route_summary_widget.dart';
 import 'widgets/strakata_route_selector_widget.dart';
+import 'widgets/monthly_theme_widget.dart';
+import 'widgets/extra_data_field_widgets.dart';
 
 class FormWidgetFactory {
   static Widget build(FormFieldWidget field) {
@@ -34,10 +36,33 @@ class FormWidgetFactory {
         return RouteSummaryWidget(field: field);
       case 'strakata_route_selector':
         return StrakataRouteSelectorWidget(field: field);
+      case 'monthly_theme':
+        return MonthlyThemeWidget(field: field);
+      case 'text':
+        return ExtraDataTextFieldWidget(field: field);
+      case 'email':
+        return ExtraDataTextFieldWidget(
+          field: field,
+          keyboardType: TextInputType.emailAddress,
+        );
+      case 'number':
+        return ExtraDataNumberFieldWidget(field: field);
+      case 'textarea':
+        return ExtraDataTextAreaWidget(field: field);
+      case 'select':
+        return ExtraDataSelectWidget(field: field);
+      case 'checkbox':
+        return ExtraDataCheckboxWidget(field: field);
+      case 'date':
+        return ExtraDataDateFieldWidget(field: field);
       default:
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text('Unknown widget type: ${field.type}'),
+          child: Text(
+            'Nepodporovaný typ pole: ${field.type}\n'
+            '(${field.label}) — doplňte obsluhu ve FormWidgetFactory.',
+            style: const TextStyle(fontSize: 13),
+          ),
         );
     }
   }

@@ -2,6 +2,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:mongo_dart/mongo_dart.dart';
 import 'database/database_service.dart';
 import '../config/google_auth_config.dart';
 
@@ -378,25 +379,26 @@ class AuthService {
         throw Exception('Database collections not available');
       }
       
-      // Create user document (email is already normalized to lowercase)
+      // Jednotné stringové _id v Mongo (stejný model jako Prisma / web). Google sub je v providerAccountId.
+      final mongoUserId = ObjectId().toHexString();
+
       final userDoc = {
-        '_id': user.id,
+        '_id': mongoUserId,
         'email': user.email.toLowerCase(),
         'name': user.name,
         'image': user.image,
         'emailVerified': DateTime.now().toIso8601String(),
         'createdAt': DateTime.now().toIso8601String(),
         'updatedAt': DateTime.now().toIso8601String(),
-        'role': 'UZIVATEL', // Default role according to Prisma schema
+        'role': 'UZIVATEL',
         'isTwoFactorEnabled': false,
       };
-      
+
       await userCollection.insertOne(userDoc);
-      
-      // Create account document
+
       final accountDoc = {
-        '_id': _generateId(),
-        'userId': user.id,
+        '_id': ObjectId().toHexString(),
+        'userId': mongoUserId,
         'type': 'oidc',
         'provider': user.provider,
         'providerAccountId': user.providerAccountId,
@@ -546,11 +548,6 @@ class AuthService {
     }
   }
   
-  // Generate unique ID
-  static String _generateId() {
-    return DateTime.now().millisecondsSinceEpoch.toString() + 
-           (1000 + (DateTime.now().microsecond % 9000)).toString();
-  }
 }
 
 // User model

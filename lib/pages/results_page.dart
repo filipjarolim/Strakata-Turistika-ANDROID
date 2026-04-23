@@ -617,8 +617,11 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                   child: CircleAvatar(
                     radius: 24,
                     backgroundColor: const Color(0xFFF3F4F6),
-                    backgroundImage: entry.userImage != null ? NetworkImage(entry.userImage!) : null,
-                    child: entry.userImage == null
+                    backgroundImage: entry.userImage != null && entry.userImage!.trim().isNotEmpty
+                        ? NetworkImage(entry.userImage!.trim())
+                        : null,
+                    onBackgroundImageError: (_, __) {},
+                    child: entry.userImage == null || entry.userImage!.trim().isEmpty
                         ? Icon(Icons.person_rounded, color: Colors.grey[400], size: 24)
                         : null,
                   ),
@@ -645,29 +648,50 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                       Row(
                         children: [
                           if (entry.dogName != null && entry.dogName!.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.pets, size: 10, color: AppColors.primary),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    entry.dogName!,
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary),
-                                  ),
-                                ],
+                            Flexible(
+                              flex: 2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(100),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.pets, size: 10, color: AppColors.primary),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        entry.dogName!,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          if (entry.dogName != null && entry.dogName!.isNotEmpty) const SizedBox(width: 8),
+                          if (entry.dogName != null && entry.dogName!.isNotEmpty && entry.visitsCount > 0)
+                            const SizedBox(width: 8),
                           if (entry.visitsCount > 0)
-                            Text(
-                              '${entry.visitsCount} výletů',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                            Flexible(
+                              flex: 1,
+                              child: Text(
+                                '${entry.visitsCount} výletů',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.start,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
                             ),
                         ],
                       ),

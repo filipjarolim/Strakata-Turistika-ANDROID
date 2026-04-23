@@ -7,6 +7,7 @@ import '../../models/forms/form_context.dart';
 import '../../services/form_service.dart';
 import 'form_widget_factory.dart';
 import 'form_design.dart';
+import 'form_field_validator.dart';
 
 class FormRenderer extends StatefulWidget {
   final String slug;
@@ -59,7 +60,8 @@ class _FormRendererState extends State<FormRenderer> {
 
   void _nextStep() {
     if (_config == null) return;
-    final validationError = _validateStep(_config!.steps[_currentStepIndex]);
+    final validationError =
+        validateFormStep(_formContext, _config!.steps[_currentStepIndex]);
     if (validationError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(validationError)),
@@ -72,70 +74,6 @@ class _FormRendererState extends State<FormRenderer> {
       });
     } else {
       widget.onSave(_formContext);
-    }
-  }
-
-  String? _validateStep(FormStep step) {
-    for (final field in step.fields) {
-      if (!field.required) continue;
-      final err = _validateField(field);
-      if (err != null) return err;
-    }
-    if (step.id == 'edit') {
-      final title = (_formContext.routeTitle ?? '').trim();
-      if (title.length < 3) {
-        return 'Název trasy musí mít alespoň 3 znaky.';
-      }
-      if (_formContext.visitDate.isAfter(
-        DateTime.now().add(const Duration(days: 1)),
-      )) {
-        return 'Datum návštěvy nemůže být v budoucnosti.';
-      }
-      final hasUnnamedPlaces = _formContext.places.any(
-        (p) => p.name.trim().isEmpty,
-      );
-      if (hasUnnamedPlaces) {
-        return 'Doplňte název u všech přidaných míst.';
-      }
-    }
-    return null;
-  }
-
-  String? _validateField(FormFieldWidget field) {
-    switch (field.type) {
-      case 'gpx_upload':
-        if (_formContext.trackingSummary == null ||
-            _formContext.trackingSummary!.trackPoints.length < 2) {
-          return 'Nahrajte platný GPX soubor s body trasy.';
-        }
-        return null;
-      case 'image_upload':
-        if (_formContext.selectedImages.isEmpty) {
-          return 'Nahrajte alespoň jednu fotografii.';
-        }
-        return null;
-      case 'strakata_route_selector':
-        final id = _formContext.extraData['strakataRouteId']?.toString() ?? '';
-        if (id.trim().isEmpty) {
-          return 'Vyberte kategorii Strakaté trasy.';
-        }
-        return null;
-      case 'title_input':
-        final title = (_formContext.routeTitle ?? '').trim();
-        if (title.isEmpty) {
-          return 'Pole "${field.label}" je povinné.';
-        }
-        return null;
-      case 'calendar':
-        return null;
-      default:
-        final name = field.metadata['name']?.toString() ?? field.id;
-        final value = _formContext.extraData[name] ?? _formContext.extraData[field.id];
-        final missing = value == null ||
-            (value is String && value.trim().isEmpty) ||
-            (value is List && value.isEmpty);
-        if (missing) return 'Pole "${field.label}" je povinné.';
-        return null;
     }
   }
 
@@ -220,9 +158,14 @@ class _FormRendererState extends State<FormRenderer> {
                     );
                   }
                   final field = currentStep.fields[index - 1];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: FormWidgetFactory.build(field),
+                  return Consumer<FormContext>(
+                    builder: (context, fc, _) {
+                      return Padding(
+                        key: ValueKey('${field.id}_v${fc.dataVersion}'),
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: FormWidgetFactory.build(field),
+                      );
+                    },
                   );
                 },
               ),
@@ -257,6 +200,37 @@ class _FormRendererState extends State<FormRenderer> {
 
   Widget _buildUploadStepHero(String slug) {
     final isGpx = slug == 'gpx-upload';
+    final isGps = slug == 'gps-tracking';
+    final isScreenshot = slug == 'screenshot-upload';
+
+    late final List<Color> gradientColors;
+    late final String pill;
+    late final String headline;
+    late final String sub;
+
+    if (isGpx) {
+      gradientColors = const [Color(0xFFD5F8E4), Color(0xFF59DF87)];
+      pill = 'GPX soubor';
+      headline = 'Nahrát z appky';
+      sub = 'Export trasy z hodinek nebo aplikace (Mapy.cz, Strava a další).';
+    } else if (isGps) {
+      gradientColors = const [Color(0xFFE0E7FF), Color(0xFF6366F1)];
+      pill = 'GPS v telefonu';
+      headline = 'Záznam z aplikace';
+      sub =
+          'Trasa je už načtená z měření — v dalších krocích doplníte název, datum, témata a místa jako na webu.';
+    } else if (isScreenshot) {
+      gradientColors = const [Color(0xFFF2F9C4), Color(0xFFB6DB2E)];
+      pill = 'Screenshot';
+      headline = 'Nahrát screenshot';
+      sub = 'Nahrajte screenshot mapy a důkazní fotky z výletu.';
+    } else {
+      gradientColors = const [Color(0xFFF2F9C4), Color(0xFFB6DB2E)];
+      pill = 'Nahrání trasy';
+      headline = 'Nahrát trasu';
+      sub = 'Postupujte podle polí níže.';
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -265,9 +239,7 @@ class _FormRendererState extends State<FormRenderer> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: isGpx
-              ? const [Color(0xFFD5F8E4), Color(0xFF59DF87)]
-              : const [Color(0xFFF2F9C4), Color(0xFFB6DB2E)],
+          colors: gradientColors,
         ),
         border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
       ),
@@ -281,7 +253,7 @@ class _FormRendererState extends State<FormRenderer> {
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              'Nahrání trasy',
+              pill,
               style: GoogleFonts.libreFranklin(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -292,7 +264,7 @@ class _FormRendererState extends State<FormRenderer> {
           ),
           const SizedBox(height: 12),
           Text(
-            isGpx ? 'Nahrát z appky' : 'Nahrát screenshot',
+            headline,
             style: GoogleFonts.libreFranklin(
               fontSize: 30,
               fontWeight: FontWeight.w800,
@@ -301,9 +273,7 @@ class _FormRendererState extends State<FormRenderer> {
           ),
           const SizedBox(height: 6),
           Text(
-            isGpx
-                ? 'Export trasy z hodinek nebo aplikace (Mapy.cz, Strava a další).'
-                : 'Nahrajte screenshot mapy a navazující důkazní fotky z výletu.',
+            sub,
             style: GoogleFonts.libreFranklin(
               fontSize: 14,
               fontWeight: FontWeight.w500,

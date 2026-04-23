@@ -18,10 +18,11 @@ class LeaderboardEntry {
   });
 
   factory LeaderboardEntry.fromMap(Map<String, dynamic> map) {
-    final user = map['user'] as Map<String, dynamic>?;
+    // Aggregation returns `userDoc` from $lookup on `users`; legacy payloads may use `user`.
+    final user = (map['user'] ?? map['userDoc']) as Map<String, dynamic>?;
     final String displayName = (map['displayName'] ?? '').toString();
     return LeaderboardEntry(
-      userId: (map['firstUserId'] ?? map['_id'] ?? '').toString(),
+      userId: (map['userId'] ?? map['firstUserId'] ?? map['_id'] ?? '').toString(),
       userName: (user != null ? (user['name'] ?? '') : displayName).toString(),
       userImage: user?['image']?.toString(),
       dogName: user?['dogName']?.toString(),

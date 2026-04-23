@@ -1,21 +1,28 @@
-import 'package:flutter/material.dart';
-
 import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../models/forms/form_image_attachment.dart';
+import '../services/auth_service.dart';
 import '../widgets/ui/app_toast.dart';
 
 class ImagePickerWidget extends StatefulWidget {
-  final Function(List<File>) onImagesSelected;
-  final List<File> initialImages;
-  final int? maxImages; // null = unlimited
+  final void Function(List<FormImageAttachment>) onImagesSelected;
+  final List<FormImageAttachment> initialAttachments;
+  final int? maxImages;
   final String title;
+  final bool allowAdminTestPhoto;
 
   const ImagePickerWidget({
     Key? key,
     required this.onImagesSelected,
-    this.initialImages = const [],
+    this.initialAttachments = const [],
     this.maxImages,
     this.title = 'Přidat fotografie',
+    this.allowAdminTestPhoto = false,
   }) : super(key: key);
 
   @override
@@ -23,14 +30,15 @@ class ImagePickerWidget extends StatefulWidget {
 }
 
 class _ImagePickerWidgetState extends State<ImagePickerWidget> {
-  List<File> _selectedImages = [];
+  List<FormImageAttachment> _items = [];
   late ImagePicker _picker;
   bool _isInitialized = false;
+  bool _adminTestLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _selectedImages = List.from(widget.initialImages);
+    _items = List.from(widget.initialAttachments);
     _initializePicker();
   }
 
@@ -59,14 +67,43 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
     }
   }
 
-  // Check if running on emulator - logic removed but method kept if needed later, or remove entirely.
-  // Method _isEmulator removed as it was unused.
+  bool get _isAdmin =>
+      widget.allowAdminTestPhoto && (AuthService.currentUser?.role ?? '') == 'ADMIN';
 
-  Future<void> _handleAddPhoto() async {
-    _showImageSourceDialog();
+  void _emit() => widget.onImagesSelected(_items);
+
+  Future<void> _addAdminTestPhoto() async {
+    if (!_isAdmin || _adminTestLoading) return;
+    setState(() => _adminTestLoading = true);
+    try {
+      final client = http.Client();
+      final res = await client.get(Uri.parse('https://picsum.photos/800/600'));
+      client.close();
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw Exception('HTTP ${res.statusCode}');
+      }
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/test-admin-photo-${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(res.bodyBytes, flush: true);
+      if (widget.maxImages != null && _items.length >= widget.maxImages!) {
+        if (mounted) {
+          AppToast.showInfo(context, 'Můžete přidat maximálně ${widget.maxImages} fotografií');
+        }
+        return;
+      }
+      setState(() {
+        _items = [..._items, FormImageAttachment(file, adminBypassPhotoDate: true)];
+      });
+      _emit();
+    } catch (e) {
+      debugPrint('Admin test photo: $e');
+      if (mounted) {
+        AppToast.showError(context, 'Testovací fotku se nepodařilo stáhnout.');
+      }
+    } finally {
+      if (mounted) setState(() => _adminTestLoading = false);
+    }
   }
-
-  // Method _reinitializePicker removed as it was unused.
 
   Future<void> _pickImages() async {
     if (!_isInitialized) {
@@ -78,10 +115,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
     }
 
     try {
-      // Add a longer delay to ensure the platform channel is ready
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Try multiple images directly first
+      await Future.delayed(const Duration(milliseconds: 200));
       final List<XFile> images = await _picker.pickMultiImage(
         maxWidth: 1920,
         maxHeight: 1080,
@@ -90,19 +124,12 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
       );
 
       if (images.isNotEmpty) {
-        final List<File> newImages = images
-            .map((xFile) => File(xFile.path))
-            .toList();
-
-        // If a max is set, enforce it; otherwise allow unlimited
-        if (widget.maxImages != null &&
-            _selectedImages.length + newImages.length > widget.maxImages!) {
+        final newFiles = images.map((x) => FormImageAttachment(File(x.path))).toList();
+        if (widget.maxImages != null && _items.length + newFiles.length > widget.maxImages!) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  'Můžete přidat maximálně ${widget.maxImages} fotografií',
-                ),
+                content: Text('Můžete přidat maximálně ${widget.maxImages} fotografií'),
                 backgroundColor: Colors.orange,
               ),
             );
@@ -111,10 +138,9 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
         }
 
         setState(() {
-          _selectedImages.addAll(newImages);
+          _items = [..._items, ...newFiles];
         });
-
-        widget.onImagesSelected(_selectedImages);
+        _emit();
       }
     } catch (e) {
       debugPrint('Image picker error: $e');
@@ -137,9 +163,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
     }
 
     try {
-      // Add a longer delay to ensure the platform channel is ready
-      await Future.delayed(const Duration(milliseconds: 500));
-
+      await Future.delayed(const Duration(milliseconds: 200));
       final XFile? photo = await _picker.pickImage(
         source: ImageSource.camera,
         maxWidth: 1920,
@@ -149,8 +173,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
       );
 
       if (photo != null) {
-        if (widget.maxImages != null &&
-            _selectedImages.length >= widget.maxImages!) {
+        if (widget.maxImages != null && _items.length >= widget.maxImages!) {
           if (mounted) {
             AppToast.showInfo(
               context,
@@ -161,10 +184,9 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
         }
 
         setState(() {
-          _selectedImages.add(File(photo.path));
+          _items = [..._items, FormImageAttachment(File(photo.path))];
         });
-
-        widget.onImagesSelected(_selectedImages);
+        _emit();
       }
     } catch (e) {
       debugPrint('Camera error: $e');
@@ -181,9 +203,13 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
 
   void _removeImage(int index) {
     setState(() {
-      _selectedImages.removeAt(index);
+      _items.removeAt(index);
     });
-    widget.onImagesSelected(_selectedImages);
+    _emit();
+  }
+
+  void _handleAddPhoto() {
+    _showImageSourceDialog();
   }
 
   void _showImageSourceDialog() {
@@ -262,9 +288,9 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
                           color: Color(0xFF111827),
                         ),
                       ),
-                      if (_selectedImages.isNotEmpty)
+                      if (_items.isNotEmpty)
                         Text(
-                          '${_selectedImages.length} fotografií',
+                          '${_items.length} fotografií',
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF6B7280),
@@ -289,15 +315,36 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
               ],
             ),
           ),
-          if (_selectedImages.isNotEmpty) ...[
+          if (_isAdmin) ...[
+            const Divider(height: 1, color: Color(0xFFE5E7EB)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _adminTestLoading ? null : _addAdminTestPhoto,
+                  icon: _adminTestLoading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.science_outlined, size: 18),
+                  label: Text(_adminTestLoading ? 'Stahuji…' : 'Nahrát testovací fotku (Admin)'),
+                ),
+              ),
+            ),
+          ],
+          if (_items.isNotEmpty) ...[
             const Divider(height: 1, color: Color(0xFFE5E7EB)),
             Container(
               height: 120,
               padding: const EdgeInsets.all(12),
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: _selectedImages.length,
+                itemCount: _items.length,
                 itemBuilder: (context, index) {
+                  final f = _items[index].file;
                   return Container(
                     margin: const EdgeInsets.only(right: 10),
                     child: Stack(
@@ -305,12 +352,28 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: Image.file(
-                            _selectedImages[index],
+                            f,
                             width: 100,
                             height: 120,
                             fit: BoxFit.cover,
                           ),
                         ),
+                        if (_items[index].adminBypassPhotoDate)
+                          Positioned(
+                            bottom: 4,
+                            left: 4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.indigo.shade700.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Admin test',
+                                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
                         Positioned(
                           top: 4,
                           right: 4,

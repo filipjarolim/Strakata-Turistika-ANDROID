@@ -44,6 +44,13 @@ def main() -> None:
             {"id": "visit_date", "type": "calendar", "label": "Datum návštěvy", "order": 2, "required": True},
             {"id": "dog_not_allowed", "type": "dog_switch", "label": "Pes neměl přístup", "order": 3, "required": False},
             {"id": "places", "type": "places_manager", "label": "Bodovaná místa", "order": 4, "required": False},
+            {
+                "id": "monthly_theme",
+                "type": "monthly_theme",
+                "label": "Téma měsíce",
+                "order": 5,
+                "required": False,
+            },
         ],
     }
 

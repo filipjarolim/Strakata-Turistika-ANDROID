@@ -108,6 +108,8 @@ class FormFieldWidget {
       metadata: {
         ...(json['metadata'] as Map<String, dynamic>? ?? {}),
         if (json['name'] != null) 'name': json['name'].toString(),
+        if (json['placeholder'] != null) 'placeholder': json['placeholder'].toString(),
+        if (json['options'] != null) 'options': json['options'],
       },
     );
   }

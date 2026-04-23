@@ -6,7 +6,9 @@ class FormService {
   factory FormService() => _instance;
   FormService._internal();
 
-  static const String _collection = 'forms';
+  /// Stejná kolekce jako Prisma `FormConfig` na webu (`@@map("form_configs")`).
+  /// Dříve aplikace četla legacy `forms` — ta data se od adminu lišila.
+  static const String _collection = 'form_configs';
   final DatabaseService _dbService = DatabaseService();
 
   Future<List<FormConfig>> getForms() async {
@@ -40,5 +42,4 @@ class FormService {
       return parsed;
     });
   }
-
 }

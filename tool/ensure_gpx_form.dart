@@ -20,8 +20,8 @@ Future<void> main() async {
   await db.open(secure: true);
 
   try {
-    final forms = db.collection('forms');
-    final existing = await forms.find({}, {'slug': 1, 'name': 1}).toList();
+    final forms = db.collection('form_configs');
+    final existing = await forms.find().toList();
     final existingSlugs = existing
         .map((doc) => doc['slug']?.toString() ?? '')
         .where((slug) => slug.isNotEmpty)

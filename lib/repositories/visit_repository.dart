@@ -5,6 +5,8 @@ import '../utils/type_converter.dart';
 
 class VisitRepository {
   final DatabaseService _dbService = DatabaseService();
+
+  /// Musí odpovídat Prisma `VisitData` → `@@map("visits")` (stejná DB jako web).
   static const String _collectionName = 'visits';
 
   /// Fetch visits with pagination, filtering, and sorting
@@ -192,24 +194,113 @@ class VisitRepository {
     return (result['data'] as List<dynamic>).cast<VisitData>();
   }
 
-  /// Save a visit (Create or Update)
-  Future<bool> saveVisit(VisitData visit) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
-      final data = visit.toMap();
-      if (visit.id.isEmpty) {
-        data['_id'] = ObjectId().toHexString();
-        data['createdAt'] = DateTime.now();
-      } else {
-        data['_id'] = visit.id;
+  static const Set<String> _mongoKeysPreserveOnUpdate = {
+    'galleryImages',
+    'strakataTrasaId',
+    'strakataTrasaIcon',
+    'isFreeCategory',
+    'freeCategoryIcon',
+    'deletedAt',
+    'deletedBy',
+    // Při přepisu DRAFT → PENDING může být route v paměti ztracený; bez toho replaceOne smaže polyline v DB.
+    'route',
+    'routeLink',
+  };
+
+  /// Sladění s Prisma modelem `VisitData` (`@@map("visits")`): odstraní pole, která Prisma
+  /// v dokumentu nečeká (a mohla by rozbít validaci zápisu), doplní výchozí hodnoty.
+  static void _prepareVisitDocumentForPrismaStorage(
+    VisitData visit,
+    Map<String, dynamic> data,
+  ) {
+    data.remove('user');
+    data.remove('displayName');
+
+    if (data.containsKey('dogNotAllowed')) {
+      final dog = data.remove('dogNotAllowed');
+      if (dog != null && '$dog'.isNotEmpty) {
+        final ed = visit.extraData != null
+            ? Map<String, dynamic>.from(visit.extraData!)
+            : (data['extraData'] is Map
+                ? Map<String, dynamic>.from(data['extraData'] as Map)
+                : <String, dynamic>{});
+        ed['dogNotAllowed'] = dog;
+        data['extraData'] = ed;
       }
-      
-      await collection.update(where.eq('_id', data['_id']), data, upsert: true);
-      return true;
-    }).catchError((e) {
+    }
+
+    if (!data.containsKey('isFreeCategory') || data['isFreeCategory'] == null) {
+      data['isFreeCategory'] = false;
+    }
+
+    final strakataId = visit.extraPoints['strakataRouteId']?.toString().trim();
+    if (strakataId != null && strakataId.isNotEmpty) {
+      data['strakataTrasaId'] = strakataId;
+    }
+
+    data.removeWhere((_, v) => v == null);
+  }
+
+  /// Save a visit (Create or Update). Vrací `_id` dokumentu v MongoDB, nebo `null` při chybě.
+  Future<String?> saveVisit(VisitData visit) async {
+    try {
+      return await _dbService.execute((db) async {
+        final collection = db.collection(_collectionName);
+        final data = Map<String, dynamic>.from(visit.toMap());
+        final String idToPersist;
+        if (visit.id.isEmpty) {
+          idToPersist = ObjectId().oid;
+          data['_id'] = idToPersist;
+          data['createdAt'] = DateTime.now();
+        } else {
+          idToPersist = visit.id;
+          data['_id'] = visit.id;
+          final existing = await collection.findOne(where.eq('_id', idToPersist));
+          if (existing != null) {
+            for (final key in _mongoKeysPreserveOnUpdate) {
+              final hasIncoming = data.containsKey(key) && data[key] != null;
+              if (!hasIncoming && existing[key] != null) {
+                data[key] = existing[key];
+              }
+            }
+          }
+        }
+
+        _prepareVisitDocumentForPrismaStorage(visit, data);
+
+        final write = await collection.replaceOne(
+          where.eq('_id', idToPersist),
+          data,
+          upsert: true,
+        );
+
+        if (!write.isSuccess) {
+          print(
+            '❌ [VisitRepository] saveVisit: replaceOne selhalo (_id=$idToPersist) '
+            'ok=${write.ok} opOk=${write.operationSucceeded} '
+            'err=${write.writeError?.errmsg} wc=${write.writeConcernError?.errmsg}',
+          );
+          return null;
+        }
+
+        final verified = await collection.findOne(where.eq('_id', idToPersist));
+        if (verified == null) {
+          print('❌ [VisitRepository] saveVisit: dokument po zápisu v DB nenalezen (_id=$idToPersist)');
+          return null;
+        }
+        final st = verified['state']?.toString();
+        if (st != null && visit.state.name.isNotEmpty && st != visit.state.name) {
+          print(
+            '⚠️ [VisitRepository] saveVisit: state v DB="$st" vs očekávaný="${visit.state.name}" (_id=$idToPersist)',
+          );
+        }
+
+        return idToPersist;
+      });
+    } catch (e) {
       print('❌ [VisitRepository] Error saving visit: $e');
-      return false;
-    });
+      return null;
+    }
   }
 
   Future<bool> updateVisitPoints(String visitId, double points, int peaksCount, int towersCount, int treesCount) async {

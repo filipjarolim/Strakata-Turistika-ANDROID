@@ -1151,22 +1151,35 @@ class _UserProfilePageState extends State<UserProfilePage> {
                        child: ElevatedButton(
                          onPressed: () {
                            Navigator.pop(context);
-                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => DynamicFormPage(
-                              slug: 'gps-tracking',
-                              trackingSummary: TrackingSummary(
-                                  isTracking: false,
-                                  startTime: visit.createdAt ?? DateTime.now(),
-                                  duration: Duration(seconds: visit.route?['duration'] ?? 0),
-                                  totalDistance: (visit.route?['totalDistance'] as num?)?.toDouble() ?? 0,
-                                  averageSpeed: 0, maxSpeed: 0, totalElevationGain: 0, totalElevationLoss: 0, minAltitude: null, maxAltitude: null,
-                                  trackPoints: (visit.route?['trackPoints'] as List?)?.map((p) => TrackPoint(
-                                    latitude: (p['latitude'] as num).toDouble(),
-                                    longitude: (p['longitude'] as num).toDouble(),
-                                    timestamp: DateTime.parse(p['timestamp']),
-                                    speed: (p['speed'] as num?)?.toDouble() ?? 0,
-                                    accuracy: (p['accuracy'] as num?)?.toDouble() ?? 0,
-                                  )).toList() ?? [],
-                           ))));
+                           final slug = _formSlugForVisitDraft(visit);
+                           Navigator.of(context).push(
+                             MaterialPageRoute<void>(
+                               builder: (_) => DynamicFormPage(
+                                 slug: slug,
+                                 existingVisit: visit,
+                                 trackingSummary: TrackingSummary(
+                                   isTracking: false,
+                                   startTime: visit.visitDate ?? visit.createdAt ?? DateTime.now(),
+                                   duration: Duration(seconds: visit.route?['duration'] ?? 0),
+                                   totalDistance:
+                                       (visit.route?['totalDistance'] as num?)?.toDouble() ?? 0,
+                                   averageSpeed:
+                                       (visit.route?['averageSpeed'] as num?)?.toDouble() ?? 0,
+                                   maxSpeed: (visit.route?['maxSpeed'] as num?)?.toDouble() ?? 0,
+                                   totalElevationGain: 0,
+                                   totalElevationLoss: 0,
+                                   minAltitude: null,
+                                   maxAltitude: null,
+                                   trackPoints: (visit.route?['trackPoints'] as List?)
+                                           ?.map((p) => TrackPoint.fromJson(
+                                                 Map<String, dynamic>.from(p as Map),
+                                               ))
+                                           .toList() ??
+                                       [],
+                                 ),
+                               ),
+                             ),
+                           );
                          },
                          style: ElevatedButton.styleFrom(
                            padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1206,12 +1219,35 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  IconData _getPlaceTypeIcon(PlaceType type) {
-    switch (type) {
-      case PlaceType.PEAK: return Icons.landscape_rounded;
-      case PlaceType.TOWER: return Icons.location_city_rounded;
-      case PlaceType.TREE: return Icons.park_outlined;
-      case PlaceType.OTHER: return Icons.place_outlined;
+  /// Slug formuláře v DB podle `extraPoints.source` (stejná logika jako při odeslání).
+  String _formSlugForVisitDraft(VisitData visit) {
+    final src = visit.extraPoints['source']?.toString();
+    switch (src) {
+      case 'gpx_upload':
+        return 'gpx-upload';
+      case 'screenshot':
+        return 'screenshot-upload';
+      case 'strakata_route':
+        return 'strakata-upload';
+      case 'gps_tracking':
+        return 'gps-tracking';
+      default:
+        final pts = visit.route?['trackPoints'];
+        if (pts is List && pts.isNotEmpty) return 'gps-tracking';
+        return 'gps-tracking';
+    }
+  }
+
+  IconData _getPlaceTypeIcon(String typeName) {
+    switch (typeName) {
+      case 'PEAK':
+        return Icons.landscape_rounded;
+      case 'TOWER':
+        return Icons.location_city_rounded;
+      case 'TREE':
+        return Icons.park_outlined;
+      default:
+        return Icons.place_outlined;
     }
   }
 

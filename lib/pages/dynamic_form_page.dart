@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +17,8 @@ import '../services/auth_service.dart';
 import '../services/scoring_config_service.dart';
 import '../services/cloudinary_service.dart'; // Ensure this exists or use appropriate service
 import '../models/place_type_config.dart';
+import '../models/forms/extra_data_merge.dart';
+import '../widgets/forms/form_field_validator.dart';
 
 class DynamicFormPage extends StatefulWidget {
   final String slug;
@@ -42,14 +46,11 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
   void initState() {
     super.initState();
     _formConfigFuture = FormService().getFormBySlug(widget.slug);
-    
-    // Initialize context
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _formContext.initializeWith(
-        summary: widget.trackingSummary,
-        existingVisit: widget.existingVisit,
-      );
-    });
+    // Ihned — addPostFrameCallback nechával trackingSummary prázdný při rychlém „Dokončit“.
+    _formContext.initializeWith(
+      summary: widget.trackingSummary,
+      existingVisit: widget.existingVisit,
+    );
   }
 
   @override
@@ -147,7 +148,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           onPrimaryPressed: _isSubmitting
               ? null
               : () {
-                  final validationError = _validateStep(step);
+                  final validationError = validateFormStep(_formContext, step);
                   if (validationError != null) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(validationError)),
@@ -170,91 +171,29 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     );
   }
 
-  String? _validateStep(FormStep step) {
-    for (final field in step.fields) {
-      if (!field.required) continue;
-      final err = _validateField(field);
-      if (err != null) return err;
-    }
-    if (step.id == 'edit') {
-      final title = (_formContext.routeTitle ?? '').trim();
-      if (title.length < 3) {
-        return 'Název trasy musí mít alespoň 3 znaky.';
-      }
-      if (_formContext.visitDate.isAfter(
-        DateTime.now().add(const Duration(days: 1)),
-      )) {
-        return 'Datum návštěvy nemůže být v budoucnosti.';
-      }
-      final hasUnnamedPlaces = _formContext.places.any(
-        (p) => p.name.trim().isEmpty,
-      );
-      if (hasUnnamedPlaces) {
-        return 'Doplňte název u všech přidaných míst.';
-      }
-    }
-    return null;
-  }
-
-  String? _validateField(FormFieldWidget field) {
-    switch (field.type) {
-      case 'gpx_upload':
-        if (_formContext.trackingSummary == null ||
-            _formContext.trackingSummary!.trackPoints.length < 2) {
-          return 'Nahrajte platný GPX soubor s body trasy.';
-        }
-        return null;
-      case 'image_upload':
-        if (_formContext.selectedImages.isEmpty) {
-          return 'Nahrajte alespoň jednu fotografii.';
-        }
-        return null;
-      case 'strakata_route_selector':
-        final id = _formContext.extraData['strakataRouteId']?.toString() ?? '';
-        if (id.trim().isEmpty) {
-          return 'Vyberte kategorii Strakaté trasy.';
-        }
-        return null;
-      case 'title_input':
-        final title = (_formContext.routeTitle ?? '').trim();
-        if (title.isEmpty) {
-          return 'Pole "${field.label}" je povinné.';
-        }
-        return null;
-      case 'calendar':
-        return null;
-      default:
-        final name = field.metadata['name']?.toString() ?? field.id;
-        final value =
-            _formContext.extraData[name] ?? _formContext.extraData[field.id];
-        final missing = value == null ||
-            (value is String && value.trim().isEmpty) ||
-            (value is List && value.isEmpty);
-        if (missing) return 'Pole "${field.label}" je povinné.';
-        return null;
-    }
-  }
-
   Future<void> _handleSubmit() async {
     setState(() => _isSubmitting = true);
     
     try {
+      final summary =
+          _formContext.trackingSummary ?? widget.trackingSummary;
+
       // 1. Calculate points
       double points = 0.0;
       final scoringConfig = await ScoringConfigService().getConfig();
       final placeTypeConfigs = await PlaceTypeConfigService().getPlaceTypeConfigs();
-      
+
       // Distance points
-      if (_formContext.trackingSummary != null) {
-        double distanceKm = _formContext.trackingSummary!.totalDistance / 1000;
+      if (summary != null) {
+        final distanceKm = summary.totalDistance / 1000;
         points += distanceKm * scoringConfig.pointsPerKm;
       }
 
       // Place points
       for (var place in _formContext.places) {
-        final matches = placeTypeConfigs.where((c) => c.name == place.type.name);
+        final matches = placeTypeConfigs.where((c) => c.name == place.type);
         if (matches.isEmpty) {
-          throw Exception('Konfigurace typu místa "${place.type.name}" nebyla nalezena v databázi.');
+          throw Exception('Konfigurace typu místa "${place.type}" nebyla nalezena v databázi.');
         }
         final typeConfig = matches.first;
         points += typeConfig.points;
@@ -262,25 +201,76 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
       // 2. Prepare VisitData object
       final currentUser = AuthService.currentUser;
-      
-      // Upload Photos if any (images are in _formContext.selectedImages (File))
+
       List<Map<String, dynamic>>? photos;
-      if (_formContext.selectedImages.isNotEmpty) {
-         try {
-           final urls = await CloudinaryService.uploadMultipleImages(_formContext.selectedImages);
-           photos = urls.map((url) => {
-             'url': url,
-             'uploadedAt': DateTime.now().toIso8601String(),
-           }).toList();
-         } catch (e) {
-           throw Exception('Nahrání fotografií selhalo: $e');
-         }
+      if (_formContext.photoAttachments.isNotEmpty) {
+        try {
+          photos = await CloudinaryService.uploadVisitPhotoPayloads(_formContext.photoAttachments);
+        } catch (e) {
+          throw Exception('Nahrání fotografií selhalo: $e');
+        }
+      }
+      final priorPhotos = widget.existingVisit?.photos;
+      if ((photos == null || photos.isEmpty) && priorPhotos != null && priorPhotos.isNotEmpty) {
+        photos = priorPhotos.map((e) => Map<String, dynamic>.from(e)).toList();
+      } else if (photos != null && priorPhotos != null && priorPhotos.isNotEmpty) {
+        photos = [
+          ...priorPhotos.map((e) => Map<String, dynamic>.from(e)),
+          ...photos,
+        ];
+      }
+
+      final routeMap = summary != null
+          ? {
+              'duration': summary.duration.inSeconds,
+              'totalDistance': summary.totalDistance,
+              'trackPoints': summary.trackPoints.map((p) => p.toJson()).toList(),
+            }
+          : null;
+
+      final extraForVisit = Map<String, dynamic>.from(_formContext.extraData);
+      mergeComputedRouteMetricsIntoExtraData(extraForVisit, summary);
+
+      String? routeLinkStr;
+      if (summary != null && summary.trackPoints.length >= 2) {
+        routeLinkStr = jsonEncode(
+          summary.trackPoints
+              .map((p) => {'lat': p.latitude, 'lng': p.longitude})
+              .toList(),
+        );
+      }
+
+      final double? distanceKmTop = summary != null
+          ? double.parse((summary.totalDistance / 1000).toStringAsFixed(4))
+          : widget.existingVisit?.distanceKm;
+      final int? durationMinTop = summary != null
+          ? (summary.duration.inSeconds / 60).ceil()
+          : widget.existingVisit?.durationMinutes;
+
+      final mergedExtra = Map<String, dynamic>.from(widget.existingVisit?.extraPoints ?? {});
+      mergedExtra['source'] = widget.slug == 'strakata-upload'
+          ? 'strakata_route'
+          : (widget.slug == 'gpx-upload'
+              ? 'gpx_upload'
+              : (widget.slug == 'screenshot-upload' ? 'screenshot' : 'gps_tracking'));
+      if (widget.slug == 'strakata-upload') {
+        mergedExtra['strakataRouteId'] = _formContext.extraData['strakataRouteId'];
+        mergedExtra['strakataRouteLabel'] = _formContext.extraData['strakataRouteLabel'];
+      }
+      if (distanceKmTop != null) {
+        mergedExtra['distanceKm'] = distanceKmTop;
+        mergedExtra['distance'] = distanceKmTop;
+      }
+      if (durationMinTop != null) {
+        mergedExtra['elapsedTime'] = durationMinTop;
       }
 
       final visit = VisitData(
         id: widget.existingVisit?.id ?? '',
         userId: currentUser?.id,
-        user: currentUser != null ? {'name': currentUser.name, 'email': currentUser.email, 'image': currentUser.image} : null,
+        user: currentUser != null
+            ? {'name': currentUser.name, 'email': currentUser.email, 'image': currentUser.image}
+            : null,
         year: _formContext.visitDate.year,
         visitDate: _formContext.visitDate,
         createdAt: widget.existingVisit?.createdAt ?? DateTime.now(),
@@ -289,39 +279,27 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         routeTitle: _formContext.routeTitle ?? 'Trasa ${DateTime.now().day}.${DateTime.now().month}.',
         routeDescription: _formContext.routeDescription ?? '',
         visitedPlaces: _formContext.places.map((p) => p.name).join(', '),
-        dogName: _formContext.extraData['dog_name']?.toString() ?? currentUser?.dogName,
+        dogName: extraForVisit['dog_name']?.toString() ?? currentUser?.dogName,
         dogNotAllowed: _formContext.dogNotAllowed ? 'true' : null,
-        extraData: _formContext.extraData,
+        routeLink: routeLinkStr,
+        extraData: extraForVisit,
         photos: photos,
-        route: _formContext.trackingSummary != null ? {
-           'duration': _formContext.trackingSummary!.duration.inSeconds,
-           'totalDistance': _formContext.trackingSummary!.totalDistance,
-           'trackPoints': _formContext.trackingSummary!.trackPoints.map((p) => p.toJson()).toList(),
-        } : null,
+        route: routeMap,
         places: _formContext.places,
-        extraPoints: {
-          'source': widget.slug == 'strakata-upload'
-              ? 'strakata_route'
-              : (widget.slug == 'gpx-upload'
-                  ? 'gpx_upload'
-                  : (widget.slug == 'screenshot-upload'
-                      ? 'screenshot'
-                      : 'gps_tracking')),
-          if (widget.slug == 'strakata-upload')
-            'strakataRouteId': _formContext.extraData['strakataRouteId'],
-          if (widget.slug == 'strakata-upload')
-            'strakataRouteLabel': _formContext.extraData['strakataRouteLabel'],
-        },
+        extraPoints: mergedExtra,
+        distanceKm: distanceKmTop,
+        durationMinutes: durationMinTop,
       );
 
-      final success = await VisitRepository().saveVisit(visit);
-      
-      if (success) {
+      final savedId = await VisitRepository().saveVisit(visit);
+
+      if (savedId != null) {
         if (mounted) {
           await showFormStatusDialog(
             context,
             title: 'Návštěva uložena',
-            message: 'Vaše návštěva byla úspěšně odeslána ke kontrole.',
+            message:
+                'Záznam je v databázi ve stavu „čeká na schválení“. V administraci na webu ho uvidíte v přehledu návštěv s filtrem Čeká na schválení (výchozí). Koncepty (DRAFT) se v adminu nezobrazují.',
             onConfirm: () => Navigator.of(context).popUntil((route) => route.isFirst),
           );
         }
@@ -353,6 +331,37 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
 
   Widget _buildUploadStepHero(String slug) {
     final isGpx = slug == 'gpx-upload';
+    final isGps = slug == 'gps-tracking';
+    final isScreenshot = slug == 'screenshot-upload';
+
+    late final List<Color> gradientColors;
+    late final String pill;
+    late final String headline;
+    late final String sub;
+
+    if (isGpx) {
+      gradientColors = const [Color(0xFFD5F8E4), Color(0xFF59DF87)];
+      pill = 'GPX soubor';
+      headline = 'Nahrát z appky';
+      sub = 'Export trasy z hodinek nebo aplikace (Mapy.cz, Strava a další).';
+    } else if (isGps) {
+      gradientColors = const [Color(0xFFE0E7FF), Color(0xFF6366F1)];
+      pill = 'GPS v telefonu';
+      headline = 'Záznam z aplikace';
+      sub =
+          'Trasa je už načtená z měření — v dalších krocích doplníte název, datum, témata a místa jako na webu.';
+    } else if (isScreenshot) {
+      gradientColors = const [Color(0xFFF2F9C4), Color(0xFFB6DB2E)];
+      pill = 'Screenshot';
+      headline = 'Nahrát screenshot';
+      sub = 'Nahrajte screenshot mapy a důkazní fotky z výletu.';
+    } else {
+      gradientColors = const [Color(0xFFF2F9C4), Color(0xFFB6DB2E)];
+      pill = 'Nahrání trasy';
+      headline = 'Nahrát trasu';
+      sub = 'Postupujte podle polí níže.';
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -361,9 +370,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: isGpx
-              ? const [Color(0xFFD5F8E4), Color(0xFF59DF87)]
-              : const [Color(0xFFF2F9C4), Color(0xFFB6DB2E)],
+          colors: gradientColors,
         ),
         border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
       ),
@@ -377,7 +384,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              'Nahrání trasy',
+              pill,
               style: GoogleFonts.libreFranklin(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -388,7 +395,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            isGpx ? 'Nahrát z appky' : 'Nahrát screenshot',
+            headline,
             style: AppTheme.editorialHeadline(
               color: AppColors.textPrimary,
               fontSize: 30,
@@ -396,9 +403,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            isGpx
-                ? 'Export trasy z hodinek nebo aplikace (Mapy.cz, Strava a další).'
-                : 'Nahrajte screenshot mapy a navazující důkazní fotky z výletu.',
+            sub,
             style: GoogleFonts.libreFranklin(
               fontSize: 14,
               fontWeight: FontWeight.w500,

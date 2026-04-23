@@ -114,8 +114,8 @@ class DatabaseService {
       }
 
       if (isReady) {
-        // final dbName = _db?.databaseName ?? 'unknown';
-        print('✅ [DatabaseService] Connected');
+        final dbName = _db?.databaseName ?? 'unknown';
+        print('✅ [DatabaseService] Connected (databaseName=$dbName)');
         return true;
       } else {
         print('❌ [DatabaseService] Timed out waiting for master connection');

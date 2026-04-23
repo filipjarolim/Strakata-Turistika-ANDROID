@@ -170,7 +170,7 @@ class GpsServices {
     required TrackingStateService trackingStateService,
     required BuildContext context,
     required VoidCallback onSuccess,
-    required Function(TrackingSummary, String?) showTrackingSummary,
+    required void Function(TrackingSummary summary, VisitData? draftVisit) showTrackingSummary,
   }) async {
     try {
       await trackingStateService.stopTracking();
@@ -211,14 +211,19 @@ class GpsServices {
               'trackPoints': trackingSummary.trackPoints.map((p) => p.toJson()).toList(),
             },
             extraData: {},
-            extraPoints: {},
+            extraPoints: {
+              'source': 'gps_tracking',
+            },
           );
-          
+
           final repo = VisitRepository();
-          await repo.saveVisit(visit);
-          
-          showTrackingSummary(trackingSummary, null);
-          
+          final savedId = await repo.saveVisit(visit);
+          VisitData? draftVisit;
+          if (savedId != null) {
+            draftVisit = visit.copyWith(id: savedId);
+          }
+
+          showTrackingSummary(trackingSummary, draftVisit);
         } catch (e) {
           print('Error autosaving draft: $e');
           showTrackingSummary(trackingSummary, null);

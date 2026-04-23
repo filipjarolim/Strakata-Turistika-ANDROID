@@ -13,68 +13,89 @@ enum VisitState {
   REJECTED,
 }
 
-enum PlaceType {
-  PEAK,
-  TOWER,
-  TREE,
-  OTHER,
-}
-
+/// Bodované místo — struktura odpovídá webu (`lib/visits/place.ts`): `type` je řetězec z `place_type_configs.name`.
 class Place {
   final String id;
   final String name;
-  final PlaceType type;
+  final String type;
   final List<PlacePhoto> photos;
-  final String? description;
+  final String description;
   final DateTime createdAt;
+  final double? lat;
+  final double? lng;
+  final String? proofType;
 
   const Place({
     required this.id,
     required this.name,
     required this.type,
     required this.photos,
-    this.description,
+    this.description = '',
     required this.createdAt,
+    this.lat,
+    this.lng,
+    this.proofType,
   });
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'name': name,
-    'type': type.name,
-    'photos': photos.map((photo) => photo.toMap()).toList(),
-    'description': description,
-    'createdAt': createdAt.toIso8601String(),
-  };
+        'id': id,
+        'name': name,
+        'type': type,
+        'photos': photos.map((photo) => photo.toMap()).toList(),
+        'description': description,
+        'createdAt': createdAt.toIso8601String(),
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+        if (proofType != null && proofType!.isNotEmpty) 'proofType': proofType,
+      };
 
-  factory Place.fromMap(Map<String, dynamic> map) => Place(
-    id: map['id']?.toString() ?? '',
-    name: map['name']?.toString() ?? '',
-    type: PlaceType.values.firstWhere(
-      (e) => e.name == map['type'],
-      orElse: () => PlaceType.OTHER,
-    ),
-    photos: (map['photos'] as List<dynamic>?)
-        ?.map((photo) => PlacePhoto.fromMap(photo))
-        .toList() ?? [],
-    description: map['description']?.toString(),
-    createdAt: DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? DateTime.now(),
-  );
+  factory Place.fromMap(Map<String, dynamic> map) {
+    double? readCoord(dynamic v) {
+      if (v == null) return null;
+      final d = TypeConverter.toDoubleWithDefault(v, double.nan);
+      if (d.isNaN || !d.isFinite) return null;
+      return d;
+    }
+
+    final rawType = map['type']?.toString() ?? 'OTHER';
+    return Place(
+      id: map['id']?.toString() ?? '',
+      name: map['name']?.toString() ?? '',
+      type: rawType,
+      photos: (map['photos'] as List<dynamic>?)
+              ?.map((photo) => PlacePhoto.fromMap(Map<String, dynamic>.from(photo as Map)))
+              .toList() ??
+          [],
+      description: map['description']?.toString() ?? '',
+      createdAt: DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      lat: readCoord(map['lat']),
+      lng: readCoord(map['lng']),
+      proofType: map['proofType']?.toString(),
+    );
+  }
 
   Place copyWith({
     String? id,
     String? name,
-    PlaceType? type,
+    String? type,
     List<PlacePhoto>? photos,
     String? description,
     DateTime? createdAt,
-  }) => Place(
-    id: id ?? this.id,
-    name: name ?? this.name,
-    type: type ?? this.type,
-    photos: photos ?? this.photos,
-    description: description ?? this.description,
-    createdAt: createdAt ?? this.createdAt,
-  );
+    double? lat,
+    double? lng,
+    String? proofType,
+  }) =>
+      Place(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        type: type ?? this.type,
+        photos: photos ?? this.photos,
+        description: description ?? this.description,
+        createdAt: createdAt ?? this.createdAt,
+        lat: lat ?? this.lat,
+        lng: lng ?? this.lng,
+        proofType: proofType ?? this.proofType,
+      );
 }
 
 class PlacePhoto {
@@ -83,6 +104,8 @@ class PlacePhoto {
   final String? description;
   final DateTime uploadedAt;
   final bool isLocal;
+  final String? title;
+  final String? publicId;
 
   const PlacePhoto({
     required this.id,
@@ -90,23 +113,29 @@ class PlacePhoto {
     this.description,
     required this.uploadedAt,
     this.isLocal = false,
+    this.title,
+    this.publicId,
   });
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'url': url,
-    'description': description,
-    'uploadedAt': uploadedAt.toIso8601String(),
-    'isLocal': isLocal,
-  };
+        'id': id,
+        'url': url,
+        'description': description ?? '',
+        'uploadedAt': uploadedAt.toIso8601String(),
+        'isLocal': isLocal,
+        if (title != null && title!.isNotEmpty) 'title': title,
+        if (publicId != null && publicId!.isNotEmpty) 'public_id': publicId,
+      };
 
   factory PlacePhoto.fromMap(Map<String, dynamic> map) => PlacePhoto(
-    id: map['id']?.toString() ?? '',
-    url: map['url']?.toString() ?? '',
-    description: map['description']?.toString(),
-    uploadedAt: DateTime.tryParse(map['uploadedAt']?.toString() ?? '') ?? DateTime.now(),
-    isLocal: map['isLocal'] == true,
-  );
+        id: map['id']?.toString() ?? '',
+        url: map['url']?.toString() ?? '',
+        description: map['description']?.toString(),
+        uploadedAt: DateTime.tryParse(map['uploadedAt']?.toString() ?? '') ?? DateTime.now(),
+        isLocal: map['isLocal'] == true,
+        title: map['title']?.toString(),
+        publicId: map['public_id']?.toString() ?? map['publicId']?.toString(),
+      );
 
   PlacePhoto copyWith({
     String? id,
@@ -114,13 +143,18 @@ class PlacePhoto {
     String? description,
     DateTime? uploadedAt,
     bool? isLocal,
-  }) => PlacePhoto(
-    id: id ?? this.id,
-    url: url ?? this.url,
-    description: description ?? this.description,
-    uploadedAt: uploadedAt ?? this.uploadedAt,
-    isLocal: isLocal ?? this.isLocal,
-  );
+    String? title,
+    String? publicId,
+  }) =>
+      PlacePhoto(
+        id: id ?? this.id,
+        url: url ?? this.url,
+        description: description ?? this.description,
+        uploadedAt: uploadedAt ?? this.uploadedAt,
+        isLocal: isLocal ?? this.isLocal,
+        title: title ?? this.title,
+        publicId: publicId ?? this.publicId,
+      );
 }
 
 class VisitData {
@@ -136,17 +170,18 @@ class VisitData {
   final Map<String, dynamic>? route;
   final int year;
   final Map<String, dynamic> extraPoints;
-  final Map<String, dynamic>? extraData; // Dynamic form data
-  final List<Place> places; // New structured places
+  final Map<String, dynamic>? extraData;
+  final List<Place> places;
   final VisitState state;
   final String? rejectionReason;
   final DateTime? createdAt;
-  final List<Map<String, dynamic>>? photos; // Photos field (includes screenshots from web)
-  // Structure from web: { url, public_id, title, description, uploadedAt }
+  final List<Map<String, dynamic>>? photos;
   final String? seasonId;
   final String? userId;
-  final Map<String, dynamic>? user; // User data from JOIN
-  final String? displayName; // Computed display name
+  final Map<String, dynamic>? user;
+  final String? displayName;
+  final double? distanceKm;
+  final int? durationMinutes;
 
   VisitData({
     required this.id,
@@ -171,12 +206,36 @@ class VisitData {
     this.userId,
     this.user,
     this.displayName,
+    this.distanceKm,
+    this.durationMinutes,
   });
 
+  double? _derivedDistanceKmFromRoute() {
+    if (route == null) return null;
+    final m = route!['totalDistance'];
+    if (m == null) return null;
+    final meters = TypeConverter.toDoubleWithDefault(m, 0.0);
+    if (meters <= 0) return null;
+    return (meters / 1000 * 1000).round() / 1000;
+  }
+
+  int? _derivedDurationMinutesFromRoute() {
+    if (route == null) return null;
+    final sec = route!['duration'];
+    if (sec == null) return null;
+    final s = TypeConverter.toDoubleWithDefault(sec, 0.0).round();
+    if (s <= 0) return null;
+    return (s / 60).ceil();
+  }
+
   Map<String, dynamic> toMap() {
+    final km = distanceKm ?? _derivedDistanceKmFromRoute();
+    final dur = durationMinutes ?? _derivedDurationMinutesFromRoute();
+
     return {
       '_id': id,
-      'visitDate': visitDate?.toIso8601String(),
+      // BSON Date — Prisma `DateTime` na Mongo; ISO řetězec rozbije admin findMany (P2023).
+      if (visitDate != null) 'visitDate': visitDate,
       'routeTitle': routeTitle,
       'routeDescription': routeDescription,
       'dogName': dogName,
@@ -185,13 +244,15 @@ class VisitData {
       'dogNotAllowed': dogNotAllowed,
       'routeLink': routeLink,
       'route': route,
+      if (km != null) 'distanceKm': km,
+      if (dur != null) 'durationMinutes': dur,
       'seasonYear': year,
       'extraPoints': extraPoints,
       'extraData': extraData,
       'places': places.map((place) => place.toMap()).toList(),
       'state': state.name,
       'rejectionReason': rejectionReason,
-      'createdAt': createdAt?.toIso8601String(),
+      if (createdAt != null) 'createdAt': createdAt,
       'photos': photos,
       'seasonId': seasonId,
       'userId': userId,
@@ -202,10 +263,8 @@ class VisitData {
 
   factory VisitData.fromMap(Map<String, dynamic> map) {
     try {
-      // 1. Helper to extract extraPoints safely
       final extra = map['extraPoints'] is Map ? map['extraPoints'] as Map : {};
-      
-      // 2. Robust Points Parsing
+
       double parsedPoints = 0.0;
       if (map['points'] != null) {
         parsedPoints = TypeConverter.toDoubleWithDefault(map['points'], 0.0);
@@ -215,73 +274,92 @@ class VisitData {
         parsedPoints = TypeConverter.toDoubleWithDefault(extra['points'], 0.0);
       }
 
-      // 3. Robust Name Parsing
       String parsedName = 'Neznámý turista';
-      if (map['displayName'] != null) parsedName = map['displayName'].toString();
-      else if (map['user'] != null && map['user']['name'] != null) parsedName = map['user']['name'].toString();
-      else if (map['fullName'] != null) parsedName = map['fullName'].toString();
-      else if (extra['fullName'] != null) parsedName = extra['fullName'].toString();
-      else if (extra['Příjmení a jméno'] != null) parsedName = extra['Příjmení a jméno'].toString();
+      if (map['displayName'] != null) {
+        parsedName = map['displayName'].toString();
+      } else if (map['user'] != null && map['user']['name'] != null) {
+        parsedName = map['user']['name'].toString();
+      } else if (map['fullName'] != null) {
+        parsedName = map['fullName'].toString();
+      } else if (extra['fullName'] != null) {
+        parsedName = extra['fullName'].toString();
+      } else if (extra['Příjmení a jméno'] != null) {
+        parsedName = extra['Příjmení a jméno'].toString();
+      }
 
-      // 4. Robust Date Parsing
       DateTime parsedDate = DateTime.now();
       if (map['visitDate'] != null) {
-        parsedDate = map['visitDate'] is DateTime 
-            ? map['visitDate'] 
+        parsedDate = map['visitDate'] is DateTime
+            ? map['visitDate'] as DateTime
             : DateTime.tryParse(map['visitDate'].toString()) ?? DateTime.now();
       } else if (map['createdAt'] != null) {
-        parsedDate = map['createdAt'] is DateTime 
-            ? map['createdAt'] 
+        parsedDate = map['createdAt'] is DateTime
+            ? map['createdAt'] as DateTime
             : DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now();
       }
-      
-      // 5. Robust Places Parsing
+
       String parsedPlacesStr = '';
-      if (map['visitedPlaces'] != null) parsedPlacesStr = map['visitedPlaces'].toString();
-      else if (extra['Navštívená místa'] != null) parsedPlacesStr = extra['Navštívená místa'].toString();
+      if (map['visitedPlaces'] != null) {
+        parsedPlacesStr = map['visitedPlaces'].toString();
+      } else if (extra['Navštívená místa'] != null) {
+        parsedPlacesStr = extra['Navštívená místa'].toString();
+      }
+
+      double? distKm;
+      if (map['distanceKm'] != null) {
+        distKm = TypeConverter.toDoubleWithDefault(map['distanceKm'], 0.0);
+      }
+
+      int? durMin;
+      if (map['durationMinutes'] != null) {
+        durMin = TypeConverter.toIntWithDefault(map['durationMinutes'], -1);
+        if (durMin < 0) durMin = null;
+      }
 
       return VisitData(
         id: map['_id'] != null ? map['_id'].toString() : (map['id']?.toString() ?? ''),
         visitDate: parsedDate,
-        routeTitle: map['routeTitle']?.toString(), // Often null for legacy
+        routeTitle: map['routeTitle']?.toString(),
         routeDescription: map['routeDescription']?.toString(),
         dogName: map['dogName']?.toString() ?? extra['Volací jméno psa']?.toString(),
         points: parsedPoints,
         visitedPlaces: parsedPlacesStr,
         dogNotAllowed: map['dogNotAllowed']?.toString(),
         routeLink: map['routeLink']?.toString(),
-        route: map['route'] is Map ? Map<String, dynamic>.from(map['route']) : null,
+        route: map['route'] is Map ? Map<String, dynamic>.from(map['route'] as Map) : null,
         year: TypeConverter.toIntWithDefault(map['seasonYear'], parsedDate.year),
         extraPoints: Map<String, dynamic>.from(extra),
-        extraData: map['extraData'] is Map ? Map<String, dynamic>.from(map['extraData']) : null,
+        extraData: map['extraData'] is Map ? Map<String, dynamic>.from(map['extraData'] as Map) : null,
         places: (map['places'] as List<dynamic>?)
-            ?.map((place) => Place.fromMap(place))
-            .toList() ?? [],
+                ?.map((place) => Place.fromMap(Map<String, dynamic>.from(place as Map)))
+                .toList() ??
+            [],
         state: VisitState.values.firstWhere(
           (e) => e.name == map['state'],
-          orElse: () => VisitState.APPROVED, // Default legacy data to approved usually
+          orElse: () => VisitState.APPROVED,
         ),
         rejectionReason: map['rejectionReason']?.toString(),
-        createdAt: map['createdAt'] is DateTime 
-            ? map['createdAt'] 
+        createdAt: map['createdAt'] is DateTime
+            ? map['createdAt'] as DateTime
             : DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? parsedDate,
-        photos: map['photos'] is List ? List<Map<String, dynamic>>.from(map['photos']) : null,
+        photos: map['photos'] is List ? List<Map<String, dynamic>>.from(map['photos'] as List) : null,
         seasonId: map['seasonId']?.toString(),
         userId: map['userId']?.toString(),
-        user: map['user'] is Map ? Map<String, dynamic>.from(map['user']) : null,
+        user: map['user'] is Map ? Map<String, dynamic>.from(map['user'] as Map) : null,
         displayName: parsedName,
+        distanceKm: distKm,
+        durationMinutes: durMin,
       );
     } catch (e) {
       print('❌ Error parsing VisitData: $e');
       print('❌ Map data (partial): ${map['_id']}');
-      // Return a safe "Error" object instead of rethrowing, to avoid crashing list views
       return VisitData(
         id: map['_id']?.toString() ?? 'error',
         points: 0,
         visitedPlaces: 'Error parsing data',
         year: DateTime.now().year,
         extraPoints: {},
-        state: VisitState.REJECTED
+        state: VisitState.REJECTED,
       );
     }
   }
@@ -309,6 +387,8 @@ class VisitData {
     String? userId,
     Map<String, dynamic>? user,
     String? displayName,
+    double? distanceKm,
+    int? durationMinutes,
   }) {
     return VisitData(
       id: id ?? this.id,
@@ -333,15 +413,12 @@ class VisitData {
       userId: userId ?? this.userId,
       user: user ?? this.user,
       displayName: displayName ?? this.displayName,
+      distanceKm: distanceKm ?? this.distanceKm,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
     );
   }
 
+  Map<String, dynamic> toJson() => toMap();
 
-  Map<String, dynamic> toJson() {
-    return toMap();
-  }
-
-  factory VisitData.fromJson(Map<String, dynamic> json) {
-    return VisitData.fromMap(json);
-  }
-} 
+  factory VisitData.fromJson(Map<String, dynamic> json) => VisitData.fromMap(json);
+}

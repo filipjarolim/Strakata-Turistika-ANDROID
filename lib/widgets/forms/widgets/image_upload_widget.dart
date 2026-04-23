@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
+import '../../../services/auth_service.dart';
 import '../../image_picker_widget.dart';
 import '../form_design.dart';
 
@@ -20,14 +22,9 @@ class ImageUploadWidget extends StatelessWidget {
       icon: Icons.photo_library_outlined,
       child: ImagePickerWidget(
         title: field.label,
-        initialImages: formContext.selectedImages,
-        onImagesSelected: (images) {
-           // Clear and add all to keep in sync
-           formContext.selectedImages.clear();
-           for(var image in images) {
-             formContext.addPhoto(image);
-           }
-        },
+        initialAttachments: formContext.photoAttachments,
+        allowAdminTestPhoto: (AuthService.currentUser?.role ?? '') == 'ADMIN',
+        onImagesSelected: formContext.replacePhotoAttachments,
       ),
     );
   }

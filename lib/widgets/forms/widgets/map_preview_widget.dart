@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -17,12 +19,33 @@ class MapPreviewWidget extends StatelessWidget {
     final summary = formContext.trackingSummary;
     
     if (summary == null || summary.trackPoints.isEmpty) {
+      final files = formContext.selectedImages;
+      if (files.isNotEmpty) {
+        return FormSectionCard(
+          title: 'Náhled trasy',
+          subtitle: 'Polyline není k dispozici — první nahraný obrázek (např. screenshot mapy).',
+          icon: Icons.map_outlined,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: AspectRatio(
+              aspectRatio: 16 / 10,
+              child: Image.file(
+                File(files.first.path),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Text('Obrázek se nepodařilo načíst'),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       return const FormSectionCard(
         title: 'Náhled trasy',
         icon: Icons.map_outlined,
         child: SizedBox(
           height: 120,
-          child: Center(child: Text('Žádná trasa k zobrazení')),
+          child: Center(child: Text('Žádná trasa ani obrázek k zobrazení')),
         ),
       );
     }
