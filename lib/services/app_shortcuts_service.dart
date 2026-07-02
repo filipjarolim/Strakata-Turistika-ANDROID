@@ -34,7 +34,7 @@ class AppShortcutsService {
   Stream<AppShortcutAction> get actions => _actionsController.stream;
 
   Future<void> initialize() async {
-    if (_initialized || !Platform.isAndroid) return;
+    if (_initialized) return;
     _initialized = true;
 
     await _quickActions.initialize((String type) {
@@ -44,10 +44,22 @@ class AppShortcutsService {
       _actionsController.add(action);
     });
 
-    await _quickActions.setShortcutItems(const <ShortcutItem>[
-      ShortcutItem(type: 'start_tracking', localizedTitle: 'Spustit sledovani'),
-      ShortcutItem(type: 'open_map', localizedTitle: 'Mapa'),
-      ShortcutItem(type: 'open_offline', localizedTitle: 'Offline mapy'),
+    await _quickActions.setShortcutItems(<ShortcutItem>[
+      ShortcutItem(
+        type: 'start_tracking',
+        localizedTitle: Platform.isIOS ? 'Start Tracking' : 'Spustit sledovani',
+        icon: Platform.isIOS ? 'location' : null,
+      ),
+      ShortcutItem(
+        type: 'open_map',
+        localizedTitle: Platform.isIOS ? 'Map' : 'Mapa',
+        icon: Platform.isIOS ? 'location.fill' : null,
+      ),
+      ShortcutItem(
+        type: 'open_offline',
+        localizedTitle: Platform.isIOS ? 'Offline Maps' : 'Offline mapy',
+        icon: Platform.isIOS ? 'map' : null,
+      ),
     ]);
   }
 
