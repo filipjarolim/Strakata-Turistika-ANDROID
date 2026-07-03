@@ -37,7 +37,7 @@ class AuthService {
   static Future<void> _testPluginAvailability() async {
     try {
       // Test SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
+      await SharedPreferences.getInstance();
       print('✅ SharedPreferences plugin is available');
     } catch (e) {
       print('❌ SharedPreferences plugin not available: $e');
@@ -102,7 +102,7 @@ class AuthService {
   static Future<bool> isGoogleSignInAvailable() async {
     try {
       // Try to access the Google Sign-In instance with a simple operation
-      final isSignedIn = await _googleSignIn.isSignedIn();
+      await _googleSignIn.isSignedIn();
       return true;
     } catch (e) {
       print('⚠️ Google Sign-In plugin not available: $e');
@@ -137,7 +137,8 @@ class AuthService {
           );
         }
         
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        // Fetch authentication to verify the Google Sign-In
+        await googleUser.authentication;
         
         // Create user object from Google data
         final user = User(

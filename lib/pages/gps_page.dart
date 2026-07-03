@@ -92,7 +92,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   double _sheetExtent = 0.18;
   double _topQuickDragStartValue = 0.0;
   double _topQuickDragAccum = 0.0;
-  MonthlyThemeData? _monthlyTheme;
   List<StrakataRouteData> _strakataRoutes = const [];
 
   @override
@@ -131,7 +130,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     final routes = await CompetitionDashboardService().getActiveStrakataRoutes();
     if (!mounted) return;
     setState(() {
-      _monthlyTheme = theme;
       _strakataRoutes = routes;
     });
   }
@@ -987,88 +985,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     }
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => DynamicUploadPage(slug: slug)),
-    );
-  }
-
-  void _showScoredPlacesSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.52,
-        minChildSize: 0.36,
-        maxChildSize: 0.86,
-        snap: true,
-        snapSizes: const [0.36, 0.52, 0.86],
-        builder: (_, controller) => ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          child: Container(
-            color: const Color(0xFFFFFBF7),
-            child: ListView(
-              controller: controller,
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-              children: [
-                const Center(child: StrakataSheetHandle()),
-                const SizedBox(height: 10),
-                const Text(
-                  'Bodovaná místa z mapy',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Vyberte kategorii a otevřete nahrání trasy s navštívenými místy.',
-                  style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 14),
-                if (_strakataRoutes.isEmpty)
-                  const Text('Aktivní bodované kategorie teď nejsou dostupné.')
-                else
-                  ..._strakataRoutes.map(
-                    (r) => Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () {
-                            Navigator.of(ctx).pop();
-                            _openUploadFromTopSheet(
-                              'gps-tracking',
-                              toast: 'Vybraná kategorie: ${r.label}. Doplňte ji v detailech návštěvy.',
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF4F0E8),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE8E4DC)),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(r.icon, style: const TextStyle(fontSize: 20)),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    r.label,
-                                    style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                                  ),
-                                ),
-                                const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
