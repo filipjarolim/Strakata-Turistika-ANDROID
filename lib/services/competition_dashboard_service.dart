@@ -36,9 +36,8 @@ class CompetitionDashboardService {
 
   Future<MonthlyThemeData?> getCurrentMonthlyTheme() async {
     final now = DateTime.now();
-    return _db.execute((db) async {
-      final collection = db.collection('monthly_themes');
-      final doc = await collection.findOne({
+    try {
+      final doc = await _db.findOne('monthly_themes', {
         'year': now.year,
         'month': now.month,
       });
@@ -53,26 +52,29 @@ class CompetitionDashboardService {
         month: TypeConverter.toInt(doc['month']) ?? now.month,
         keywords: keywords,
       );
-    }).catchError((_) => null);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<List<StrakataRouteData>> getActiveStrakataRoutes() async {
-    return _db.execute((db) async {
-      final collection = db.collection('strakata_trasy');
-      final docs = await collection.find({'isActive': true}).toList();
+    try {
+      final docs = await _db.find('strakata_trasy', {'isActive': true});
       final items = docs
           .map(
             (doc) => StrakataRouteData(
               id: doc['_id']?.toString() ?? doc['id']?.toString() ?? '',
               label: doc['label']?.toString() ?? doc['name']?.toString() ?? 'Strakatá trasa',
               icon: doc['icon']?.toString() ?? '🧭',
-                      order: TypeConverter.toInt(doc['order']) ?? 999,
+              order: TypeConverter.toInt(doc['order']) ?? 999,
             ),
           )
           .where((e) => e.id.isNotEmpty)
           .toList();
       items.sort((a, b) => a.order.compareTo(b.order));
       return items;
-    }).catchError((_) => <StrakataRouteData>[]);
+    } catch (_) {
+      return <StrakataRouteData>[];
+    }
   }
 }

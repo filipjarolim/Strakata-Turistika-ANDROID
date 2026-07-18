@@ -157,10 +157,8 @@ class PlaceTypeConfigService {
   static const String _collection = 'place_type_configs';
 
   Future<List<PlaceTypeConfig>> getPlaceTypeConfigs() async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
-      final configs = await collection.find().toList();
-      
+    try {
+      final configs = await _dbService.find(_collection, {});
       if (configs.isEmpty) {
         throw Exception('Kolekce place_type_configs je prázdná.');
       }
@@ -168,16 +166,15 @@ class PlaceTypeConfigService {
       configs.sort((a, b) => PlaceTypeConfig.safeIntFromMap(a['order']).compareTo(PlaceTypeConfig.safeIntFromMap(b['order'])));
       final result = configs.map((doc) => PlaceTypeConfig.fromMap(doc)).toList();
       return result.where((config) => config.isActive).toList();
-    }).catchError((e) {
+    } catch (e) {
       print('❌ Error loading place type configs: $e');
       return <PlaceTypeConfig>[];
-    });
+    }
   }
 
   Future<bool> savePlaceTypeConfigs(List<PlaceTypeConfig> configs) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
-      await collection.deleteMany({});
+    try {
+      await _dbService.deleteMany(_collection, {});
       final currentUser = AuthService.currentUser?.id;
       final now = DateTime.now();
       
@@ -186,69 +183,67 @@ class PlaceTypeConfigService {
       }).toList();
 
       if (configsToSave.isNotEmpty) {
-        await collection.insertAll(configsToSave);
+        await _dbService.insertAll(_collection, configsToSave);
       }
       return true;
-    }).catchError((e) {
+    } catch (e) {
       print('❌ Error saving place type configs: $e');
       return false;
-    });
+    }
   }
 
   Future<bool> updatePlaceTypeConfig(PlaceTypeConfig config) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
+    try {
       final currentUser = AuthService.currentUser?.id;
       final now = DateTime.now();
       
       final configToUpdate = config.copyWith(updatedAt: now, updatedBy: currentUser);
-      final result = await collection.replaceOne({'id': config.id}, configToUpdate.toMap());
-      return result.isSuccess;
-    }).catchError((e) {
+      await _dbService.updateOne(_collection, {'id': config.id}, {'\$set': configToUpdate.toMap()});
+      return true;
+    } catch (e) {
       print('❌ Error updating place type config: $e');
       return false;
-    });
+    }
   }
 
   Future<bool> reorderPlaceTypeConfigs(List<String> configIds) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
+    try {
       for (int i = 0; i < configIds.length; i++) {
-        await collection.updateOne(
+        await _dbService.updateOne(
+          _collection,
           {'id': configIds[i]},
           {'\$set': {'order': i}},
         );
       }
       return true;
-    }).catchError((e) {
+    } catch (e) {
       print('❌ Error reordering place type configs: $e');
       return false;
-    });
+    }
   }
 
   Future<bool> deletePlaceTypeConfig(String configId) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
-      final result = await collection.deleteOne({'id': configId});
-      return result.isSuccess;
-    }).catchError((e) {
+    try {
+      await _dbService.deleteOne(_collection, {'id': configId});
+      return true;
+    } catch (e) {
       print('❌ Error deleting place type config: $e');
       return false;
-    });
+    }
   }
 
   Future<bool> updatePlaceTypeStatus(String configId, bool isActive) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
-      final result = await collection.updateOne(
+    try {
+      await _dbService.updateOne(
+        _collection,
         {'id': configId},
         {'\$set': {'isActive': isActive}},
       );
-      return result.isSuccess;
-    }).catchError((e) {
+      return true;
+    } catch (e) {
       print('❌ Error updating place type config status: $e');
       return false;
-    });
+    }
   }
 
   Future<bool> reorderPlaceTypes(List<String> configIds) async {

@@ -12,34 +12,30 @@ class FormService {
   final DatabaseService _dbService = DatabaseService();
 
   Future<List<FormConfig>> getForms() async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
-      final docs = await collection.find().toList();
+    try {
+      final docs = await _dbService.find(_collection, {});
       return docs.map((doc) => FormConfig.fromJson(doc)).toList();
-    }).catchError((e) {
+    } catch (e) {
       print('❌ Error getting forms: $e');
       return <FormConfig>[];
-    });
+    }
   }
 
   Future<FormConfig?> getFormBySlug(String slug) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
-      final doc = await collection.findOne({'slug': slug});
-      if (doc == null) {
-        throw Exception(
-          'Strict mode: formulář "$slug" nebyl v databázi nalezen.',
-        );
-      }
+    final doc = await _dbService.findOne(_collection, {'slug': slug});
+    if (doc == null) {
+      throw Exception(
+        'Strict mode: formulář "$slug" nebyl v databázi nalezen.',
+      );
+    }
 
-      final parsed = FormConfig.fromJson(doc);
-      if (parsed.steps.isEmpty) {
-        throw Exception(
-          'Strict mode: formulář "$slug" v databázi neobsahuje žádné kroky.',
-        );
-      }
-      print('✅ [FormService] Loaded "$slug" form from DB (strict mode)');
-      return parsed;
-    });
+    final parsed = FormConfig.fromJson(doc);
+    if (parsed.steps.isEmpty) {
+      throw Exception(
+        'Strict mode: formulář "$slug" v databázi neobsahuje žádné kroky.',
+      );
+    }
+    print('✅ [FormService] Loaded "$slug" form from DB (strict mode)');
+    return parsed;
   }
 }

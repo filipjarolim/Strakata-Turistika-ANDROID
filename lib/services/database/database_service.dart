@@ -1,213 +1,217 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:mongo_dart/mongo_dart.dart';
+import 'package:http/http.dart' as http;
+import '../error_recovery_service.dart';
 
 class DatabaseService {
-  // Singleton pattern
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal();
 
-  Db? _db;
-  Future<bool>? _connectFuture;
-  Future? _lock;
+  bool _isConnected = false;
+  String? _baseUrl;
+  String? _apiKey;
 
-  /// Returns the database instance.
-  Db? get db => _db;
+  bool get isConnected => _isConnected;
 
-  /// Returns true if connected.
-  bool get isConnected => _db != null && _db!.state == State.OPEN;
-
-  /// Connects to the database using the URL from .env.
-  /// This version is aggressive with TLS for Emulator compatibility.
   Future<bool> connect() async {
-    // Synchronization: if a connection attempt is already in progress, wait for it.
-    if (_connectFuture != null) {
-      return _connectFuture!;
-    }
-
-    _connectFuture = _internalConnect();
-    try {
-      final result = await _connectFuture!;
-      return result;
-    } finally {
-      _connectFuture = null;
-    }
-  }
-
-  Future<bool> _internalConnect() async {
-    // If already connected, do a quick health check
-    if (isConnected) {
-      try {
-        await _db!.getCollectionNames(); // Lightweight ping
-        return true;
-      } catch (e) {
-        // print('⚠️ [DatabaseService] Health check failed, reconnecting...');
-        await close();
-      }
-    }
-
     try {
       await dotenv.load();
-      var url = dotenv.env['DATABASE_URL'];
+      _baseUrl = dotenv.env['API_BASE_URL']?.trim();
+      _apiKey = dotenv.env['MOBILE_API_KEY']?.trim();
 
-      if (url == null || url.isEmpty) {
-        print('❌ [DatabaseService] DATABASE_URL not found in .env');
+      if (_baseUrl == null || _baseUrl!.isEmpty) {
+        print('❌ [DatabaseService] API_BASE_URL not found in .env');
+        _isConnected = false;
         return false;
       }
 
-      // 1. Force TLS/SSL for Atlas compatibility on Emulator
-      if (!url.contains('tls=') && !url.contains('ssl=')) {
-        url += (url.contains('?') ? '&' : '?') + 'tls=true';
-      }
-      
-      // 2. Add extra safety for self-signed or emulator-proxy certs if needed
-      if (!url.contains('tlsAllowInvalidCertificates=')) {
-        url += '&tlsAllowInvalidCertificates=true&tlsInsecure=true';
-      }
-
-      // 3. Ensure authSource is set for Atlas
-      if (!url.contains('authSource=')) {
-        url += '&authSource=admin';
-      }
-      
-      // 4. Increase timeouts for flaky networks.
-      // REDUCED: 30s is too long. Using 10s.
-      if (!url.contains('connectTimeoutMS=')) {
-        url += '&connectTimeoutMS=10000&socketTimeoutMS=10000&serverSelectionTimeoutMS=10000';
-      }
-
-      print('🔗 [DatabaseService] Connecting to MongoDB...');
-      
-      _db = await Db.create(url);
-      
-      // 5. Open with explicit secure flag
-      // Wait for the primary to be ready
-      await _db!.open(secure: true);
-      
-      // Give the driver a moment to establish background pool/connections
-      // REDUCED: 3s is too long. Using 1s.
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      // 6. Verify primary is ready (Wait for master)
-      bool isReady = false;
-      int retries = 5; // Reduced from 15
-      while (!isReady && retries > 0) {
-        try {
-          await _db!.getCollectionNames(); // This forces a master check
-          isReady = true;
-        } catch (e) {
-          final errorStr = e.toString();
-          final isRetryable = errorStr.contains('No master connection') || 
-                             errorStr.contains('connection closed') ||
-                             errorStr.contains('reset by peer');
-
-          if (isRetryable) {
-            // print('⏳ [DatabaseService] Waiting for stable connection (${6-retries}/5): $e');
-            await Future.delayed(const Duration(milliseconds: 1000));
-            retries--;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      if (isReady) {
-        final dbName = _db?.databaseName ?? 'unknown';
-        print('✅ [DatabaseService] Connected (databaseName=$dbName)');
-        return true;
-      } else {
-        print('❌ [DatabaseService] Timed out waiting for master connection');
-        await close();
+      // Check if network is available
+      final isOffline = !await ErrorRecoveryService().isNetworkAvailable();
+      if (isOffline) {
+        print('⚠️ [DatabaseService] Network unreachable (Offline Mode)');
+        _isConnected = false;
         return false;
       }
-    } on SocketException catch (_) {
-      // Specific handling for network/DNS errors (common on Emulator)
-      print('⚠️ [DatabaseService] Network unreachable (Offline Mode)');
-      _db = null;
-      return false;
+
+      _isConnected = true;
+      print('✅ [DatabaseService] REST API database bridge initialized (baseUrl=$_baseUrl)');
+      return true;
     } catch (e) {
-      // Check for strict SocketException string if "on SocketException" didn't catch it
-      if (e.toString().contains('SocketException') || e.toString().contains('Failed host lookup')) {
-         print('⚠️ [DatabaseService] Connection failed (Offline Mode)');
-      } else {
-         print('❌ [DatabaseService] Connection failed: $e');
-      }
-      _db = null;
+      print('❌ [DatabaseService] Initialization failed: $e');
+      _isConnected = false;
       return false;
     }
   }
 
-  /// Centralized execution wrapper for DB operations.
-  /// Handles auto-connection, master election wait, socket reset retries, and strict serialization.
-  Future<T> execute<T>(Future<T> Function(Db db) operation) async {
-    // 1. Strict Mutex Chain to prevent concurrent DB requests
-    final prevLock = _lock;
-    final completer = Completer();
-    _lock = completer.future;
-    
-    if (prevLock != null) {
-      await prevLock.catchError((_) => null);
-    }
-
-    try {
-      return await _internalExecute(operation);
-    } finally {
-      completer.complete();
-      // Only clear if we are still the latest lock in the chain
-      if (_lock == completer.future) {
-        _lock = null;
-      }
-    }
-  }
-
-  Future<T> _internalExecute<T>(Future<T> Function(Db db) operation) async {
-    int attempts = 0;
-    const maxAttempts = 10;
-
-    while (attempts < maxAttempts) {
-      attempts++;
-      try {
-        if (!isConnected) {
-          final success = await connect();
-          if (!success) throw Exception('Nepodařilo se připojit k databázi');
-        }
-
-        return await operation(_db!);
-      } catch (e) {
-        final errorStr = e.toString();
-        final isRetryable = errorStr.contains('No master connection') || 
-                           errorStr.contains('connection closed') ||
-                           errorStr.contains('reset by peer');
-
-        if (isRetryable && attempts < maxAttempts) {
-          final waitMs = attempts * 200;
-          print('🔄 [DatabaseService] Retrying in ${waitMs}ms...');
-          
-          await close(); // Close existing just in case it's a dirty state
-          await Future.delayed(Duration(milliseconds: waitMs));
-          continue;
-        }
-        
-        print('❌ [DatabaseService] Operation failed permanently: $e');
-        rethrow;
-      }
-    }
-    throw Exception('Neočekávaná chyba při provádění databázové operace');
-  }
-
-  /// Get a collection by name.
-  /// DEPRECATED: Prefer [execute] to handle connection resilience.
-  Future<DbCollection?> getCollection(String name) async {
-    return execute((db) async => db.collection(name));
-  }
-
-  /// Close the connection.
   Future<void> close() async {
+    _isConnected = false;
+  }
+
+  Future<dynamic> _request(String action, String collection, Map<String, dynamic> bodyFields) async {
+    if (_baseUrl == null || _apiKey == null) {
+      final success = await connect();
+      if (!success) {
+        throw const SocketException('Nepodařilo se připojit k serveru. Zkontrolujte prosím své internetové připojení.');
+      }
+    }
+
+    final isOffline = !await ErrorRecoveryService().isNetworkAvailable();
+    if (isOffline) {
+      _isConnected = false;
+      throw const SocketException('Nepodařilo se připojit k internetu. Zkontrolujte prosím své připojení a zkuste to znovu.');
+    }
+
+    final url = Uri.parse('$_baseUrl/mobile/db');
+    final headers = {
+      'Content-Type': 'application/json',
+      'x-mobile-api-key': _apiKey!,
+    };
+
+    final requestBody = {
+      'collection': collection,
+      'action': action,
+      ...bodyFields,
+    };
+
     try {
-      await _db?.close();
-    } catch (_) {}
-    _db = null;
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode(requestBody),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['success'] == true) {
+          _isConnected = true;
+          return responseData['result'];
+        } else {
+          throw Exception(responseData['error'] ?? 'Neznámá chyba na serveru');
+        }
+      } else if (response.statusCode == 401) {
+        throw Exception('Chyba ověření API klíče (401 Unauthorized).');
+      } else if (response.statusCode == 403) {
+        throw Exception('Přístup ke kolekci "$collection" byl zamítnut (403 Forbidden).');
+      } else {
+        throw Exception('Server vrátil neočekávaný status kód: ${response.statusCode}');
+      }
+    } on TimeoutException {
+      throw const SocketException('Připojení k serveru vypršelo. Zkontrolujte stabilitu internetu.');
+    } on SocketException catch (e) {
+      throw SocketException('Nepodařilo se navázat spojení se serverem: ${e.message}');
+    } catch (e) {
+      throw Exception('Chyba při komunikaci s databází: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> find(
+    String collection,
+    Map<String, dynamic> selector, {
+    Map<String, dynamic>? sort,
+    int? skip,
+    int? limit,
+  }) async {
+    final body = <String, dynamic>{'selector': selector};
+    if (sort != null) body['sort'] = sort;
+    if (skip != null) body['skip'] = skip;
+    if (limit != null) body['limit'] = limit;
+
+    final rawResult = await _request('find', collection, body);
+    if (rawResult is List) {
+      return rawResult.map((item) => Map<String, dynamic>.from(item)).toList();
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>?> findOne(
+    String collection,
+    Map<String, dynamic> selector,
+  ) async {
+    final rawResult = await _request('findOne', collection, {'selector': selector});
+    if (rawResult != null) {
+      return Map<String, dynamic>.from(rawResult);
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> insertOne(
+    String collection,
+    Map<String, dynamic> document,
+  ) async {
+    final rawResult = await _request('insertOne', collection, {'document': document});
+    return Map<String, dynamic>.from(rawResult);
+  }
+
+  Future<Map<String, dynamic>> insertAll(
+    String collection,
+    List<Map<String, dynamic>> documents,
+  ) async {
+    final rawResult = await _request('insertMany', collection, {'documents': documents});
+    return Map<String, dynamic>.from(rawResult);
+  }
+
+  Future<Map<String, dynamic>> updateOne(
+    String collection,
+    Map<String, dynamic> selector,
+    Map<String, dynamic> update, {
+    bool upsert = false,
+  }) async {
+    final rawResult = await _request('updateOne', collection, {
+      'selector': selector,
+      'update': update,
+      'upsert': upsert,
+    });
+    return Map<String, dynamic>.from(rawResult);
+  }
+
+  Future<Map<String, dynamic>> updateMany(
+    String collection,
+    Map<String, dynamic> selector,
+    Map<String, dynamic> update,
+  ) async {
+    final rawResult = await _request('updateMany', collection, {
+      'selector': selector,
+      'update': update,
+    });
+    return Map<String, dynamic>.from(rawResult);
+  }
+
+  Future<Map<String, dynamic>> deleteOne(
+    String collection,
+    Map<String, dynamic> selector,
+  ) async {
+    final rawResult = await _request('deleteOne', collection, {'selector': selector});
+    return Map<String, dynamic>.from(rawResult);
+  }
+
+  Future<Map<String, dynamic>> deleteMany(
+    String collection,
+    Map<String, dynamic> selector,
+  ) async {
+    final rawResult = await _request('deleteMany', collection, {'selector': selector});
+    return Map<String, dynamic>.from(rawResult);
+  }
+
+  Future<int> count(
+    String collection,
+    Map<String, dynamic> selector,
+  ) async {
+    final rawResult = await _request('count', collection, {'selector': selector});
+    if (rawResult is int) return rawResult;
+    return int.tryParse(rawResult.toString()) ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> aggregate(
+    String collection,
+    List<Map<String, dynamic>> pipeline,
+  ) async {
+    final rawResult = await _request('aggregate', collection, {'pipeline': pipeline});
+    if (rawResult is List) {
+      return rawResult.map((item) => Map<String, dynamic>.from(item)).toList();
+    }
+    return [];
   }
 }

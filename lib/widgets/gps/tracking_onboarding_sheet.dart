@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../ui/app_button.dart';
@@ -7,20 +9,26 @@ class TrackingOnboardingSheet extends StatefulWidget {
   final VoidCallback? onComplete;
   final bool showSkipButton;
 
+  /// When true (GPS tracking flow), all three steps must be completed.
+  /// When false (app entry), foreground location is enough to continue.
+  final bool requireAllForComplete;
+
   const TrackingOnboardingSheet({
     super.key,
     this.onComplete,
     this.showSkipButton = true,
+    this.requireAllForComplete = true,
   });
 
   @override
   State<TrackingOnboardingSheet> createState() => _TrackingOnboardingSheetState();
 }
 
-class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with WidgetsBindingObserver {
+class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
+    with WidgetsBindingObserver {
   bool _locationGranted = false;
   bool _backgroundGranted = false;
-  bool _batteryOptimized = true; // True means optimization is ON (bad for us)
+  bool _batteryOptimized = true;
   bool _isCompleting = false;
 
   @override
@@ -43,33 +51,40 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with 
     }
   }
 
+  bool get _canContinue {
+    if (widget.requireAllForComplete) {
+      return _locationGranted && _backgroundGranted && !_batteryOptimized;
+    }
+    return _locationGranted;
+  }
+
   Future<void> _checkPermissions() async {
     final locStatus = await Permission.location.status;
     final bgStatus = await Permission.locationAlways.status;
     final batteryStatus = await Permission.ignoreBatteryOptimizations.status;
 
-    if (mounted) {
-      setState(() {
-        _locationGranted = locStatus.isGranted;
-        _backgroundGranted = bgStatus.isGranted;
-        _batteryOptimized = !batteryStatus.isGranted;
-      });
+    if (!mounted) return;
 
-      // Auto-close if everything is good
-      if (_locationGranted && _backgroundGranted && !_batteryOptimized) {
-        if (_isCompleting) return; // Prevent multiple triggers
-        _isCompleting = true;
-        
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            if (widget.onComplete != null) {
-              widget.onComplete!();
-            } else {
-              Navigator.of(context).pop(true);
-            }
-          }
-        });
-      }
+    setState(() {
+      _locationGranted = locStatus.isGranted;
+      _backgroundGranted = bgStatus.isGranted;
+      _batteryOptimized = !batteryStatus.isGranted;
+    });
+
+    if (_canContinue && !_isCompleting) {
+      _isCompleting = true;
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        _finish();
+      });
+    }
+  }
+
+  void _finish() {
+    if (widget.onComplete != null) {
+      widget.onComplete!();
+    } else {
+      Navigator.of(context).pop(_canContinue);
     }
   }
 
@@ -78,19 +93,74 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with 
     await _checkPermissions();
   }
 
-  Future<void> _requestBackground() async {
-    // Show instruction first if needed, as per Android guidelines
-    // But since this IS the instruction screen, we can just request/open settings
+  Future<void> _showBackgroundInstructions() async {
+    if (!mounted) return;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nastavení polohy na pozadí'),
+        content: const Text(
+          'V nastavení telefonu otevřete sekci Oprávnění → Poloha '
+          'a zvolte „Povolit vždy“ (ne „Pouze při používání“).\n\n'
+          'Sekce Baterie není totéž — tu nastavíte až v dalším kroku.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Zrušit'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Otevřít nastavení'),
+          ),
+        ],
+      ),
+    );
+    if (open != true) return;
     if (await Permission.locationAlways.isPermanentlyDenied) {
       await openAppSettings();
     } else {
       await Permission.locationAlways.request();
+      if (!await Permission.locationAlways.isGranted && Platform.isAndroid) {
+        await openAppSettings();
+      }
     }
     await _checkPermissions();
   }
 
+  Future<void> _requestBackground() async {
+    await _showBackgroundInstructions();
+  }
+
   Future<void> _requestBattery() async {
+    if (!mounted) return;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Úspora baterie'),
+        content: const Text(
+          'V nastavení aplikace otevřete sekci Baterie a zvolte '
+          '„Bez omezení“ nebo „Neomezeno“.\n\n'
+          'Na některých telefonech (Samsung, Xiaomi…) může být volba '
+          'pod jiným názvem — hledejte vypnutí úspory baterie pro tuto aplikaci.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Zrušit'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Otevřít nastavení'),
+          ),
+        ],
+      ),
+    );
+    if (open != true) return;
     await Permission.ignoreBatteryOptimizations.request();
+    if (!await Permission.ignoreBatteryOptimizations.isGranted) {
+      await openAppSettings();
+    }
     await _checkPermissions();
   }
 
@@ -120,16 +190,17 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with 
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Pro spolehlivý záznam trasy i při vypnuté obrazovce potřebujeme následující oprávnění.',
-            style: TextStyle(
+          Text(
+            widget.requireAllForComplete
+                ? 'Pro spolehlivý záznam trasy i při vypnuté obrazovce potřebujeme následující oprávnění.'
+                : 'Pro základní používání stačí přístup k poloze. Doporučujeme dokončit i další kroky před výletem s GPS.',
+            style: const TextStyle(
               fontSize: 15,
               color: Color(0xFF4B5563),
               height: 1.4,
             ),
           ),
           const SizedBox(height: 32),
-          
           _buildStep(
             title: 'Přístup k poloze',
             description: 'Základní oprávnění pro GPS.',
@@ -137,58 +208,68 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with 
             onAction: _requestLocation,
             buttonText: 'Povolit',
           ),
-          
           const SizedBox(height: 20),
-          
           _buildStep(
             title: 'Sledování na pozadí',
-            description: 'Umožní aplikaci běžet při zamčeném telefonu. Vyberte "Vždy povolit" / "Allow all the time".',
+            description:
+                'V nastavení zvolte „Povolit vždy“. Jinak se GPS při zamčeném telefonu vypne.',
             isDone: _backgroundGranted,
             onAction: _requestBackground,
-            buttonText: 'Povolit "Vždy"',
-            isEnabled: _locationGranted, // Can't ask background before foreground
-          ),
-          
-          const SizedBox(height: 20),
-          
-          _buildStep(
-            title: 'Vypnout úsporu baterie',
-            description: 'Zabrání systému ukončit aplikaci během výletu.',
-            isDone: !_batteryOptimized,
-            onAction: _requestBattery,
-            buttonText: 'Vypnout omezení',
+            buttonText: 'Nastavit „Vždy“',
             isEnabled: _locationGranted,
           ),
-          
-          const SizedBox(height: 32),
-          
+          const SizedBox(height: 20),
+          _buildStep(
+            title: 'Vypnout úsporu baterie',
+            description: 'Samostatný krok v sekci Baterie — zabrání ukončení aplikace během výletu.',
+            isDone: !_batteryOptimized,
+            onAction: _requestBattery,
+            buttonText: 'Nastavit baterii',
+            isEnabled: _locationGranted,
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _checkPermissions,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Zkontrolovat nastavení znovu'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF4B5563),
+                side: const BorderSide(color: Color(0xFFE5E7EB)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: AppButton(
-              onPressed: allDone 
+              onPressed: _canContinue
                   ? () {
                       if (_isCompleting) return;
                       _isCompleting = true;
-                      
-                      if (widget.onComplete != null) {
-                        widget.onComplete!();
-                      } else {
-                        Navigator.of(context).pop(true);
-                      }
+                      _finish();
                     }
-                  : (widget.showSkipButton 
-                      ? () => Navigator.of(context).pop(false)
-                      : null), // Disable if skip is not allowed
-              text: allDone ? 'Hotovo, spustit aplikaci' : (widget.showSkipButton ? 'Nastavit později' : 'Dokončete nastavení'),
-              type: allDone ? AppButtonType.primary : AppButtonType.ghost,
+                  : (widget.showSkipButton ? () => Navigator.of(context).pop(false) : null),
+              text: _primaryButtonLabel(allDone),
+              type: _canContinue ? AppButtonType.primary : AppButtonType.ghost,
               size: AppButtonSize.large,
-              // If not done and skip is hidden, disable the button
-              // AppButton doesn't have "disabled" property exposed directly in the example used, assuming standard behavior or handling via onPressed null
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _primaryButtonLabel(bool allDone) {
+    if (_canContinue) {
+      return widget.requireAllForComplete
+          ? 'Hotovo, spustit sledování'
+          : 'Pokračovat do aplikace';
+    }
+    if (widget.showSkipButton) return 'Nastavit později';
+    return 'Nejdřív povolte přístup k poloze';
   }
 
   Widget _buildStep({
@@ -204,13 +285,14 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with 
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Check/Number Icon
           Container(
             width: 28,
             height: 28,
             margin: const EdgeInsets.only(top: 2),
             decoration: BoxDecoration(
-              color: isDone ? const Color(0xFF4CAF50) : (isEnabled ? const Color(0xFFE5E7EB) : const Color(0xFFF3F4F6)),
+              color: isDone
+                  ? const Color(0xFF4CAF50)
+                  : (isEnabled ? const Color(0xFFE5E7EB) : const Color(0xFFF3F4F6)),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -220,8 +302,6 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet> with 
             ),
           ),
           const SizedBox(width: 16),
-          
-          // Content
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

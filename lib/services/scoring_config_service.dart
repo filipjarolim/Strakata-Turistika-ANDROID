@@ -1,4 +1,3 @@
-import 'package:mongo_dart/mongo_dart.dart' as mongo;
 import 'database/database_service.dart';
 import 'auth_service.dart';
 import '../utils/type_converter.dart';
@@ -113,11 +112,7 @@ class ScoringConfigService {
 
   Future<ScoringConfig> getConfig() async {
     try {
-      final doc = await _dbService.execute((db) async {
-        final collection = db.collection(_collection);
-        return await collection.findOne({'active': true});
-      });
-
+      final doc = await _dbService.findOne(_collection, {'active': true});
       if (doc == null) return _defaultConfig();
       return ScoringConfig.fromMap(doc);
     } catch (e) {
@@ -127,23 +122,24 @@ class ScoringConfigService {
   }
 
   Future<bool> saveConfig(ScoringConfig config) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collection);
+    try {
       final updatedBy = AuthService.currentUser?.id;
       final toSave = config.copyWith(updatedAt: DateTime.now(), updatedBy: updatedBy).toMap();
 
-      var modifier = mongo.modify.setOnInsert('id', config.id);
-      final fieldsToSet = Map<String, dynamic>.from(toSave)..remove('id');
-      fieldsToSet.forEach((k, v) {
-        modifier = modifier.set(k, v);
-      });
-
-      await collection.updateOne({'id': config.id}, modifier, upsert: true);
+      await _dbService.updateOne(
+        _collection,
+        {'id': config.id},
+        {
+          '\$set': Map<String, dynamic>.from(toSave)..remove('id'),
+          '\$setOnInsert': {'id': config.id}
+        },
+        upsert: true,
+      );
       return true;
-    }).catchError((e) {
+    } catch (e) {
       print('❌ Error saving scoring config: $e');
       return false;
-    });
+    }
   }
 
   ScoringConfig _defaultConfig() => ScoringConfig(

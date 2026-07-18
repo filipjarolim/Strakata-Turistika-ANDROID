@@ -1110,8 +1110,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _updateUserImage(String userId, String imageUrl) async {
-    final users = await DatabaseService().getCollection('users');
-    if (users != null) await users.updateOne({'_id': userId}, {'\$set': {'image': imageUrl, 'updatedAt': DateTime.now().toIso8601String()}});
+    await DatabaseService().updateOne('users', {'_id': userId}, {'\$set': {'image': imageUrl, 'updatedAt': DateTime.now().toIso8601String()}});
     final u = AuthService.currentUser;
     if (u != null) {
        final updated = User(id: u.id, email: u.email, name: u.name, image: imageUrl, isOAuth: u.isOAuth, provider: u.provider, providerAccountId: u.providerAccountId, role: u.role, isTwoFactorEnabled: u.isTwoFactorEnabled, dogName: u.dogName);
@@ -1122,8 +1121,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _updateUserName(String userId, String name) async {
-    final users = await DatabaseService().getCollection('users');
-    if (users != null) await users.updateOne({'_id': userId}, {'\$set': {'name': name, 'updatedAt': DateTime.now().toIso8601String()}});
+    await DatabaseService().updateOne('users', {'_id': userId}, {'\$set': {'name': name, 'updatedAt': DateTime.now().toIso8601String()}});
     final u = AuthService.currentUser;
     if (u != null) {
        final updated = User(id: u.id, email: u.email, name: name, image: u.image, isOAuth: u.isOAuth, provider: u.provider, providerAccountId: u.providerAccountId, role: u.role, isTwoFactorEnabled: u.isTwoFactorEnabled, dogName: u.dogName);
@@ -1151,10 +1149,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
      try {
        final u = AuthService.currentUser;
        if (u == null) return;
-       final users = await DatabaseService().getCollection('users');
-       if (users != null) await users.deleteOne({'_id': u.id});
-       final visits = await DatabaseService().getCollection('visits');
-       if (visits != null) await visits.deleteMany({'userId': u.id});
+       await DatabaseService().deleteOne('users', {'_id': u.id});
+       await DatabaseService().deleteMany('visits', {'userId': u.id});
        await AuthService.signOut();
        if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false);
      } catch (e) {

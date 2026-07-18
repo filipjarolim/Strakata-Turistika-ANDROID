@@ -4,9 +4,11 @@ import 'package:strakataturistikaandroidapp/widgets/gps/tracking_onboarding_shee
 import '../../config/app_colors.dart';
 import '../../config/app_theme.dart';
 import '../../widgets/strakata_editorial_background.dart';
-/// One-time onboarding page that forces the user to grant permissions
+/// Onboarding page for location/battery permissions before first use.
 class PermissionOnboardingPage extends StatelessWidget {
-  const PermissionOnboardingPage({super.key});
+  final VoidCallback? onPermissionsChanged;
+
+  const PermissionOnboardingPage({super.key, this.onPermissionsChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +58,9 @@ class PermissionOnboardingPage extends StatelessWidget {
                           ],
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: const _EmbeddedOnboarding(),
+                        child: _EmbeddedOnboarding(
+                          onPermissionsChanged: onPermissionsChanged,
+                        ),
                       ),
                     ],
                   ),
@@ -71,24 +75,18 @@ class PermissionOnboardingPage extends StatelessWidget {
 }
 
 class _EmbeddedOnboarding extends StatelessWidget {
-  const _EmbeddedOnboarding();
+  final VoidCallback? onPermissionsChanged;
+
+  const _EmbeddedOnboarding({this.onPermissionsChanged});
 
   @override
   Widget build(BuildContext context) {
-    // Navigate to Home when done. 
-    // We assume PermissionGate is handling the routing, so we just need to trigger a rebuild or push replacement.
-    // Actually, calling PermissionGate logic again is best.
-    // If we are in PermissionGate context, we can just pushReplacement to home directly?
-    // The safest way is to pop until we hit the root or pushReplacement to '/'.
-    
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: TrackingOnboardingSheet(
-        showSkipButton: false, // Force them to complete it
-        onComplete: () {
-          // Restart the app from root to re-trigger PermissionGate check
-          Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-        },
+        requireAllForComplete: false,
+        showSkipButton: false,
+        onComplete: onPermissionsChanged,
       ),
     );
   }

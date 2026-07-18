@@ -1,6 +1,6 @@
+import 'dart:math';
 import '../services/database/database_service.dart';
 import '../models/visit_data.dart';
-import 'package:mongo_dart/mongo_dart.dart';
 import '../utils/type_converter.dart';
 
 class VisitRepository {
@@ -8,6 +8,15 @@ class VisitRepository {
 
   /// Musí odpovídat Prisma `VisitData` → `@@map("visits")` (stejná DB jako web).
   static const String _collectionName = 'visits';
+
+  // Helper to generate 24-char hex MongoDB ObjectId
+  String _generateObjectId() {
+    final random = Random.secure();
+    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final timeHex = timestamp.toRadixString(16).padLeft(8, '0');
+    final randomHex = List.generate(16, (_) => random.nextInt(16).toRadixString(16)).join();
+    return '$timeHex$randomHex';
+  }
 
   /// Fetch visits with pagination, filtering, and sorting
   Future<Map<String, dynamic>> getVisits({
@@ -19,38 +28,38 @@ class VisitRepository {
     bool onlyApproved = true,
     List<VisitState>? states, // New: Filter by specific states
   }) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
-      final query = where;
-      if (seasonYear != null) query.eq('seasonYear', seasonYear);
-      if (userId != null) query.eq('userId', userId);
+    try {
+      final query = <String, dynamic>{};
+      if (seasonYear != null) query['seasonYear'] = seasonYear;
+      if (userId != null) query['userId'] = userId;
       
       // Handle state filtering logic
       if (states != null && states.isNotEmpty) {
-        query.oneFrom('state', states.map((s) => s.name).toList());
+        query['state'] = {'\$in': states.map((s) => s.name).toList()};
       } else if (onlyApproved) {
-        query.eq('state', 'APPROVED');
+        query['state'] = 'APPROVED';
       }
 
       if (searchQuery != null && searchQuery.isNotEmpty) {
         final regex = '.*$searchQuery.*';
         final options = 'i';
-        query.raw({
-          '\$or': [
-            {'routeTitle': {'\$regex': regex, '\$options': options}},
-            {'visitedPlaces': {'\$regex': regex, '\$options': options}},
-            {'fullName': {'\$regex': regex, '\$options': options}},
-            {'extraPoints.fullName': {'\$regex': regex, '\$options': options}},
-            {'extraPoints.Příjmení a jméno': {'\$regex': regex, '\$options': options}},
-          ]
-        });
+        query['\$or'] = [
+          {'routeTitle': {'\$regex': regex, '\$options': options}},
+          {'visitedPlaces': {'\$regex': regex, '\$options': options}},
+          {'fullName': {'\$regex': regex, '\$options': options}},
+          {'extraPoints.fullName': {'\$regex': regex, '\$options': options}},
+          {'extraPoints.Příjmení a jméno': {'\$regex': regex, '\$options': options}},
+        ];
       }
 
-      query.sortBy('visitDate', descending: true);
-      query.skip((page - 1) * limit).limit(limit);
-
-      final totalCount = await collection.count(query);
-      final docs = await collection.find(query).toList();
+      final totalCount = await _dbService.count(_collectionName, query);
+      final docs = await _dbService.find(
+        _collectionName, 
+        query,
+        sort: {'visitDate': -1},
+        skip: (page - 1) * limit,
+        limit: limit,
+      );
       final visits = docs.map((doc) => VisitData.fromMap(doc)).toList();
 
       return {
@@ -58,10 +67,10 @@ class VisitRepository {
         'total': totalCount,
         'hasMore': (page * limit) < totalCount,
       };
-    }).catchError((e) {
+    } catch (e) {
       print('❌ [VisitRepository] Error fetching visits: $e');
-      return {'data': <VisitData>[], 'total': 0};
-    });
+      return {'data': <VisitData>[], 'total': 0, 'hasMore': false};
+    }
   }
 
   /// Get leaderboard data (aggregated points per user)
@@ -72,8 +81,7 @@ class VisitRepository {
     String? searchQuery,
     bool sortByVisits = false,
   }) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
+    try {
       final pipeline = <Map<String, Object>>[
         {
           '\$match': {
@@ -84,7 +92,7 @@ class VisitRepository {
         {
           '\$addFields': {
             'groupKey': {
-              '\$ifNull': ['\$userId', {'\$ifNull': ['\$extraPoints.fullName', '\$fullName', 'Neznámý']}]
+               '\$ifNull': ['\$userId', {'\$ifNull': ['\$extraPoints.fullName', '\$fullName', 'Neznámý']}]
             },
             'normalizedName': {
                '\$ifNull': ['\$extraPoints.fullName', {'\$ifNull': ['\$fullName', 'Neznámý']}]
@@ -141,7 +149,7 @@ class VisitRepository {
         }
       ];
 
-      final result = await collection.aggregateToStream(pipeline).toList();
+      final result = await _dbService.aggregate(_collectionName, pipeline);
       
       if (result.isEmpty) return {'data': [], 'total': 0, 'hasMore': false};
 
@@ -155,31 +163,30 @@ class VisitRepository {
         'total': total,
         'hasMore': (page * limit) < total,
       };
-    }).catchError((e) {
+    } catch (e) {
       print('❌ [VisitRepository] Error fetching leaderboard: $e');
       return {'data': [], 'total': 0, 'hasMore': false};
-    });
+    }
   }
 
   /// Get distinct seasons available in the database
   Future<List<int>> getAvailableSeasons() async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
+    try {
       final pipeline = [
         {'\$group': {'_id': '\$seasonYear'}},
         {'\$sort': {'_id': -1}}
       ];
 
-      final result = await collection.aggregateToStream(pipeline).toList();
+      final result = await _dbService.aggregate(_collectionName, pipeline);
       
       return result.map((doc) {
         final val = doc['_id'];
         return TypeConverter.toIntWithDefault(val, 0);
       }).where((year) => year > 2000).toList();
-    }).catchError((e) {
+    } catch (e) {
       print('❌ [VisitRepository] Error fetching seasons: $e');
       return <int>[];
-    });
+    }
   }
 
   /// Get all visits for a specific user
@@ -244,59 +251,48 @@ class VisitRepository {
   /// Save a visit (Create or Update). Vrací `_id` dokumentu v MongoDB, nebo `null` při chybě.
   Future<String?> saveVisit(VisitData visit) async {
     try {
-      return await _dbService.execute((db) async {
-        final collection = db.collection(_collectionName);
-        final data = Map<String, dynamic>.from(visit.toMap());
-        final String idToPersist;
-        if (visit.id.isEmpty) {
-          idToPersist = ObjectId().oid;
-          data['_id'] = idToPersist;
-          data['createdAt'] = DateTime.now();
-        } else {
-          idToPersist = visit.id;
-          data['_id'] = visit.id;
-          final existing = await collection.findOne(where.eq('_id', idToPersist));
-          if (existing != null) {
-            for (final key in _mongoKeysPreserveOnUpdate) {
-              final hasIncoming = data.containsKey(key) && data[key] != null;
-              if (!hasIncoming && existing[key] != null) {
-                data[key] = existing[key];
-              }
+      final data = Map<String, dynamic>.from(visit.toMap());
+      final String idToPersist;
+      if (visit.id.isEmpty) {
+        idToPersist = _generateObjectId();
+        data['_id'] = idToPersist;
+        data['createdAt'] = DateTime.now().toIso8601String();
+      } else {
+        idToPersist = visit.id;
+        data['_id'] = visit.id;
+        final existing = await _dbService.findOne(_collectionName, {'_id': idToPersist});
+        if (existing != null) {
+          for (final key in _mongoKeysPreserveOnUpdate) {
+            final hasIncoming = data.containsKey(key) && data[key] != null;
+            if (!hasIncoming && existing[key] != null) {
+              data[key] = existing[key];
             }
           }
         }
+      }
 
-        _prepareVisitDocumentForPrismaStorage(visit, data);
+      _prepareVisitDocumentForPrismaStorage(visit, data);
 
-        final write = await collection.replaceOne(
-          where.eq('_id', idToPersist),
-          data,
-          upsert: true,
+      await _dbService.updateOne(
+        _collectionName,
+        {'_id': idToPersist},
+        {'\$set': data},
+        upsert: true,
+      );
+
+      final verified = await _dbService.findOne(_collectionName, {'_id': idToPersist});
+      if (verified == null) {
+        print('❌ [VisitRepository] saveVisit: dokument po zápisu v DB nenalezen (_id=$idToPersist)');
+        return null;
+      }
+      final st = verified['state']?.toString();
+      if (st != null && visit.state.name.isNotEmpty && st != visit.state.name) {
+        print(
+          '⚠️ [VisitRepository] saveVisit: state v DB="$st" vs očekávaný="${visit.state.name}" (_id=$idToPersist)',
         );
+      }
 
-        if (!write.isSuccess) {
-          print(
-            '❌ [VisitRepository] saveVisit: replaceOne selhalo (_id=$idToPersist) '
-            'ok=${write.ok} opOk=${write.operationSucceeded} '
-            'err=${write.writeError?.errmsg} wc=${write.writeConcernError?.errmsg}',
-          );
-          return null;
-        }
-
-        final verified = await collection.findOne(where.eq('_id', idToPersist));
-        if (verified == null) {
-          print('❌ [VisitRepository] saveVisit: dokument po zápisu v DB nenalezen (_id=$idToPersist)');
-          return null;
-        }
-        final st = verified['state']?.toString();
-        if (st != null && visit.state.name.isNotEmpty && st != visit.state.name) {
-          print(
-            '⚠️ [VisitRepository] saveVisit: state v DB="$st" vs očekávaný="${visit.state.name}" (_id=$idToPersist)',
-          );
-        }
-
-        return idToPersist;
-      });
+      return idToPersist;
     } catch (e) {
       print('❌ [VisitRepository] Error saving visit: $e');
       return null;
@@ -304,84 +300,92 @@ class VisitRepository {
   }
 
   Future<bool> updateVisitPoints(String visitId, double points, int peaksCount, int towersCount, int treesCount) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
-      await collection.update(
-        where.eq('_id', visitId),
-        modify
-          .set('points', points)
-          .set('extraPoints.peaks', peaksCount)
-          .set('extraPoints.towers', towersCount)
-          .set('extraPoints.trees', treesCount)
-          .set('extraPoints.points', points)
-          .set('updatedAt', DateTime.now())
+    try {
+      await _dbService.updateOne(
+        _collectionName,
+        {'_id': visitId},
+        {
+          '\$set': {
+            'points': points,
+            'extraPoints.peaks': peaksCount,
+            'extraPoints.towers': towersCount,
+            'extraPoints.trees': treesCount,
+            'extraPoints.points': points,
+            'updatedAt': DateTime.now().toIso8601String(),
+          }
+        }
       );
       return true;
-    }).catchError((e) {
+    } catch (e) {
       print('❌ [VisitRepository] Error updating visit points: $e');
       return false;
-    });
+    }
   }
 
   /// Delete a visit
   Future<bool> deleteVisit(String id) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
-      await collection.remove(where.eq('_id', id));
+    try {
+      await _dbService.deleteOne(_collectionName, {'_id': id});
       return true;
-    }).catchError((e) {
+    } catch (e) {
       print('❌ [VisitRepository] Error deleting visit: $e');
       return false;
-    });
+    }
   }
 
   /// Get full visit detail by ID
   Future<VisitData?> getVisitById(String id) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
-      final doc = await collection.findOne(where.eq('_id', id));
+    try {
+      final doc = await _dbService.findOne(_collectionName, {'_id': id});
       if (doc == null) return null;
       return VisitData.fromMap(doc);
-    }).catchError((e) {
+    } catch (e) {
       print('❌ [VisitRepository] Error fetching visit by id: $e');
       return null;
-    });
+    }
   }
 
   /// Update the state of a visit (Admin)
   Future<bool> updateVisitState(String visitId, VisitState newState, {String? rejectionReason}) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
-      final modifier = modify.set('state', newState.name);
+    try {
+      final updateFields = {
+        'state': newState.name,
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
       if (rejectionReason != null) {
-        modifier.set('rejectionReason', rejectionReason);
+        updateFields['rejectionReason'] = rejectionReason;
       }
       
-      await collection.update(
-        where.eq('_id', visitId),
-        modifier
+      await _dbService.updateOne(
+        _collectionName,
+        {'_id': visitId},
+        {'\$set': updateFields}
       );
       
       return true;
-    }).catchError((e) {
+    } catch (e) {
       print('❌ [VisitRepository] Error updating visit state: $e');
       return false;
-    });
+    }
   }
 
   /// Bulk update visit states
   Future<int> bulkUpdateVisitStates(Iterable<String> ids, VisitState newState) async {
-    return _dbService.execute((db) async {
-      final collection = db.collection(_collectionName);
-      await collection.update(
-        where.oneFrom('_id', ids.toList()),
-        modify.set('state', newState.name).set('updatedAt', DateTime.now()),
-        multiUpdate: true
+    try {
+      await _dbService.updateMany(
+        _collectionName,
+        {'_id': {'\$in': ids.toList()}},
+        {
+          '\$set': {
+            'state': newState.name,
+            'updatedAt': DateTime.now().toIso8601String(),
+          }
+        }
       );
       return ids.length;
-    }).catchError((e) {
+    } catch (e) {
       print('❌ [VisitRepository] Error bulk updating visit states: $e');
       return 0;
-    });
+    }
   }
 }

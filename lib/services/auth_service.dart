@@ -2,7 +2,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:mongo_dart/mongo_dart.dart';
+import 'dart:math';
 import 'database/database_service.dart';
 import '../config/google_auth_config.dart';
 
@@ -350,38 +350,32 @@ class AuthService {
     }
   }
   
+  // Helper to generate 24-char hex MongoDB ObjectId
+  static String _generateObjectId() {
+    final random = Random.secure();
+    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final timeHex = timestamp.toRadixString(16).padLeft(8, '0');
+    final randomHex = List.generate(16, (_) => random.nextInt(16).toRadixString(16)).join();
+    return '$timeHex$randomHex';
+  }
+
   // Find user by email
   static Future<User?> _findUserByEmail(String email) async {
-    try {
-      // Normalize email to lowercase for case-insensitive search
-      final normalizedEmail = email.trim().toLowerCase();
-      
-      final userCollection = await DatabaseService().getCollection('users');
-      if (userCollection == null) return null;
-      
-      final users = await userCollection.find({'email': normalizedEmail}).take(1).toList();
-      if (users.isEmpty) return null;
-      
-      final userData = users.first;
-      return User.fromMap(userData);
-    } catch (e) {
-      print('❌ Error finding user by email: $e');
-      return null;
-    }
+    // Normalize email to lowercase for case-insensitive search
+    final normalizedEmail = email.trim().toLowerCase();
+    
+    final users = await DatabaseService().find('users', {'email': normalizedEmail});
+    if (users.isEmpty) return null;
+    
+    final userData = users.first;
+    return User.fromMap(userData);
   }
   
   // Create new user
   static Future<User> _createUser(User user) async {
     try {
-      final userCollection = await DatabaseService().getCollection('users');
-      final accountCollection = await DatabaseService().getCollection('accounts');
-      
-      if (userCollection == null || accountCollection == null) {
-        throw Exception('Database collections not available');
-      }
-      
       // Jednotné stringové _id v Mongo (stejný model jako Prisma / web). Google sub je v providerAccountId.
-      final mongoUserId = ObjectId().toHexString();
+      final mongoUserId = _generateObjectId();
 
       final userDoc = {
         '_id': mongoUserId,
@@ -395,10 +389,10 @@ class AuthService {
         'isTwoFactorEnabled': false,
       };
 
-      await userCollection.insertOne(userDoc);
+      await DatabaseService().insertOne('users', userDoc);
 
       final accountDoc = {
-        '_id': ObjectId().toHexString(),
+        '_id': _generateObjectId(),
         'userId': mongoUserId,
         'type': 'oidc',
         'provider': user.provider,
@@ -407,11 +401,11 @@ class AuthService {
         'updatedAt': DateTime.now().toIso8601String(),
       };
       
-      await accountCollection.insertOne(accountDoc);
+      await DatabaseService().insertOne('accounts', accountDoc);
       
       print('✅ User created successfully');
       
-      final createdUsers = await userCollection.find({'email': user.email.toLowerCase()}).take(1).toList();
+      final createdUsers = await DatabaseService().find('users', {'email': user.email.toLowerCase()});
       if (createdUsers.isNotEmpty) {
          return User.fromMap(createdUsers.first);
       }
@@ -427,10 +421,8 @@ class AuthService {
   // Update user image
   static Future<void> _updateUserImage(String userId, String imageUrl) async {
     try {
-      final userCollection = await DatabaseService().getCollection('users');
-      if (userCollection == null) return;
-      
-      await userCollection.updateOne(
+      await DatabaseService().updateOne(
+        'users',
         {'_id': userId},
         {
           '\$set': {
@@ -443,17 +435,14 @@ class AuthService {
       print('✅ User image updated');
     } catch (e) {
       print('❌ Error updating user image: $e');
-      // rethrow; // Optional depending on if we want to bubble up
     }
   }
   
   // Update user dog name
   static Future<bool> updateUserDogName(String userId, String dogName) async {
     try {
-      final userCollection = await DatabaseService().getCollection('users');
-      if (userCollection == null) return false;
-      
-      await userCollection.updateOne(
+      await DatabaseService().updateOne(
+        'users',
         {'_id': userId},
         {
           '\$set': {

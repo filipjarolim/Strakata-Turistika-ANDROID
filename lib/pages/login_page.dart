@@ -68,12 +68,23 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
         }
       } else {
         if (mounted) {
-          AppToast.showError(context, result.error ?? 'Google přihlášení selhalo');
+          final isCancelled = result.error?.contains('cancelled') == true;
+          AppToast.showError(
+            context,
+            result.error ?? 'Google přihlášení selhalo',
+            actionLabel: isCancelled ? null : 'Zkusit znovu',
+            onAction: isCancelled ? null : _signInWithGoogle,
+          );
         }
       }
     } catch (e) {
       if (mounted) {
-        AppToast.showError(context, 'Chyba: $e');
+        AppToast.showError(
+          context,
+          'Chyba: $e',
+          actionLabel: 'Zkusit znovu',
+          onAction: _signInWithGoogle,
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

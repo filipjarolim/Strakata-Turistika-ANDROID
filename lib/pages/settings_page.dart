@@ -352,15 +352,12 @@ class SettingsPage extends StatelessWidget {
 
   Future<void> _updateUserName(String userId, String name) async {
     try {
-      final users = await DatabaseService().getCollection('users');
-      if (users != null) {
-        await users.updateOne({'_id': userId}, {
-          '\$set': {
-            'name': name,
-            'updatedAt': DateTime.now().toIso8601String(),
-          }
-        });
-      }
+      await DatabaseService().updateOne('users', {'_id': userId}, {
+        '\$set': {
+          'name': name,
+          'updatedAt': DateTime.now().toIso8601String(),
+        }
+      });
       // update in-memory user
       final u = AuthService.currentUser;
       if (u != null) {
