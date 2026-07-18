@@ -15,6 +15,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../widgets/ui/web_mobile_section_card.dart';
 import '../widgets/ui/web_mobile_patterns.dart';
 import 'offline_maps_page.dart';
+import '../services/app_update_service.dart';
+
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -166,16 +168,40 @@ class SettingsPage extends StatelessWidget {
                             );
                           },
                         ),
-                        _buildSettingsItem(
-                          icon: Icons.info,
-                          title: 'O aplikaci',
-                          subtitle: 'Verze aplikace a informace',
-                          onTap: () {
-                            showAboutDialog(
-                              context: context,
-                              applicationName: 'Strakatá Turistika',
-                              applicationVersion: '1.1.0',
-                              applicationIcon: const Icon(Icons.hiking),
+                        FutureBuilder<List<String>>(
+                          future: Future.wait([
+                            AppUpdateService.getAppVersionString(),
+                            AppUpdateService.getLastUpdateDateString(),
+                          ]),
+                          builder: (context, snapshot) {
+                            final version = snapshot.data?[0] ?? '...';
+                            final lastUpdate = snapshot.data?[1] ?? '...';
+                            return Column(
+                              children: [
+                                _buildSettingsItem(
+                                  icon: Icons.info_outline,
+                                  title: 'O aplikaci',
+                                  subtitle: 'Verze: $version\nAktualizováno: $lastUpdate',
+                                  onTap: () {
+                                    showAboutDialog(
+                                      context: context,
+                                      applicationName: 'Strakatá Turistika',
+                                      applicationVersion: version,
+                                      applicationIcon: const Icon(Icons.hiking, size: 40, color: Color(0xFF2E7D32)),
+                                      children: [
+                                        const SizedBox(height: 12),
+                                        Text('Poslední instalovaná aktualizace: $lastUpdate'),
+                                      ],
+                                    );
+                                  },
+                                ),
+                                _buildSettingsItem(
+                                  icon: Icons.system_update_alt_rounded,
+                                  title: 'Zkontrolovat aktualizace',
+                                  subtitle: 'Vyhledat novou verzi na Google Play',
+                                  onTap: () => AppUpdateService.manualCheckForUpdate(context),
+                                ),
+                              ],
                             );
                           },
                         ),
@@ -231,16 +257,40 @@ class SettingsPage extends StatelessWidget {
                     _buildSettingsSection(
                       title: 'Aplikace',
                       items: [
-                        _buildSettingsItem(
-                          icon: Icons.info,
-                          title: 'O aplikaci',
-                          subtitle: 'Verze aplikace a informace',
-                          onTap: () {
-                            showAboutDialog(
-                              context: context,
-                              applicationName: 'Strakatá Turistika',
-                              applicationVersion: '1.1.0',
-                              applicationIcon: const Icon(Icons.hiking),
+                        FutureBuilder<List<String>>(
+                          future: Future.wait([
+                            AppUpdateService.getAppVersionString(),
+                            AppUpdateService.getLastUpdateDateString(),
+                          ]),
+                          builder: (context, snapshot) {
+                            final version = snapshot.data?[0] ?? '...';
+                            final lastUpdate = snapshot.data?[1] ?? '...';
+                            return Column(
+                              children: [
+                                _buildSettingsItem(
+                                  icon: Icons.info_outline,
+                                  title: 'O aplikaci',
+                                  subtitle: 'Verze: $version\nAktualizováno: $lastUpdate',
+                                  onTap: () {
+                                    showAboutDialog(
+                                      context: context,
+                                      applicationName: 'Strakatá Turistika',
+                                      applicationVersion: version,
+                                      applicationIcon: const Icon(Icons.hiking, size: 40, color: Color(0xFF2E7D32)),
+                                      children: [
+                                        const SizedBox(height: 12),
+                                        Text('Poslední instalovaná aktualizace: $lastUpdate'),
+                                      ],
+                                    );
+                                  },
+                                ),
+                                _buildSettingsItem(
+                                  icon: Icons.system_update_alt_rounded,
+                                  title: 'Zkontrolovat aktualizace',
+                                  subtitle: 'Vyhledat novou verzi na Google Play',
+                                  onTap: () => AppUpdateService.manualCheckForUpdate(context),
+                                ),
+                              ],
                             );
                           },
                         ),

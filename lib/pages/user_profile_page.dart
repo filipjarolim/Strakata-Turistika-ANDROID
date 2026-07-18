@@ -23,6 +23,8 @@ import '../services/mapy_cz_download_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/app_update_service.dart';
+
 import '../widgets/ui/web_mobile_section_card.dart';
 import '../widgets/ui/web_mobile_patterns.dart';
 import 'offline_maps_page.dart';
@@ -206,6 +208,20 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                   builder: (_) => const OfflineMapsPage(),
                                 ),
                               );
+                            },
+                          ),
+                          _buildMenuItem(
+                            Icons.settings_outlined,
+                            'Nastavení',
+                            () {
+                              Navigator.of(context).pushNamed('/settings');
+                            },
+                          ),
+                          _buildMenuItem(
+                            Icons.gavel_rounded,
+                            'Žádost o výjimku',
+                            () {
+                              Navigator.of(context).pushNamed('/exception-request');
                             },
                           ),
                           _buildMenuItem(Icons.description_outlined, 'Pravidla soutěže (web)', _openRulesWeb),
@@ -632,14 +648,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
               contentPadding: EdgeInsets.zero,
               leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.info_outline, color: Colors.blue)),
               title: const Text('O aplikaci', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(ctx);
-                showAboutDialog(
-                  context: context,
-                  applicationName: 'Strakatá Turistika',
-                  applicationVersion: '1.1.0',
-                  applicationIcon: const Icon(Icons.hiking, size: 48, color: Color(0xFF2E7D32)),
-                );
+                final version = await AppUpdateService.getAppVersionString();
+                final lastUpdate = await AppUpdateService.getLastUpdateDateString();
+                if (context.mounted) {
+                  showAboutDialog(
+                    context: context,
+                    applicationName: 'Strakatá Turistika',
+                    applicationVersion: version,
+                    applicationIcon: const Icon(Icons.hiking, size: 48, color: Color(0xFF2E7D32)),
+                    children: [
+                      const SizedBox(height: 12),
+                      Text('Poslední instalovaná aktualizace: $lastUpdate'),
+                    ],
+                  );
+                }
               },
             ),
             const Divider(height: 1),
@@ -680,7 +704,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 children: [
                   Icon(Icons.email_outlined, size: 20, color: Colors.black87),
                   SizedBox(width: 10),
-                  Text('info@strakata.cz', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text('jarolimfilip07@gmail.com', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 ],
               ),
             ),

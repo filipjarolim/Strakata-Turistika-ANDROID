@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import '../../maps/shared_map_widget.dart';
 
 import '../../../config/app_colors.dart';
 import '../../../models/forms/form_config.dart';
@@ -571,32 +572,21 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                             borderRadius: BorderRadius.circular(16),
                             child: Stack(
                               children: [
-                                FlutterMap(
-                                  options: MapOptions(
-                                    initialCenter: mapCenter(),
-                                    initialZoom: 14,
-                                    onTap: (_, p) => onMapTap(p),
-                                  ),
-                                  children: [
-                                    TileLayer(
-                                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                      userAgentPackageName:
-                                          'cz.strakata.turistika.strakataturistikaandroidapp',
-                                    ),
+                                SharedMapWidget(
+                                  center: mapCenter(),
+                                  zoom: 14,
+                                  onTap: onMapTap,
+                                  markers: [
                                     if (mapPickLat != null && mapPickLng != null)
-                                      MarkerLayer(
-                                        markers: [
-                                          Marker(
-                                            width: 36,
-                                            height: 36,
-                                            point: LatLng(mapPickLat!, mapPickLng!),
-                                            child: const Icon(
-                                              Icons.place,
-                                              color: Color(0xFFDC2626),
-                                              size: 36,
-                                            ),
-                                          ),
-                                        ],
+                                      Marker(
+                                        width: 36,
+                                        height: 36,
+                                        point: LatLng(mapPickLat!, mapPickLng!),
+                                        child: const Icon(
+                                          Icons.place,
+                                          color: Color(0xFFDC2626),
+                                          size: 36,
+                                        ),
                                       ),
                                   ],
                                 ),

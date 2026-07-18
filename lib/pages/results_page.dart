@@ -27,6 +27,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
 
   // Leaderboard data for the selected season
   final List<LeaderboardEntry> _leaders = [];
+  bool _sortByVisits = false;
 
   bool _isInitialLoading = true;
   bool _isLoadingMore = false;
@@ -213,6 +214,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
         page: 1,
         limit: 10000, // Velký limit pro načtení všech záznamů
         searchQuery: _searchQuery.isEmpty ? null : _searchQuery,
+        sortByVisits: _sortByVisits,
       );
       final raw = (result['data'] as List<dynamic>).cast<Map<String, dynamic>>();
       final data = raw.map((m) => LeaderboardEntry.fromMap(m)).toList();
@@ -387,6 +389,11 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   Widget _buildTopSummary() {
     final season = selectedSeason;
     final isCurrent = season != null && season == DateTime.now().year;
+    
+    final totalCompetitors = _leaders.length;
+    final totalVisits = _leaders.fold<int>(0, (sum, entry) => sum + entry.visitsCount);
+    final totalPoints = _leaders.fold<double>(0.0, (sum, entry) => sum + entry.totalPoints);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
       child: WebMobileSectionCard(
@@ -427,6 +434,54 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                 fontWeight: FontWeight.w500,
                 color: AppColors.textTertiary,
                 height: 1.4,
+              ),
+            ),
+            if (_leaders.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _buildMetricTile('Soutěžící', '$totalCompetitors'),
+                  const SizedBox(width: 8),
+                  _buildMetricTile('Návštěvy', '$totalVisits'),
+                  const SizedBox(width: 8),
+                  _buildMetricTile('Body celkem', totalPoints.toStringAsFixed(0)),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricTile(String label, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.65),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black.withOpacity(0.08)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: GoogleFonts.libreFranklin(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textTertiary,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              value,
+              style: GoogleFonts.libreFranklin(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
               ),
             ),
           ],
@@ -531,22 +586,62 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   }
 
   Widget _buildSearchOnlyActions() {
-    return TextField(
-      controller: _searchController,
-      onChanged: _onSearchChanged,
-      decoration: InputDecoration(
-        hintText: 'Hledat…',
-        prefixIcon: const Icon(Icons.search_rounded),
-        suffixIcon: _searchQuery.isNotEmpty
-            ? IconButton(
-                onPressed: () {
-                  _searchController.clear();
-                  _onSearchChanged('');
-                },
-                icon: const Icon(Icons.close_rounded),
-              )
-            : null,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _searchController,
+          onChanged: _onSearchChanged,
+          decoration: InputDecoration(
+            hintText: 'Hledat…',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    onPressed: () {
+                      _searchController.clear();
+                      _onSearchChanged('');
+                    },
+                    icon: const Icon(Icons.close_rounded),
+                  )
+                : null,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Text(
+              'Řadit podle:',
+              style: GoogleFonts.libreFranklin(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            ChoiceChip(
+              label: const Text('Bodů'),
+              selected: !_sortByVisits,
+              onSelected: (val) {
+                if (val) {
+                  setState(() => _sortByVisits = false);
+                  _reloadForCurrentFilters(resetScroll: true);
+                }
+              },
+            ),
+            const SizedBox(width: 8),
+            ChoiceChip(
+              label: const Text('Návštěv'),
+              selected: _sortByVisits,
+              onSelected: (val) {
+                if (val) {
+                  setState(() => _sortByVisits = true);
+                  _reloadForCurrentFilters(resetScroll: true);
+                }
+              },
+            ),
+          ],
+        ),
+      ],
     );
   }
 

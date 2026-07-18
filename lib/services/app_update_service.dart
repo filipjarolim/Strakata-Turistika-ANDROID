@@ -1,19 +1,79 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:in_app_update/in_app_update.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 
-/// Service pro správu aktualizací aplikace z Google Play Store
+/// Service pro správu aktualizací aplikace z Google Play Store a sledování verzí
 class AppUpdateService {
   static bool _isCheckingForUpdate = false;
   
+  /// Inicializuje sledování verzí. Porovná aktuální verzi s naposledy uloženou.
+  /// Pokud se verze liší, zaznamená čas aktualizace do SharedPreferences.
+  static Future<void> initializeVersionTracking() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final packageInfo = await PackageInfo.fromPlatform();
+      
+      final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      final lastSavedVersion = prefs.getString('last_run_version');
+      
+      if (lastSavedVersion == null) {
+        // První spuštění aplikace na tomto zařízení
+        await prefs.setString('last_run_version', currentVersion);
+        await prefs.setString('app_install_date', DateTime.now().toIso8601String());
+        await prefs.setString('app_last_update_date', DateTime.now().toIso8601String());
+      } else if (lastSavedVersion != currentVersion) {
+        // Aplikace byla aktualizována
+        await prefs.setString('last_run_version', currentVersion);
+        await prefs.setString('app_last_update_date', DateTime.now().toIso8601String());
+        print('🎉 Aplikace byla aktualizována na verzi $currentVersion!');
+      }
+    } catch (e) {
+      print('❌ Chyba při inicializaci sledování verzí: $e');
+    }
+  }
+
+  /// Získá formátovaný řetězec s aktuální verzí (např. "1.1.17 (51)")
+  static Future<String> getAppVersionString() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      return '${packageInfo.version} (${packageInfo.buildNumber})';
+    } catch (_) {
+      return 'Neznámá verze';
+    }
+  }
+
+  /// Získá datum poslední aktualizace / instalace aplikace
+  static Future<String> getLastUpdateDateString() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final dateStr = prefs.getString('app_last_update_date');
+      if (dateStr == null) {
+        await initializeVersionTracking();
+        final reRead = prefs.getString('app_last_update_date');
+        if (reRead != null) {
+          final date = DateTime.parse(reRead);
+          return DateFormat('d. M. yyyy').format(date);
+        }
+        return 'Neznámé';
+      }
+      final date = DateTime.parse(dateStr);
+      return DateFormat('d. M. yyyy').format(date);
+    } catch (_) {
+      return 'Neznámé';
+    }
+  }
+
   /// Zkontroluje dostupnost aktualizace a zobrazí dialog pokud je k dispozici
-  /// 
-  /// [context] - BuildContext pro zobrazení dialogu
-  /// [forceImmediate] - pokud true, vynutí okamžitou aktualizaci (vhodné pro kritické verze)
   static Future<void> checkForUpdate(
     BuildContext context, {
     bool forceImmediate = false,
   }) async {
+    // Inicializovat / aktualizovat informace o verzi
+    await initializeVersionTracking();
+
     // In-app update funguje pouze na Android
     if (!Platform.isAndroid) {
       return;
@@ -46,6 +106,77 @@ class AppUpdateService {
       }
     } finally {
       _isCheckingForUpdate = false;
+    }
+  }
+
+  /// Provede manuální kontrolu aktualizací se zobrazením loading dialogu a toastů
+  static Future<void> manualCheckForUpdate(BuildContext context) async {
+    // Zobrazit loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Kontrola aktualizací...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      if (!Platform.isAndroid) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kontrola aktualizací je podporována pouze na systému Android.')),
+        );
+        return;
+      }
+
+      final AppUpdateInfo updateInfo = await InAppUpdate.checkForUpdate();
+      
+      if (context.mounted) {
+        Navigator.pop(context); // Skrýt loading dialog
+      }
+
+      if (updateInfo.updateAvailability == UpdateAvailability.updateAvailable) {
+        if (updateInfo.immediateUpdateAllowed) {
+          await _performImmediateUpdate(context, updateInfo);
+        } else if (updateInfo.flexibleUpdateAllowed) {
+          await _showFlexibleUpdateDialog(context);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nová verze je k dispozici v Google Play Store.')),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Máte nainstalovanou nejnovější verzi aplikace.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Skrýt loading dialog
+      }
+      
+      final errorStr = e.toString();
+      if (errorStr.contains('ERROR_APP_NOT_OWNED')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tato aplikace nebyla nainstalována přes Google Play Store.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Chyba při kontrole aktualizace: $e')),
+        );
+      }
     }
   }
   
@@ -101,8 +232,6 @@ class AppUpdateService {
   static Future<void> _startFlexibleUpdate(BuildContext context) async {
     try {
       await InAppUpdate.startFlexibleUpdate();
-      
-      // Čekání na dokončení stahování
       await InAppUpdate.completeFlexibleUpdate();
       
       if (context.mounted) {
@@ -131,7 +260,6 @@ class AppUpdateService {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // Restart aplikace se provede automaticky
               },
               child: const Text('OK'),
             ),
@@ -164,7 +292,6 @@ class AppUpdateService {
   }
   
   /// Provede tichou kontrolu aktualizace (bez dialogu, pouze v pozadí)
-  /// Vhodné pro kontrolu při startu aplikace
   static Future<bool> silentCheckForUpdate() async {
     if (!Platform.isAndroid) {
       return false;
@@ -182,4 +309,3 @@ class AppUpdateService {
     }
   }
 }
-

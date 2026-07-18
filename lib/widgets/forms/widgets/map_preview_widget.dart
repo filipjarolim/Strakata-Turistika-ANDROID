@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import '../../maps/shared_map_widget.dart';
 import '../../../models/forms/form_config.dart';
 import '../../../models/forms/form_context.dart';
 import '../form_design.dart';
@@ -64,24 +65,14 @@ class MapPreviewWidget extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: FlutterMap(
-            options: MapOptions(
-              initialCenter: _calculateCenter(points),
-              initialZoom: _calculateZoom(points),
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.strakataturistika.app',
-              ),
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: points,
-                    strokeWidth: 4,
-                    color: const Color(0xFF2563EB),
-                  ),
-                ],
+          child: SharedMapWidget(
+            center: _calculateCenter(points),
+            zoom: _calculateZoom(points),
+            polylines: [
+              Polyline(
+                points: points,
+                strokeWidth: 4,
+                color: const Color(0xFF2563EB),
               ),
             ],
           ),

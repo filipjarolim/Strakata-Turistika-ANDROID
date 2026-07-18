@@ -25,6 +25,7 @@ import 'pages/login_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/user_profile_page.dart';
 import 'pages/offline_maps_page.dart';
+import 'pages/exception_request_page.dart';
 
 import 'pages/dynamic_form_page.dart';
 import 'pages/results_page.dart';
@@ -147,6 +148,7 @@ class MyApp extends StatelessWidget {
         '/settings': (context) => const SettingsPage(),
         '/user-profile': (context) => const UserProfilePage(),
         '/offline-maps': (context) => const OfflineMapsPage(),
+        '/exception-request': (context) => const ExceptionRequestPage(),
         '/visit-data-form': (context) => const DynamicFormPage(slug: 'gps-tracking'),
         '/tos': (context) => const WebViewPage(
           title: 'Podmínky použití',
@@ -400,6 +402,22 @@ class _MyHomePageState extends State<MyHomePage>
                 },
               ),
               _profileMenuItem(
+                icon: Icons.settings_outlined,
+                title: 'Nastavení',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).pushNamed('/settings');
+                },
+              ),
+              _profileMenuItem(
+                icon: Icons.gavel_rounded,
+                title: 'Žádost o výjimku',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).pushNamed('/exception-request');
+                },
+              ),
+              _profileMenuItem(
                 icon: Icons.description_outlined,
                 title: 'Pravidla soutěže',
                 onTap: () async {
@@ -411,14 +429,22 @@ class _MyHomePageState extends State<MyHomePage>
               _profileMenuItem(
                 icon: Icons.info_outline_rounded,
                 title: 'O aplikaci',
-                onTap: () {
+                onTap: () async {
                   Navigator.of(sheetContext).pop();
-                  showAboutDialog(
-                    context: context,
-                    applicationName: 'Strakatá Turistika',
-                    applicationVersion: '1.1.0',
-                    applicationIcon: const Icon(Icons.hiking, size: 44, color: Color(0xFF2E7D32)),
-                  );
+                  final version = await AppUpdateService.getAppVersionString();
+                  final lastUpdate = await AppUpdateService.getLastUpdateDateString();
+                  if (context.mounted) {
+                    showAboutDialog(
+                      context: context,
+                      applicationName: 'Strakatá Turistika',
+                      applicationVersion: version,
+                      applicationIcon: const Icon(Icons.hiking, size: 44, color: Color(0xFF2E7D32)),
+                      children: [
+                        const SizedBox(height: 12),
+                        Text('Poslední instalovaná aktualizace: $lastUpdate'),
+                      ],
+                    );
+                  }
                 },
               ),
             ],
