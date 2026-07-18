@@ -25,8 +25,10 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = AuthService.currentUser;
     return GlassScaffold(
-      body: Column(
-        children: [
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
           // Header with Back Button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
@@ -311,8 +313,9 @@ class SettingsPage extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _showEditProfileSheet(BuildContext context) {
     final user = AuthService.currentUser;

@@ -22,6 +22,7 @@ class SharedMapWidget extends StatefulWidget {
   final double? minZoom;
   final double? maxZoom;
   final Function(LatLng)? onTap;
+  final EdgeInsets? controlsPadding;
 
   const SharedMapWidget({
     Key? key,
@@ -36,6 +37,7 @@ class SharedMapWidget extends StatefulWidget {
     this.minZoom,
     this.maxZoom,
     this.onTap,
+    this.controlsPadding,
   }) : super(key: key);
 
   @override
@@ -202,8 +204,10 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
         ),
         if (widget.isInteractive)
           Positioned(
-            right: 12,
-            bottom: 16,
+            right: widget.controlsPadding?.right ?? 12,
+            bottom: widget.controlsPadding?.bottom ?? 16,
+            left: widget.controlsPadding?.left,
+            top: widget.controlsPadding?.top,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

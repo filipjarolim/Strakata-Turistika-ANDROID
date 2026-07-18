@@ -1003,6 +1003,10 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                 mapController: _mapController,
                 center: _lastMapCenter ?? const LatLng(49.8175, 15.4730),
                 zoom: _lastMapZoom ?? 8.0,
+                controlsPadding: EdgeInsets.only(
+                  right: 16,
+                  bottom: MediaQuery.of(context).size.height * 0.28,
+                ),
                 onMapReady: () {
                   _isMapReady = true;
                   _currentZoom = _mapController.camera.zoom;

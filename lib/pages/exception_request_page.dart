@@ -97,8 +97,10 @@ class _ExceptionRequestPageState extends State<ExceptionRequestPage> {
     final hasPending = _requests.any((r) => r.status == ExceptionStatus.pending);
 
     return GlassScaffold(
-      body: Column(
-        children: [
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
           // Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
@@ -319,8 +321,9 @@ class _ExceptionRequestPageState extends State<ExceptionRequestPage> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildRequestCard(ExceptionRequest req) {
     Color statusColor = Colors.orange;
