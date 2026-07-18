@@ -23,6 +23,7 @@ class SharedMapWidget extends StatefulWidget {
   final double? maxZoom;
   final Function(LatLng)? onTap;
   final EdgeInsets? controlsPadding;
+  final bool showControls;
 
   const SharedMapWidget({
     Key? key,
@@ -38,6 +39,7 @@ class SharedMapWidget extends StatefulWidget {
     this.maxZoom,
     this.onTap,
     this.controlsPadding,
+    this.showControls = true,
   }) : super(key: key);
 
   @override
@@ -202,7 +204,7 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
               MarkerLayer(markers: widget.markers),
           ],
         ),
-        if (widget.isInteractive)
+        if (widget.isInteractive && widget.showControls)
           Positioned(
             right: widget.controlsPadding?.right ?? 12,
             bottom: widget.controlsPadding?.bottom ?? 16,
