@@ -273,10 +273,13 @@ class VisitRepository {
 
       _prepareVisitDocumentForPrismaStorage(visit, data);
 
+      final setData = Map<String, dynamic>.from(data);
+      setData.remove('_id');
+
       await _dbService.updateOne(
         _collectionName,
         {'_id': idToPersist},
-        {'\$set': data},
+        {'\$set': setData},
         upsert: true,
       );
 

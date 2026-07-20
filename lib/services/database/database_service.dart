@@ -81,7 +81,7 @@ class DatabaseService {
         url,
         headers: headers,
         body: jsonEncode(requestBody),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
@@ -159,9 +159,15 @@ class DatabaseService {
     Map<String, dynamic> update, {
     bool upsert = false,
   }) async {
+    final cleanUpdate = Map<String, dynamic>.from(update);
+    if (cleanUpdate.containsKey('\$set') && cleanUpdate['\$set'] is Map) {
+      final setMap = Map<String, dynamic>.from(cleanUpdate['\$set'] as Map);
+      setMap.remove('_id');
+      cleanUpdate['\$set'] = setMap;
+    }
     final rawResult = await _request('updateOne', collection, {
       'selector': selector,
-      'update': update,
+      'update': cleanUpdate,
       'upsert': upsert,
     });
     return Map<String, dynamic>.from(rawResult);
@@ -172,9 +178,15 @@ class DatabaseService {
     Map<String, dynamic> selector,
     Map<String, dynamic> update,
   ) async {
+    final cleanUpdate = Map<String, dynamic>.from(update);
+    if (cleanUpdate.containsKey('\$set') && cleanUpdate['\$set'] is Map) {
+      final setMap = Map<String, dynamic>.from(cleanUpdate['\$set'] as Map);
+      setMap.remove('_id');
+      cleanUpdate['\$set'] = setMap;
+    }
     final rawResult = await _request('updateMany', collection, {
       'selector': selector,
-      'update': update,
+      'update': cleanUpdate,
     });
     return Map<String, dynamic>.from(rawResult);
   }
