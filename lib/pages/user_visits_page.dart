@@ -382,13 +382,7 @@ class _UserVisitsPageState extends State<UserVisitsPage> {
   }
 
   double _distanceFromVisit(VisitData visit) {
-    final dynamic raw = visit.extraPoints['distanceKm'] ??
-        visit.extraPoints['distance'] ??
-        visit.extraPoints['DistanceKm'] ??
-        visit.extraPoints['Vzdálenost'];
-    if (raw is num) return raw.toDouble();
-    if (raw is String) return double.tryParse(raw.replaceAll(',', '.')) ?? 0.0;
-    return 0.0;
+    return visit.resolvedDistanceKm ?? 0.0;
   }
 
   String _formatDate(DateTime? date) {

@@ -9,7 +9,6 @@ import 'widgets/map_preview_widget.dart';
 import 'widgets/image_upload_widget.dart';
 import 'widgets/places_manager_widget.dart';
 import 'widgets/route_summary_widget.dart';
-import 'widgets/strakata_route_selector_widget.dart';
 import 'widgets/monthly_theme_widget.dart';
 import 'widgets/extra_data_field_widgets.dart';
 
@@ -35,7 +34,7 @@ class FormWidgetFactory {
       case 'route_summary':
         return RouteSummaryWidget(field: field);
       case 'strakata_route_selector':
-        return StrakataRouteSelectorWidget(field: field);
+        return const SizedBox.shrink();
       case 'monthly_theme':
         return MonthlyThemeWidget(field: field);
       case 'text':

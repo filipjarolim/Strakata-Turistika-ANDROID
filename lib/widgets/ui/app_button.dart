@@ -129,13 +129,17 @@ class AppButton extends StatelessWidget {
           const SizedBox(width: 8),
         ],
         if (text != null)
-          Text(
-            text!,
-            style: TextStyle(
-              fontSize: _getFontSize(),
-              fontWeight: FontWeight.w700,
-              color: _getContentColor(),
-              letterSpacing: 0.0,
+          Flexible(
+            child: Text(
+              text!,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: _getFontSize(),
+                fontWeight: FontWeight.w700,
+                color: _getContentColor(),
+                letterSpacing: 0.0,
+              ),
             ),
           ),
       ],

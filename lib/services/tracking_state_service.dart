@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'enhanced_gps_tracking_service.dart';
 import '../models/tracking_summary.dart';
+import 'route_backup_service.dart';
 
 class TrackingStateService {
   static final TrackingStateService _instance = TrackingStateService._internal();
@@ -15,6 +16,7 @@ class TrackingStateService {
   
   bool _isTracking = false;
   Timer? _updateTimer;
+  int _backupTick = 0;
   static const int _trackingNotificationId = 2001;
   String? _lastTrackingInfo;
   
@@ -78,6 +80,7 @@ class TrackingStateService {
     if (success) {
       _isTracking = true;
       _trackingStateController.add(true);
+      _backupTick = 0;
       _startTrackingUpdates();
       if (!Platform.isAndroid) {
         _showTrackingNotification();
@@ -121,6 +124,12 @@ class TrackingStateService {
           _trackingInfoController.add(info);
         }
         _updateTrackingNotification(info);
+
+        // Průběžná lokální záloha (každých ~15 s), ať trasa přežije pád / přepnutí aplikace.
+        _backupTick++;
+        if (_backupTick % 5 == 0 && summary.trackPoints.length >= 2) {
+          unawaited(RouteBackupService().saveBackup(summary));
+        }
       } else {
         timer.cancel();
       }

@@ -1,14 +1,19 @@
 class GpsConfig {
   // Accuracy thresholds (meters)
-  static const double maxAccuracyMeters = 12.0; // strict global cap
-  static const double stationaryAccuracyCap = 6.0; // when nearly stationary
-  static const double slowAccuracyCap = 8.0; // slow movement
+  // Pozn.: dřívější přísné limity (12/6/8 m) zahazovaly většinu bodů v lese či
+  // při pomalé chůzi a měřená vzdálenost pak vycházela výrazně kratší než skutečnost.
+  static const double maxAccuracyMeters = 25.0; // global cap
+  static const double stationaryAccuracyCap = 12.0; // when nearly stationary
+  static const double slowAccuracyCap = 18.0; // slow movement
 
   // Movement thresholds
   static const double minMovementMeters = 2.0; // ignore tiny drift
   static const double maxSpeedMs = 50.0; // unrealistic speed cap
   // Dynamic minimum movement: add fraction of current accuracy to threshold
-  static const double dynamicMinMoveAccuracyFactor = 0.5; // e.g., 50% of accuracy
+  static const double dynamicMinMoveAccuracyFactor = 0.3;
+  // Horní strop dynamického prahu — jinak by nepřesnost 20 m znamenala
+  // ignorování každého pohybu kratšího než 10 m a trasa by se zkracovala.
+  static const double dynamicMinMoveCapMeters = 5.0;
 
   // Acceleration limits by profile (m/s^2)
   static const double accelStationary = 3.0;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -12,18 +13,24 @@ import '../utils/gps_utils.dart';
 import '../models/tracking_summary.dart';
 import '../repositories/visit_repository.dart';
 import '../services/auth_service.dart';
+import '../services/route_backup_service.dart';
+import '../services/track_file_parser.dart';
 import '../models/visit_data.dart';
 
 class GpsServices {
   static Future<Map<String, bool>> checkPermissionsStatus() async {
     final location = await Permission.location.status;
     final background = await Permission.locationAlways.status;
-    final battery = await Permission.ignoreBatteryOptimizations.status;
-    
+    // Battery optimization exemption exists only on Android.
+    final battery = Platform.isAndroid
+        ? await Permission.ignoreBatteryOptimizations.status
+        : PermissionStatus.granted;
+
     return {
       'location': location.isGranted,
       'background': background.isGranted,
-      'battery_granted': battery.isGranted, 
+      // On iOS always true so tracking start isn't blocked.
+      'battery_granted': Platform.isIOS || battery.isGranted,
     };
   }
 
@@ -180,16 +187,25 @@ class GpsServices {
       
       final trackingSummary = trackingStateService.getSummary();
       if (trackingSummary.trackPoints.isNotEmpty) {
+        // Trasa se nejdřív zálohuje lokálně — kdyby zápis do DB selhal
+        // (výpadek sítě, chyba serveru), data zůstanou v telefonu.
+        await RouteBackupService().saveBackup(trackingSummary);
+
         // Offer: Save as draft now or fill details now
         // Default: save as DRAFT immediately for safety
         try {
           final currentUser = AuthService.currentUser;
+          if (currentUser == null || currentUser.id.isEmpty) {
+            print('⚠️ Draft se do DB neuložil — uživatel není přihlášen. Zůstává lokální záloha.');
+            showTrackingSummary(trackingSummary, null);
+            return;
+          }
           final now = DateTime.now();
           
           final visit = VisitData(
             id: '', // Repo will assign
-            userId: currentUser?.id,
-            user: currentUser != null ? {'name': currentUser.name, 'email': currentUser.email, 'image': currentUser.image} : null,
+            userId: currentUser.id,
+            user: {'name': currentUser.name, 'email': currentUser.email, 'image': currentUser.image},
             seasonId: null,
             year: now.year,
             visitDate: trackingSummary.startTime,
@@ -198,18 +214,12 @@ class GpsServices {
             points: 0,
             routeTitle: 'Trasa ${now.day}.${now.month}.${now.year}',
             routeDescription: 'GPS trasa',
-            visitedPlaces: '', // Empty for draft
-            dogName: currentUser?.dogName,
+            visitedPlaces: RouteBackupService().capturedPlaces.map((p) => p.name).join(', '),
+            dogName: currentUser.dogName,
             dogNotAllowed: null,
             photos: [],
-            places: [],
-            route: {
-              'duration': trackingSummary.duration.inSeconds,
-              'totalDistance': trackingSummary.totalDistance,
-              'averageSpeed': trackingSummary.averageSpeed,
-              'maxSpeed': trackingSummary.maxSpeed,
-              'trackPoints': trackingSummary.trackPoints.map((p) => p.toJson()).toList(),
-            },
+            places: List<Place>.from(RouteBackupService().capturedPlaces),
+            route: routePayloadForStorage(trackingSummary),
             extraData: {},
             extraPoints: {
               'source': 'gps_tracking',
@@ -221,6 +231,8 @@ class GpsServices {
           VisitData? draftVisit;
           if (savedId != null) {
             draftVisit = visit.copyWith(id: savedId);
+            // Koncept je bezpečně v databázi — lokální záloha už není potřeba.
+            await RouteBackupService().clearBackup();
           }
 
           showTrackingSummary(trackingSummary, draftVisit);

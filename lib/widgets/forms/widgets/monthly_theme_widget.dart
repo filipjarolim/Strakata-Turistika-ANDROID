@@ -20,13 +20,22 @@ class MonthlyThemeWidget extends StatefulWidget {
 
 class _MonthlyThemeWidgetState extends State<MonthlyThemeWidget> {
   final CompetitionDashboardService _dashboard = CompetitionDashboardService();
-  late final Future<MonthlyThemeData?> _future;
+  Future<MonthlyThemeData?>? _future;
+  // Rok+měsíc data návštěvy, pro který je _future načtené.
+  int? _loadedYearMonth;
   int? _appliedKeywordLen;
 
-  @override
-  void initState() {
-    super.initState();
-    _future = _dashboard.getCurrentMonthlyTheme();
+  /// Téma se načítá podle data návštěvy (ne podle dneška), aby dodatečné
+  /// doplnění staršího výletu nabídlo téma správného měsíce.
+  Future<MonthlyThemeData?> _futureFor(FormContext ctx) {
+    final date = ctx.visitDate;
+    final ym = date.year * 100 + date.month;
+    if (_future == null || _loadedYearMonth != ym) {
+      _loadedYearMonth = ym;
+      _appliedKeywordLen = null;
+      _future = _dashboard.getCurrentMonthlyTheme(forDate: date);
+    }
+    return _future!;
   }
 
   void _syncKeywordCountIfNeeded(FormContext ctx, int len) {
@@ -61,7 +70,7 @@ class _MonthlyThemeWidgetState extends State<MonthlyThemeWidget> {
     return Consumer<FormContext>(
       builder: (context, formContext, _) {
         return FutureBuilder<MonthlyThemeData?>(
-          future: _future,
+          future: _futureFor(formContext),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return FormSectionCard(
@@ -81,10 +90,13 @@ class _MonthlyThemeWidgetState extends State<MonthlyThemeWidget> {
             _syncKeywordCountIfNeeded(formContext, len);
 
             if (keywords.isEmpty) {
+              final d = formContext.visitDate;
+              final missingMonthLabel =
+                  '${d.month.toString().padLeft(2, '0')}/${d.year}';
               return FormSectionCard(
                 title: widget.field.label,
                 subtitle:
-                    'Pro tento měsíc zatím není v databázi nastaveno žádné klíčové slovo. Pole můžete přeskočit.',
+                    'Pro měsíc $missingMonthLabel není v databázi nastaveno žádné klíčové slovo. Pole můžete přeskočit.',
                 icon: Icons.palette_outlined,
                 child: Text(
                   'Téma měsíce není k dispozici.',

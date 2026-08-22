@@ -1,5 +1,7 @@
 import 'package:latlong2/latlong.dart';
 
+import '../utils/type_converter.dart';
+
 class TrackPoint {
   final double latitude;
   final double longitude;
@@ -37,15 +39,31 @@ class TrackPoint {
   }
   
   factory TrackPoint.fromJson(Map<String, dynamic> json) {
+    DateTime parseTimestamp(dynamic raw) {
+      if (raw is DateTime) return raw;
+      if (raw is num) {
+        final n = raw.toInt();
+        // nativní Android posílá epoch ms; sekundy by byly ~1e9.
+        return DateTime.fromMillisecondsSinceEpoch(n < 100000000000 ? n * 1000 : n);
+      }
+      return DateTime.tryParse(raw?.toString() ?? '') ?? DateTime.now();
+    }
+
     return TrackPoint(
-      latitude: json['latitude']?.toDouble() ?? 0.0,
-      longitude: json['longitude']?.toDouble() ?? 0.0,
-      timestamp: DateTime.parse(json['timestamp']),
-      speed: json['speed']?.toDouble() ?? 0.0,
-      accuracy: json['accuracy']?.toDouble() ?? 0.0,
-      heading: json['heading']?.toDouble(),
-      altitude: json['altitude']?.toDouble(),
-      verticalAccuracy: json['verticalAccuracy']?.toDouble(),
+      latitude: TypeConverter.toDoubleWithDefault(
+        json['latitude'] ?? json['lat'],
+        0.0,
+      ),
+      longitude: TypeConverter.toDoubleWithDefault(
+        json['longitude'] ?? json['lng'] ?? json['lon'],
+        0.0,
+      ),
+      timestamp: parseTimestamp(json['timestamp']),
+      speed: TypeConverter.toDoubleWithDefault(json['speed'], 0.0),
+      accuracy: TypeConverter.toDoubleWithDefault(json['accuracy'], 0.0),
+      heading: TypeConverter.toDouble(json['heading']),
+      altitude: TypeConverter.toDouble(json['altitude']),
+      verticalAccuracy: TypeConverter.toDouble(json['verticalAccuracy']),
     );
   }
 }
@@ -83,18 +101,13 @@ class TrackingSummary {
     if (raw is! List || raw.length < 2) return null;
     final points = <TrackPoint>[];
     for (final e in raw) {
-      if (e is Map<String, dynamic>) {
+      if (e is Map) {
         try {
-          points.add(TrackPoint.fromJson(e));
-        } catch (_) {
-          return null;
-        }
-      } else if (e is Map) {
-        try {
-          points.add(TrackPoint.fromJson(Map<String, dynamic>.from(e)));
-        } catch (_) {
-          return null;
-        }
+          final pt = TrackPoint.fromJson(Map<String, dynamic>.from(e));
+          if (pt.latitude != 0 || pt.longitude != 0) {
+            points.add(pt);
+          }
+        } catch (_) {}
       }
     }
     if (points.length < 2) return null;

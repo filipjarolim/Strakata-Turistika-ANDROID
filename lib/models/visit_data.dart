@@ -129,7 +129,7 @@ class PlacePhoto {
 
   factory PlacePhoto.fromMap(Map<String, dynamic> map) => PlacePhoto(
         id: map['id']?.toString() ?? '',
-        url: map['url']?.toString() ?? '',
+        url: visitPhotoUrl(map) ?? '',
         description: map['description']?.toString(),
         uploadedAt: DateTime.tryParse(map['uploadedAt']?.toString() ?? '') ?? DateTime.now(),
         isLocal: map['isLocal'] == true,
@@ -209,6 +209,74 @@ class VisitData {
     this.distanceKm,
     this.durationMinutes,
   });
+
+  /// Vzdálenost pro UI: top-level, extraData, extraPoints, nebo metry z trasy.
+  double? get resolvedDistanceKm {
+    if (distanceKm != null && distanceKm! > 0) return distanceKm;
+    return _readDistanceKm(
+      topLevel: null,
+      extraPoints: extraPoints,
+      extraData: extraData ?? const {},
+      route: route,
+    );
+  }
+
+  /// Délka v minutách pro UI.
+  int? get resolvedDurationMinutes {
+    if (durationMinutes != null && durationMinutes! > 0) return durationMinutes;
+    return _readDurationMinutes(
+      topLevel: null,
+      extraPoints: extraPoints,
+      extraData: extraData ?? const {},
+      route: route,
+    );
+  }
+
+  double? get resolvedAverageSpeedKmh {
+    final explicit = _positiveDouble(
+      extraPoints['averageSpeedKmh'] ?? extraData?['averageSpeedKmh'],
+    );
+    if (explicit != null) return explicit;
+    final km = resolvedDistanceKm;
+    final min = resolvedDurationMinutes;
+    if (km != null && min != null && min > 0) return km / (min / 60.0);
+    final metersPerSecond = _positiveDouble(route?['averageSpeed']);
+    if (metersPerSecond != null) return metersPerSecond * 3.6;
+    return null;
+  }
+
+  /// Fotky návštěvy + fotky míst (URL, ne lokální soubory).
+  List<String> get allPhotoUrls {
+    final urls = <String>[];
+    void add(String? raw) {
+      final u = raw?.trim() ?? '';
+      if (u.isEmpty || urls.contains(u)) return;
+      if (u.startsWith('http') || u.startsWith('https')) urls.add(u);
+    }
+
+    for (final photo in photos ?? const <Map<String, dynamic>>[]) {
+      add(visitPhotoUrl(photo));
+    }
+    for (final place in places) {
+      for (final photo in place.photos) {
+        if (!photo.isLocal) add(photo.url);
+      }
+    }
+    return urls;
+  }
+
+  String get formSlug {
+    final src = extraPoints['source']?.toString();
+    switch (src) {
+      case 'gpx_upload':
+        return 'gpx-upload';
+      case 'screenshot':
+        return 'screenshot-upload';
+      case 'gps_tracking':
+      default:
+        return 'gps-tracking';
+    }
+  }
 
   double? _derivedDistanceKmFromRoute() {
     if (route == null) return null;
@@ -305,16 +373,26 @@ class VisitData {
         parsedPlacesStr = extra['Navštívená místa'].toString();
       }
 
-      double? distKm;
-      if (map['distanceKm'] != null) {
-        distKm = TypeConverter.toDoubleWithDefault(map['distanceKm'], 0.0);
-      }
+      final extraDataMap = map['extraData'] is Map
+          ? Map<String, dynamic>.from(map['extraData'] as Map)
+          : <String, dynamic>{};
+      final routeMap = map['route'] is Map
+          ? Map<String, dynamic>.from(map['route'] as Map)
+          : null;
 
-      int? durMin;
-      if (map['durationMinutes'] != null) {
-        durMin = TypeConverter.toIntWithDefault(map['durationMinutes'], -1);
-        if (durMin < 0) durMin = null;
-      }
+      double? distKm = _readDistanceKm(
+        topLevel: map['distanceKm'],
+        extraPoints: extra,
+        extraData: extraDataMap,
+        route: routeMap,
+      );
+
+      int? durMin = _readDurationMinutes(
+        topLevel: map['durationMinutes'],
+        extraPoints: extra,
+        extraData: extraDataMap,
+        route: routeMap,
+      );
 
       return VisitData(
         id: map['_id'] != null ? map['_id'].toString() : (map['id']?.toString() ?? ''),
@@ -326,23 +404,23 @@ class VisitData {
         visitedPlaces: parsedPlacesStr,
         dogNotAllowed: map['dogNotAllowed']?.toString(),
         routeLink: map['routeLink']?.toString(),
-        route: map['route'] is Map ? Map<String, dynamic>.from(map['route'] as Map) : null,
+        route: routeMap,
         year: TypeConverter.toIntWithDefault(map['seasonYear'], parsedDate.year),
         extraPoints: Map<String, dynamic>.from(extra),
-        extraData: map['extraData'] is Map ? Map<String, dynamic>.from(map['extraData'] as Map) : null,
+        extraData: extraDataMap.isEmpty ? null : extraDataMap,
         places: (map['places'] as List<dynamic>?)
                 ?.map((place) => Place.fromMap(Map<String, dynamic>.from(place as Map)))
                 .toList() ??
             [],
         state: VisitState.values.firstWhere(
           (e) => e.name == map['state'],
-          orElse: () => VisitState.APPROVED,
+          orElse: () => VisitState.DRAFT,
         ),
         rejectionReason: map['rejectionReason']?.toString(),
         createdAt: map['createdAt'] is DateTime
             ? map['createdAt'] as DateTime
             : DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? parsedDate,
-        photos: map['photos'] is List ? List<Map<String, dynamic>>.from(map['photos'] as List) : null,
+        photos: _normalizeVisitPhotos(map['photos']),
         seasonId: map['seasonId']?.toString(),
         userId: map['userId']?.toString(),
         user: map['user'] is Map ? Map<String, dynamic>.from(map['user'] as Map) : null,
@@ -421,4 +499,83 @@ class VisitData {
   Map<String, dynamic> toJson() => toMap();
 
   factory VisitData.fromJson(Map<String, dynamic> json) => VisitData.fromMap(json);
+}
+
+/// URL fotky z Mongo / Cloudinary (`url`, `secure_url`, …).
+String? visitPhotoUrl(Map<String, dynamic> map) {
+  for (final key in ['url', 'secure_url', 'secureUrl', 'src', 'path']) {
+    final value = map[key]?.toString().trim();
+    if (value != null && value.isNotEmpty) return value;
+  }
+  return null;
+}
+
+double? _positiveDouble(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is String && raw.trim().isEmpty) return null;
+  final parsed = TypeConverter.toDoubleWithDefault(raw, double.nan);
+  if (parsed.isNaN || !parsed.isFinite || parsed <= 0) return null;
+  return parsed;
+}
+
+double? _readDistanceKm({
+  required dynamic topLevel,
+  required Map extraPoints,
+  required Map extraData,
+  required Map? route,
+}) {
+  final fromTop = _positiveDouble(topLevel);
+  if (fromTop != null) return fromTop;
+  for (final key in ['distanceKm', 'distance']) {
+    final value =
+        _positiveDouble(extraData[key]) ?? _positiveDouble(extraPoints[key]);
+    if (value != null) return value;
+  }
+  final meters = _positiveDouble(route?['totalDistance']);
+  if (meters == null) return null;
+  return (meters / 1000 * 1000).round() / 1000;
+}
+
+int? _readDurationMinutes({
+  required dynamic topLevel,
+  required Map extraPoints,
+  required Map extraData,
+  required Map? route,
+}) {
+  int? fromMinutes(dynamic raw) {
+    final value = _positiveDouble(raw);
+    if (value == null) return null;
+    final minutes = value.round();
+    return minutes > 0 ? minutes : null;
+  }
+
+  final fromTop = fromMinutes(topLevel);
+  if (fromTop != null) return fromTop;
+  for (final key in ['durationMinutes']) {
+    final value =
+        fromMinutes(extraData[key]) ?? fromMinutes(extraPoints[key]);
+    if (value != null) return value;
+  }
+  // extraData.duration je z formuláře v minutách (řetězec).
+  final extraDuration =
+      fromMinutes(extraData['duration']) ?? fromMinutes(extraPoints['duration']);
+  if (extraDuration != null) return extraDuration;
+
+  final seconds = _positiveDouble(route?['duration']);
+  if (seconds == null) return null;
+  final minutes = (seconds / 60).ceil();
+  return minutes > 0 ? minutes : null;
+}
+
+List<Map<String, dynamic>>? _normalizeVisitPhotos(dynamic raw) {
+  if (raw is! List) return null;
+  final out = <Map<String, dynamic>>[];
+  for (final item in raw) {
+    if (item is! Map) continue;
+    final map = Map<String, dynamic>.from(item);
+    final url = visitPhotoUrl(map);
+    if (url != null) map['url'] = url;
+    out.add(map);
+  }
+  return out;
 }

@@ -22,6 +22,7 @@ class ImageUploadWidget extends StatelessWidget {
       icon: Icons.photo_library_outlined,
       child: ImagePickerWidget(
         title: field.label,
+        embedded: true,
         initialAttachments: formContext.photoAttachments,
         allowAdminTestPhoto: (AuthService.currentUser?.role ?? '') == 'ADMIN',
         onImagesSelected: formContext.replacePhotoAttachments,

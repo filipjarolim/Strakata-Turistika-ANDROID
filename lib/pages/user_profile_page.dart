@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/visit_data.dart';
-import '../models/tracking_summary.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/ui/app_toast.dart';
 import '../widgets/ui/strakata_primitives.dart';
@@ -17,17 +16,15 @@ import '../repositories/visit_repository.dart';
 import '../services/auth_service.dart';
 import '../services/database/database_service.dart';
 import '../services/cloudinary_service.dart';
-import 'dynamic_form_page.dart';
 import '../services/vector_tile_provider.dart';
 import '../services/mapy_cz_download_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../services/app_update_service.dart';
-
+import '../widgets/legal/legal_actions.dart';
 import '../widgets/ui/web_mobile_section_card.dart';
 import '../widgets/ui/web_mobile_patterns.dart';
 import 'offline_maps_page.dart';
+import 'results_visit_detail_page.dart';
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({Key? key}) : super(key: key);
@@ -224,8 +221,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                               Navigator.of(context).pushNamed('/exception-request');
                             },
                           ),
-                          _buildMenuItem(Icons.description_outlined, 'Pravidla soutěže (web)', _openRulesWeb),
-                          _buildMenuItem(Icons.help_outline_rounded, 'O aplikaci a podpora', _showHelpAndAboutSheet),
+                          _buildMenuItem(Icons.description_outlined, 'Pravidla soutěže', () => LegalActions.openCompetitionRules(context)),
+                          _buildMenuItem(Icons.privacy_tip_outlined, 'Soukromí a podmínky', () => LegalActions.showAbout(context)),
                         ],
                       ),
                     ),
@@ -461,7 +458,19 @@ class _UserProfilePageState extends State<UserProfilePage> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () => _showRouteDetailsSheet(visit),
+          onTap: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ResultsVisitDetailPage(
+                  visit: visit,
+                  seasonYear: visit.year > 0 ? visit.year : _selectedYear,
+                  userName: AuthService.currentUser?.name ?? 'Já',
+                  allowDraftActions: true,
+                ),
+              ),
+            );
+            if (mounted) _loadUserVisits();
+          },
           child: Row(
             children: [
               Expanded(
@@ -631,90 +640,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   // --- Logic Helpers (Bottom Sheets, Dialogs, etc.) ---
 
-  void _showHelpAndAboutSheet() {
-    showStrakataModalBottomSheet(
-      context: context,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Center(child: StrakataSheetHandle()),
-            const SizedBox(height: 24),
-            const StrakataSheetTitle('O aplikaci a podpora'),
-            const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.info_outline, color: Colors.blue)),
-              title: const Text('O aplikaci', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final version = await AppUpdateService.getAppVersionString();
-                final lastUpdate = await AppUpdateService.getLastUpdateDateString();
-                if (context.mounted) {
-                  showAboutDialog(
-                    context: context,
-                    applicationName: 'Strakatá Turistika',
-                    applicationVersion: version,
-                    applicationIcon: const Icon(Icons.hiking, size: 48, color: Color(0xFF2E7D32)),
-                    children: [
-                      const SizedBox(height: 12),
-                      Text('Poslední instalovaná aktualizace: $lastUpdate'),
-                    ],
-                  );
-                }
-              },
-            ),
-            const Divider(height: 1),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.help_outline, color: Colors.green)),
-              title: const Text('Pomoc a podpora', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showSupportContact();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  void _showSupportContact() {
-    showStrakataModalBottomSheet(
-      context: context,
-      builder: (ctx2) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.support_agent_rounded, size: 48, color: Color(0xFF2E7D32)),
-            const SizedBox(height: 16),
-            const StrakataSheetTitle('Kontaktujte nás'),
-            const SizedBox(height: 8),
-            const Text('Máte dotaz nebo problém? Napište nám.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.email_outlined, size: 20, color: Colors.black87),
-                  SizedBox(width: 10),
-                  Text('jarolimfilip07@gmail.com', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
-    );
-  }
-
   Color _getStatusColor(VisitState state) {
     switch (state) {
       case VisitState.APPROVED: return const Color(0xFF10B981);
@@ -724,269 +649,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  IconData _getStatusIcon(VisitState state) {
-    switch (state) {
-      case VisitState.APPROVED: return Icons.check_circle_rounded;
-      case VisitState.PENDING_REVIEW: return Icons.schedule_rounded;
-      case VisitState.REJECTED: return Icons.cancel_rounded;
-      case VisitState.DRAFT: return Icons.edit_note_rounded;
-    }
-  }
-
   String _getStatusText(VisitState state) {
     switch (state) {
       case VisitState.APPROVED: return 'Schváleno';
       case VisitState.PENDING_REVIEW: return 'Čeká na kontrolu';
       case VisitState.REJECTED: return 'Zamítnuto';
       case VisitState.DRAFT: return 'Rozpracováno';
-    }
-  }
-
-  void _showRouteDetailsSheet(VisitData visit) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            const StrakataSheetHandle(margin: EdgeInsets.only(top: 12)),
-            
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 56, height: 56,
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(visit.state).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(_getStatusIcon(visit.state), color: _getStatusColor(visit.state), size: 28),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          visit.routeTitle ?? visit.visitedPlaces,
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF111827), height: 1.2),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                             color: _getStatusColor(visit.state).withValues(alpha: 0.1),
-                             borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _getStatusText(visit.state),
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _getStatusColor(visit.state)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFF3F4F6)),
-                      ),
-                      child: Column(
-                        children: [
-                           _buildDetailRow(Icons.star_outline, 'Body', '${visit.points.toStringAsFixed(1)} b'),
-                           const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
-                           if (visit.route != null && visit.route!['totalDistance'] != null)
-                              _buildDetailRow(Icons.route_outlined, 'Vzdálenost', '${((visit.route!['totalDistance'] as num) / 1000).toStringAsFixed(1)} km'),
-                           if (visit.visitDate != null)
-                              _buildDetailRow(Icons.calendar_today_outlined, 'Datum', '${visit.visitDate!.day}.${visit.visitDate!.month}.${visit.visitDate!.year}'),
-                           if (visit.dogName != null && visit.dogName!.isNotEmpty)
-                              _buildDetailRow(Icons.pets, 'Pes', visit.dogName!),
-                        ],
-                      ),
-                    ),
-                    
-                    if (visit.places.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      const Align(alignment: Alignment.centerLeft, child: Text('Navštívená místa', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
-                      const SizedBox(height: 12),
-                      ...visit.places.map((place) => Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 4, offset: const Offset(0, 2))],
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(_getPlaceTypeIcon(place.type), color: const Color(0xFF4B5563), size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(child: Text(place.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1F2937)))),
-                          ],
-                        ),
-                      )),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            
-            if (visit.state == VisitState.DRAFT) ...[
-               Container(
-                 padding: const EdgeInsets.all(24),
-                 decoration: BoxDecoration(
-                   color: Colors.white,
-                   border: Border(top: BorderSide(color: Colors.grey[200]!)),
-                 ),
-                 child: Row(
-                   children: [
-                     Expanded(
-                       child: OutlinedButton(
-                         onPressed: () async {
-                           final confirm = await showDialog<bool>(
-                             context: context,
-                             builder: (c) => AlertDialog(
-                                title: const Text('Smazat?'), content: const Text('Opravdu smazat tento návrh?'),
-                                actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Zrušit')), TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Smazat', style: TextStyle(color: Colors.red)))],
-                             ),
-                           );
-                           if (confirm == true) {
-                             await _visitRepository.deleteVisit(visit.id);
-                             if (mounted) { Navigator.pop(context); _loadUserVisits(); }
-                           }
-                         },
-                         style: OutlinedButton.styleFrom(
-                           padding: const EdgeInsets.symmetric(vertical: 16),
-                           foregroundColor: Colors.red,
-                           side: const BorderSide(color: Colors.red),
-                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                         ),
-                         child: const Text('Smazat'),
-                       ),
-                     ),
-                     const SizedBox(width: 16),
-                     Expanded(
-                       child: ElevatedButton(
-                         onPressed: () {
-                           Navigator.pop(context);
-                           final slug = _formSlugForVisitDraft(visit);
-                           Navigator.of(context).push(
-                             MaterialPageRoute<void>(
-                               builder: (_) => DynamicFormPage(
-                                 slug: slug,
-                                 existingVisit: visit,
-                                 trackingSummary: TrackingSummary(
-                                   isTracking: false,
-                                   startTime: visit.visitDate ?? visit.createdAt ?? DateTime.now(),
-                                   duration: Duration(seconds: visit.route?['duration'] ?? 0),
-                                   totalDistance:
-                                       (visit.route?['totalDistance'] as num?)?.toDouble() ?? 0,
-                                   averageSpeed:
-                                       (visit.route?['averageSpeed'] as num?)?.toDouble() ?? 0,
-                                   maxSpeed: (visit.route?['maxSpeed'] as num?)?.toDouble() ?? 0,
-                                   totalElevationGain: 0,
-                                   totalElevationLoss: 0,
-                                   minAltitude: null,
-                                   maxAltitude: null,
-                                   trackPoints: (visit.route?['trackPoints'] as List?)
-                                           ?.map((p) => TrackPoint.fromJson(
-                                                 Map<String, dynamic>.from(p as Map),
-                                               ))
-                                           .toList() ??
-                                       [],
-                                 ),
-                               ),
-                             ),
-                           );
-                         },
-                         style: ElevatedButton.styleFrom(
-                           padding: const EdgeInsets.symmetric(vertical: 16),
-                           backgroundColor: const Color(0xFF2E7D32),
-                           foregroundColor: Colors.white,
-                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                         ),
-                         child: const Text('Pokračovat'),
-                       ),
-                     ),
-                   ],
-                 ),
-               ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: Colors.grey[500]),
-              const SizedBox(width: 8),
-              Text(label, style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500)),
-            ],
-          ),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF111827))),
-        ],
-      ),
-    );
-  }
-
-  /// Slug formuláře v DB podle `extraPoints.source` (stejná logika jako při odeslání).
-  String _formSlugForVisitDraft(VisitData visit) {
-    final src = visit.extraPoints['source']?.toString();
-    switch (src) {
-      case 'gpx_upload':
-        return 'gpx-upload';
-      case 'screenshot':
-        return 'screenshot-upload';
-      case 'strakata_route':
-        return 'strakata-upload';
-      case 'gps_tracking':
-        return 'gps-tracking';
-      default:
-        final pts = visit.route?['trackPoints'];
-        if (pts is List && pts.isNotEmpty) return 'gps-tracking';
-        return 'gps-tracking';
-    }
-  }
-
-  IconData _getPlaceTypeIcon(String typeName) {
-    switch (typeName) {
-      case 'PEAK':
-        return Icons.landscape_rounded;
-      case 'TOWER':
-        return Icons.location_city_rounded;
-      case 'TREE':
-        return Icons.park_outlined;
-      default:
-        return Icons.place_outlined;
     }
   }
 
@@ -1134,7 +802,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _updateUserImage(String userId, String imageUrl) async {
-    await DatabaseService().updateOne('users', {'_id': userId}, {'\$set': {'image': imageUrl, 'updatedAt': DateTime.now().toIso8601String()}});
+    await DatabaseService().updateOne('users', {'_id': userId}, {'\$set': {'image': imageUrl, 'updatedAt': DateTime.now()}});
     final u = AuthService.currentUser;
     if (u != null) {
        final updated = User(id: u.id, email: u.email, name: u.name, image: imageUrl, isOAuth: u.isOAuth, provider: u.provider, providerAccountId: u.providerAccountId, role: u.role, isTwoFactorEnabled: u.isTwoFactorEnabled, dogName: u.dogName);
@@ -1145,7 +813,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _updateUserName(String userId, String name) async {
-    await DatabaseService().updateOne('users', {'_id': userId}, {'\$set': {'name': name, 'updatedAt': DateTime.now().toIso8601String()}});
+    await DatabaseService().updateOne('users', {'_id': userId}, {'\$set': {'name': name, 'updatedAt': DateTime.now()}});
     final u = AuthService.currentUser;
     if (u != null) {
        final updated = User(id: u.id, email: u.email, name: name, image: u.image, isOAuth: u.isOAuth, provider: u.provider, providerAccountId: u.providerAccountId, role: u.role, isTwoFactorEnabled: u.isTwoFactorEnabled, dogName: u.dogName);
@@ -1164,7 +832,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   void _showDeleteAccountConfirmation() {
     showDialog(context: context, builder: (c) => AlertDialog(
-      title: const Text('Smazat účet'), content: const Text('Tato akce je nevratná. Opravdu chcete smazat účet?'),
+      title: const Text('Smazat účet'),
+      content: const Text(
+        'Smazáním účtu trvale odstraníte svůj profil, návštěvy a související data. Tuto akci nelze vrátit.',
+      ),
       actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Zrušit')), TextButton(onPressed: () async { Navigator.pop(c); await _deleteAccount(); }, child: const Text('SMAZAT', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)))],
     ));
   }
@@ -1182,8 +853,4 @@ class _UserProfilePageState extends State<UserProfilePage> {
      }
   }
 
-  Future<void> _openRulesWeb() async {
-    final url = Uri.parse('https://www.strakata.cz/pravidla');
-    await launchUrl(url, mode: LaunchMode.externalApplication);
-  }
 }

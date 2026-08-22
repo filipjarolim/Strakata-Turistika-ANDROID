@@ -18,7 +18,14 @@ class DatabaseService {
 
   Future<bool> connect() async {
     try {
-      await dotenv.load();
+      // Nenačítat znovu, pokud už je env k dispozici (main() nebo testLoad v testech).
+      bool alreadyLoaded = false;
+      try {
+        alreadyLoaded = dotenv.env.isNotEmpty;
+      } catch (_) {}
+      if (!alreadyLoaded) {
+        await dotenv.load();
+      }
       _baseUrl = dotenv.env['API_BASE_URL']?.trim();
       _apiKey = dotenv.env['MOBILE_API_KEY']?.trim();
 
@@ -80,7 +87,7 @@ class DatabaseService {
       final response = await http.post(
         url,
         headers: headers,
-        body: jsonEncode(requestBody),
+        body: jsonEncode(_normalizeForJson(requestBody)),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -105,6 +112,30 @@ class DatabaseService {
     } catch (e) {
       throw Exception('Chyba při komunikaci s databází: $e');
     }
+  }
+
+  /// JSON neumí BSON Date — `DateTime` posíláme jako `{"$date": ISO}` a server
+  /// (`/api/mobile/db`) je převede na skutečné Date. Holý ISO string by se v DB
+  /// uložil jako string a rozbil Prisma čtení na webu (P2023).
+  dynamic _normalizeForJson(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) {
+      return {'\$date': value.toUtc().toIso8601String()};
+    }
+    if (value is Map) {
+      final out = <String, dynamic>{};
+      for (final entry in value.entries) {
+        out[entry.key.toString()] = _normalizeForJson(entry.value);
+      }
+      return out;
+    }
+    if (value is Iterable) {
+      return value.map(_normalizeForJson).toList();
+    }
+    if (value is num || value is bool || value is String) {
+      return value;
+    }
+    return value.toString();
   }
 
   Future<List<Map<String, dynamic>>> find(

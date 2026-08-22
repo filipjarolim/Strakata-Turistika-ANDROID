@@ -3,14 +3,22 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io' show Platform;
 import 'database/database_service.dart';
 import '../config/google_auth_config.dart';
 
 class AuthService {
-  static final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: GoogleAuthConfig.scopes,
-    // Use default configuration - let Google Sign-In handle the client ID
-  );
+  static GoogleSignIn get _googleSignIn => GoogleSignIn(
+        scopes: GoogleAuthConfig.scopes,
+        // Web client — used as serverClientId so backend can verify ID tokens.
+        serverClientId: GoogleAuthConfig.clientId.isEmpty
+            ? null
+            : GoogleAuthConfig.clientId,
+        // iOS requires a dedicated iOS OAuth client (not the WEB one).
+        clientId: Platform.isIOS && GoogleAuthConfig.iosClientId.isNotEmpty
+            ? GoogleAuthConfig.iosClientId
+            : null,
+      );
   
   static User? _currentUser;
   static bool _isInitialized = false;
@@ -44,7 +52,15 @@ class AuthService {
     }
     
     try {
-      // Test Google Sign-In with a simple operation
+      // Avoid calling into Google Sign-In during startup on iOS when the
+      // native client isn't configured — that throws an uncaught NSException.
+      if (Platform.isIOS && !GoogleAuthConfig.isIosConfigured) {
+        print(
+          '⚠️ Google Sign-In on iOS needs GOOGLE_IOS_CLIENT_ID '
+          '(create an iOS OAuth client in Google Cloud Console)',
+        );
+        return;
+      }
       final isSignedIn = await _googleSignIn.isSignedIn();
       print('✅ Google Sign-In plugin is available (isSignedIn: $isSignedIn)');
     } catch (e) {
@@ -116,7 +132,16 @@ class AuthService {
     if (!GoogleAuthConfig.isConfigured) {
       return AuthResult(
         success: false,
-        error: 'Google Client ID not configured. Update lib/config/google_auth_config.dart',
+        error: 'Google Client ID not configured. Update .env (GOOGLE_CLIENT_ID).',
+      );
+    }
+    if (Platform.isIOS && !GoogleAuthConfig.isIosConfigured) {
+      return AuthResult(
+        success: false,
+        error:
+            'iOS Google Sign-In needs an iOS OAuth client. '
+            'Create one in Google Cloud Console and set GOOGLE_IOS_CLIENT_ID '
+            '(and Info.plist GIDClientID).',
       );
     }
     
@@ -217,124 +242,22 @@ class AuthService {
     );
   }
   
-  // Sign In with credentials
+  // Sign In with credentials — v aplikaci jen Google. Dřívější implementace
+  // přihlásila kohokoliv, kdo znal e-mail, bez ověření hesla.
   static Future<AuthResult> signInWithCredentials(String email, String password) async {
-    try {
-      // Normalize email to lowercase for case-insensitive comparison
-      final normalizedEmail = email.trim().toLowerCase();
-      
-      if (normalizedEmail.isEmpty || password.isEmpty) {
-        return AuthResult(
-          success: false,
-          error: 'Email and password are required',
-        );
-      }
-      
-      if (password.length < 6) {
-        return AuthResult(
-          success: false,
-          error: 'Password must be at least 6 characters',
-        );
-      }
-      
-      // Create or find user by email
-      final user = User(
-        id: 'credential_user_${normalizedEmail.hashCode}',
-        email: normalizedEmail,
-        name: 'User ${normalizedEmail.split('@')[0]}',
-        image: null,
-        isOAuth: false,
-        provider: 'credentials',
-        providerAccountId: normalizedEmail,
-      );
-      
-      // Check if user exists in database
-      final existingUser = await _findUserByEmail(user.email);
-      
-      if (existingUser != null) {
-        _currentUser = existingUser;
-      } else {
-        // Create new user
-        final createdUser = await _createUser(user);
-        _currentUser = createdUser;
-      }
-      
-      // Save session
-      await _saveSessionToStorage();
-      
-      return AuthResult(
-        success: true,
-        user: _currentUser,
-      );
-      
-    } catch (e) {
-      print('❌ Credential Sign In Error: $e');
-      return AuthResult(
-        success: false,
-        error: 'Failed to sign in with credentials: $e',
-      );
-    }
+    return AuthResult(
+      success: false,
+      error:
+          'Přihlášení e-mailem a heslem v aplikaci není podporované. Použijte Google účet.',
+    );
   }
   
   // Sign Up with credentials
   static Future<AuthResult> signUpWithCredentials(String email, String password, String name) async {
-    try {
-      // Normalize email to lowercase for case-insensitive comparison
-      final normalizedEmail = email.trim().toLowerCase();
-      
-      // Validate input
-      if (normalizedEmail.isEmpty || password.isEmpty || name.isEmpty) {
-        return AuthResult(
-          success: false,
-          error: 'All fields are required',
-        );
-      }
-      
-      if (password.length < 6) {
-        return AuthResult(
-          success: false,
-          error: 'Password must be at least 6 characters',
-        );
-      }
-      
-      // Check if user already exists
-      final existingUser = await _findUserByEmail(normalizedEmail);
-      if (existingUser != null) {
-        return AuthResult(
-          success: false,
-          error: 'User with this email already exists',
-        );
-      }
-      
-      // Create new user
-      final user = User(
-        id: 'credential_user_${DateTime.now().millisecondsSinceEpoch}',
-        email: normalizedEmail,
-        name: name,
-        image: null,
-        isOAuth: false,
-        provider: 'credentials',
-        providerAccountId: normalizedEmail,
-      );
-      
-      final createdUser = await _createUser(user);
-      _currentUser = createdUser;
-      
-      // Save session
-      await _saveSessionToStorage();
-      
-      return AuthResult(
-        success: true,
-        user: _currentUser,
-      );
-      
-    } catch (e) {
-      print('❌ Credential Sign Up Error: $e');
-      return AuthResult(
-        success: false,
-        error: 'Failed to sign up with credentials: $e',
-      );
-    }
+    return AuthResult(
+      success: false,
+      error: 'Registrace v aplikaci není podporovaná. Použijte registraci na webu a přihlaste se Googlem.',
+    );
   }
   
   // Sign Out
@@ -382,9 +305,11 @@ class AuthService {
         'email': user.email.toLowerCase(),
         'name': user.name,
         'image': user.image,
-        'emailVerified': DateTime.now().toIso8601String(),
-        'createdAt': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
+        // DateTime objekty — DatabaseService je serializuje jako {$date} a server
+        // uloží BSON Date (string by rozbil Prisma čtení uživatele na webu).
+        'emailVerified': DateTime.now(),
+        'createdAt': DateTime.now(),
+        'updatedAt': DateTime.now(),
         'role': 'UZIVATEL',
         'isTwoFactorEnabled': false,
       };
@@ -397,8 +322,8 @@ class AuthService {
         'type': 'oidc',
         'provider': user.provider,
         'providerAccountId': user.providerAccountId,
-        'createdAt': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
+        'createdAt': DateTime.now(),
+        'updatedAt': DateTime.now(),
       };
       
       await DatabaseService().insertOne('accounts', accountDoc);
@@ -427,7 +352,7 @@ class AuthService {
         {
           '\$set': {
             'image': imageUrl,
-            'updatedAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now(),
           }
         }
       );
@@ -447,7 +372,7 @@ class AuthService {
         {
           '\$set': {
             'dogName': dogName,
-            'updatedAt': DateTime.now().toIso8601String(),
+            'updatedAt': DateTime.now(),
           }
         }
       );

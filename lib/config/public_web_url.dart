@@ -6,5 +6,5 @@ String publicWebBaseUrl() {
   if (u != null && u.isNotEmpty) {
     return u.replaceAll(RegExp(r'/+$'), '');
   }
-  return 'https://strakata.cz';
+  return 'https://strakataturistika.vercel.app';
 }

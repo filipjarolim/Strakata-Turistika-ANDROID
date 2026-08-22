@@ -624,7 +624,9 @@ class ActivityItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: WebMobileSectionCard(
           padding: EdgeInsets.zero,
-          child: ListTile(
+          child: Material(
+            color: Colors.transparent,
+            child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             leading: Container(
               padding: const EdgeInsets.all(10),
@@ -653,6 +655,7 @@ class ActivityItem extends StatelessWidget {
               ),
             ),
             trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey[500]),
+            ),
           ),
         ),
       ),

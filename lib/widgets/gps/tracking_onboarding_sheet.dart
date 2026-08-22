@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../ui/app_button.dart';
 import '../ui/strakata_primitives.dart';
@@ -9,7 +10,7 @@ class TrackingOnboardingSheet extends StatefulWidget {
   final VoidCallback? onComplete;
   final bool showSkipButton;
 
-  /// When true (GPS tracking flow), all three steps must be completed.
+  /// When true (GPS tracking flow), location + background must be completed.
   /// When false (app entry), foreground location is enough to continue.
   final bool requireAllForComplete;
 
@@ -21,7 +22,8 @@ class TrackingOnboardingSheet extends StatefulWidget {
   });
 
   @override
-  State<TrackingOnboardingSheet> createState() => _TrackingOnboardingSheetState();
+  State<TrackingOnboardingSheet> createState() =>
+      _TrackingOnboardingSheetState();
 }
 
 class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
@@ -30,6 +32,8 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
   bool _backgroundGranted = false;
   bool _batteryOptimized = true;
   bool _isCompleting = false;
+  bool _isRequesting = false;
+  bool _isChecking = false;
 
   @override
   void initState() {
@@ -46,63 +50,105 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed && !_isRequesting) {
       _checkPermissions();
     }
   }
 
   bool get _canContinue {
     if (widget.requireAllForComplete) {
-      return _locationGranted && _backgroundGranted && !_batteryOptimized;
+      final batteryOk = Platform.isIOS || !_batteryOptimized;
+      return _locationGranted && _backgroundGranted && batteryOk;
     }
     return _locationGranted;
   }
 
   Future<void> _checkPermissions() async {
-    final locStatus = await Permission.location.status;
-    final bgStatus = await Permission.locationAlways.status;
-    final batteryStatus = await Permission.ignoreBatteryOptimizations.status;
+    if (_isChecking || _isRequesting) return;
+    _isChecking = true;
+    try {
+      final locStatus = await Permission.location.status;
+      final bgStatus = await Permission.locationAlways.status;
+      final batteryStatus = Platform.isAndroid
+          ? await Permission.ignoreBatteryOptimizations.status
+          : PermissionStatus.granted;
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _locationGranted = locStatus.isGranted;
-      _backgroundGranted = bgStatus.isGranted;
-      _batteryOptimized = !batteryStatus.isGranted;
-    });
-
-    if (_canContinue && !_isCompleting) {
-      _isCompleting = true;
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted) return;
-        _finish();
+      setState(() {
+        _locationGranted = locStatus.isGranted;
+        _backgroundGranted = bgStatus.isGranted;
+        _batteryOptimized = Platform.isAndroid && !batteryStatus.isGranted;
       });
+
+      if (_canContinue && !_isCompleting) {
+        _isCompleting = true;
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (!mounted) return;
+          _finish();
+        });
+      }
+    } finally {
+      _isChecking = false;
     }
   }
 
   void _finish() {
     if (widget.onComplete != null) {
       widget.onComplete!();
-    } else {
+    } else if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop(_canContinue);
     }
   }
 
+  Future<void> _safeRequest(Permission permission) async {
+    try {
+      await permission.request();
+    } on PlatformException catch (e) {
+      // Ignore overlapping system dialogs — status will be re-checked after.
+      if (e.code != 'ERROR_ALREADY_REQUESTING_PERMISSIONS') {
+        rethrow;
+      }
+    }
+  }
+
   Future<void> _requestLocation() async {
-    await Permission.location.request();
-    await _checkPermissions();
+    if (_isRequesting) return;
+    setState(() => _isRequesting = true);
+    try {
+      final status = await Permission.location.status;
+      if (status.isGranted) {
+        await _checkPermissions();
+        return;
+      }
+      if (status.isPermanentlyDenied) {
+        await openAppSettings();
+      } else {
+        await _safeRequest(Permission.location);
+      }
+      await _checkPermissions();
+    } catch (e) {
+      debugPrint('Location permission request failed: $e');
+      await _checkPermissions();
+    } finally {
+      if (mounted) setState(() => _isRequesting = false);
+    }
   }
 
   Future<void> _showBackgroundInstructions() async {
-    if (!mounted) return;
+    if (!mounted || _isRequesting) return;
     final open = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Nastavení polohy na pozadí'),
-        content: const Text(
-          'V nastavení telefonu otevřete sekci Oprávnění → Poloha '
-          'a zvolte „Povolit vždy“ (ne „Pouze při používání“).\n\n'
-          'Sekce Baterie není totéž — tu nastavíte až v dalším kroku.',
+        content: Text(
+          Platform.isIOS
+              ? 'V nastavení iPhonu otevřete Poloha a zvolte „Vždy“ '
+                  '(ne „Při používání aplikace“).\n\n'
+                  'Bez toho se GPS při zamčeném telefonu vypne.'
+              : 'V nastavení telefonu otevřete sekci Oprávnění → Poloha '
+                  'a zvolte „Povolit vždy“ (ne „Pouze při používání“).\n\n'
+                  'Sekce Baterie není totéž — tu nastavíte až v dalším kroku.',
         ),
         actions: [
           TextButton(
@@ -111,21 +157,35 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Otevřít nastavení'),
+            child: const Text('Pokračovat'),
           ),
         ],
       ),
     );
     if (open != true) return;
-    if (await Permission.locationAlways.isPermanentlyDenied) {
-      await openAppSettings();
-    } else {
-      await Permission.locationAlways.request();
-      if (!await Permission.locationAlways.isGranted && Platform.isAndroid) {
-        await openAppSettings();
+
+    setState(() => _isRequesting = true);
+    try {
+      final status = await Permission.locationAlways.status;
+      if (status.isGranted) {
+        await _checkPermissions();
+        return;
       }
+      if (status.isPermanentlyDenied) {
+        await openAppSettings();
+      } else {
+        await _safeRequest(Permission.locationAlways);
+        if (!await Permission.locationAlways.isGranted) {
+          await openAppSettings();
+        }
+      }
+      await _checkPermissions();
+    } catch (e) {
+      debugPrint('Background permission request failed: $e');
+      await _checkPermissions();
+    } finally {
+      if (mounted) setState(() => _isRequesting = false);
     }
-    await _checkPermissions();
   }
 
   Future<void> _requestBackground() async {
@@ -133,6 +193,7 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
   }
 
   Future<void> _requestBattery() async {
+    if (Platform.isIOS || _isRequesting) return;
     if (!mounted) return;
     final open = await showDialog<bool>(
       context: context,
@@ -157,16 +218,26 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
       ),
     );
     if (open != true) return;
-    await Permission.ignoreBatteryOptimizations.request();
-    if (!await Permission.ignoreBatteryOptimizations.isGranted) {
-      await openAppSettings();
+
+    setState(() => _isRequesting = true);
+    try {
+      await _safeRequest(Permission.ignoreBatteryOptimizations);
+      if (!await Permission.ignoreBatteryOptimizations.isGranted) {
+        await openAppSettings();
+      }
+      await _checkPermissions();
+    } catch (e) {
+      debugPrint('Battery permission request failed: $e');
+      await _checkPermissions();
+    } finally {
+      if (mounted) setState(() => _isRequesting = false);
     }
-    await _checkPermissions();
   }
 
   @override
   Widget build(BuildContext context) {
-    final allDone = _locationGranted && _backgroundGranted && !_batteryOptimized;
+    final batteryOk = Platform.isIOS || !_batteryOptimized;
+    final allDone = _locationGranted && _backgroundGranted && batteryOk;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -205,33 +276,37 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
             title: 'Přístup k poloze',
             description: 'Základní oprávnění pro GPS.',
             isDone: _locationGranted,
-            onAction: _requestLocation,
-            buttonText: 'Povolit',
+            onAction: _isRequesting ? null : _requestLocation,
+            buttonText: _isRequesting ? 'Čekejte…' : 'Povolit',
           ),
           const SizedBox(height: 20),
           _buildStep(
             title: 'Sledování na pozadí',
-            description:
-                'V nastavení zvolte „Povolit vždy“. Jinak se GPS při zamčeném telefonu vypne.',
+            description: Platform.isIOS
+                ? 'V nastavení iPhonu zvolte Poloha → „Vždy“.'
+                : 'V nastavení zvolte „Povolit vždy“. Jinak se GPS při zamčeném telefonu vypne.',
             isDone: _backgroundGranted,
-            onAction: _requestBackground,
+            onAction: _isRequesting ? null : _requestBackground,
             buttonText: 'Nastavit „Vždy“',
-            isEnabled: _locationGranted,
+            isEnabled: _locationGranted && !_isRequesting,
           ),
-          const SizedBox(height: 20),
-          _buildStep(
-            title: 'Vypnout úsporu baterie',
-            description: 'Samostatný krok v sekci Baterie — zabrání ukončení aplikace během výletu.',
-            isDone: !_batteryOptimized,
-            onAction: _requestBattery,
-            buttonText: 'Nastavit baterii',
-            isEnabled: _locationGranted,
-          ),
+          if (Platform.isAndroid) ...[
+            const SizedBox(height: 20),
+            _buildStep(
+              title: 'Vypnout úsporu baterie',
+              description:
+                  'Samostatný krok v sekci Baterie — zabrání ukončení aplikace během výletu.',
+              isDone: !_batteryOptimized,
+              onAction: _isRequesting ? null : _requestBattery,
+              buttonText: 'Nastavit baterii',
+              isEnabled: _locationGranted && !_isRequesting,
+            ),
+          ],
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _checkPermissions,
+              onPressed: (_isRequesting || _isChecking) ? null : _checkPermissions,
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Zkontrolovat nastavení znovu'),
               style: OutlinedButton.styleFrom(
@@ -251,7 +326,9 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
                       _isCompleting = true;
                       _finish();
                     }
-                  : (widget.showSkipButton ? () => Navigator.of(context).pop(false) : null),
+                  : (widget.showSkipButton
+                      ? () => Navigator.of(context).pop(false)
+                      : null),
               text: _primaryButtonLabel(allDone),
               type: _canContinue ? AppButtonType.primary : AppButtonType.ghost,
               size: AppButtonSize.large,
@@ -276,10 +353,11 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
     required String title,
     required String description,
     required bool isDone,
-    required VoidCallback onAction,
+    required VoidCallback? onAction,
     required String buttonText,
     bool isEnabled = true,
   }) {
+    final canTap = isEnabled && onAction != null && !isDone;
     return Opacity(
       opacity: isEnabled ? 1.0 : 0.5,
       child: Row(
@@ -292,7 +370,9 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
             decoration: BoxDecoration(
               color: isDone
                   ? const Color(0xFF4CAF50)
-                  : (isEnabled ? const Color(0xFFE5E7EB) : const Color(0xFFF3F4F6)),
+                  : (isEnabled
+                      ? const Color(0xFFE5E7EB)
+                      : const Color(0xFFF3F4F6)),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -311,7 +391,9 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: isDone ? const Color(0xFF4CAF50) : const Color(0xFF1F2937),
+                    color: isDone
+                        ? const Color(0xFF4CAF50)
+                        : const Color(0xFF1F2937),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -327,7 +409,7 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
                   SizedBox(
                     height: 36,
                     child: ElevatedButton(
-                      onPressed: onAction,
+                      onPressed: canTap ? onAction : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFF3F4F6),
                         foregroundColor: const Color(0xFF1F2937),
@@ -340,7 +422,10 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
                       ),
                       child: Text(
                         buttonText,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ),

@@ -69,8 +69,9 @@ class PlaceTypeConfig {
     'color': color.value,
     'isActive': isActive,
     'order': order,
-    'createdAt': createdAt.toIso8601String(),
-    'updatedAt': updatedAt.toIso8601String(),
+    // DateTime → {$date} → BSON Date; ISO string by rozbil Prisma na webu.
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
     'createdBy': createdBy,
     'updatedBy': updatedBy,
   };
@@ -165,7 +166,14 @@ class PlaceTypeConfigService {
       
       configs.sort((a, b) => PlaceTypeConfig.safeIntFromMap(a['order']).compareTo(PlaceTypeConfig.safeIntFromMap(b['order'])));
       final result = configs.map((doc) => PlaceTypeConfig.fromMap(doc)).toList();
-      return result.where((config) => config.isActive).toList();
+      const hidden = {
+        'DOPORUCENA_TRASA_TVORBA',
+        'DOPORUCENA_TRASA_ZDOLANI',
+        'PRUCHOZI_BOD',
+      };
+      return result
+          .where((config) => config.isActive && !hidden.contains(config.name))
+          .toList();
     } catch (e) {
       print('❌ Error loading place type configs: $e');
       return <PlaceTypeConfig>[];

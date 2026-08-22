@@ -82,6 +82,19 @@ const List<AdminTestTrackFixture> kAdminTestTrackFixtures = [
   ),
 ];
 
+/// Rovnoměrně proředí polyline na [maxPoints] bodů (první a poslední zůstanou).
+/// Vzdálenost se musí počítat z původních bodů — downsample je jen pro uložení/UI.
+List<TrackPoint> downsampleTrackPoints(
+  List<TrackPoint> points, {
+  int maxPoints = _maxPoints,
+}) {
+  if (points.length <= maxPoints) return points;
+  final step = (points.length - 1) / (maxPoints - 1);
+  return [
+    for (var i = 0; i < maxPoints; i++) points[(i * step).round()],
+  ];
+}
+
 class TrackParseResult {
   final bool ok;
   final String? message;
@@ -109,7 +122,7 @@ TrackParseResult _parseGpxXml(XmlDocument doc) {
   }
   final pts = <TrackPoint>[];
   final base = DateTime.now().toUtc();
-  for (var i = 0; i < nodes.length && i < _maxPoints; i++) {
+  for (var i = 0; i < nodes.length; i++) {
     final node = nodes[i];
     final lat = double.tryParse(node.getAttribute('lat') ?? '');
     final lon = double.tryParse(node.getAttribute('lon') ?? '');
@@ -160,7 +173,6 @@ TrackParseResult _parseKml(String text) {
           );
         }
       }
-      if (points.length >= _maxPoints) break;
     }
   }
   if (points.length < 2) {
@@ -191,7 +203,6 @@ TrackParseResult _parseTcx(String text) {
         ),
       );
     }
-    if (points.length >= _maxPoints) break;
   }
   if (points.length < 2) {
     return TrackParseResult.error('V TCX nebyly nalezeny žádné body Trackpoint.');
@@ -228,7 +239,6 @@ TrackParseResult _parseGeoJson(String text) {
           );
         }
       }
-      if (out.length >= _maxPoints) break;
     }
     return out;
   }
@@ -280,7 +290,7 @@ TrackParseResult _parseCsv(String text) {
     lngIdx = 1;
   }
   final pts = <TrackPoint>[];
-  for (var i = 1; i < lines.length && pts.length < _maxPoints; i++) {
+  for (var i = 1; i < lines.length; i++) {
     final cells = lines[i].split(',').map((c) => c.trim()).toList();
     if (cells.length <= latIdx || cells.length <= lngIdx) continue;
     final lat = double.tryParse(cells[latIdx]);
@@ -392,8 +402,24 @@ TrackingSummary trackPointsToSummary(List<TrackPoint> points) {
     totalElevationLoss: 0,
     minAltitude: null,
     maxAltitude: null,
-    trackPoints: points,
+    // Vzdálenost je z kompletní trasy; do paměti/UI jde už proředěná polyline.
+    trackPoints: downsampleTrackPoints(points),
   );
+}
+
+/// Payload `route` pro Mongo — vzdálenost z kompletního měření, polyline max 1000 bodů.
+Map<String, dynamic> routePayloadForStorage(TrackingSummary summary) {
+  return {
+    'duration': summary.duration.inSeconds,
+    'totalDistance': summary.totalDistance,
+    'averageSpeed': summary.averageSpeed,
+    'maxSpeed': summary.maxSpeed,
+    'totalElevationGain': summary.totalElevationGain,
+    'totalElevationLoss': summary.totalElevationLoss,
+    'minAltitude': summary.minAltitude,
+    'maxAltitude': summary.maxAltitude,
+    'trackPoints': downsampleTrackPoints(summary.trackPoints).map((p) => p.toJson()).toList(),
+  };
 }
 
 extension _FirstOrNull<E> on Iterable<E> {

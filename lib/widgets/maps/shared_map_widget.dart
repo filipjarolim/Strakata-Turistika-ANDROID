@@ -57,6 +57,20 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
     _mapController = widget.mapController ?? MapController();
   }
 
+  @override
+  void didUpdateWidget(covariant SharedMapWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.center != widget.center || oldWidget.zoom != widget.zoom) {
+      // Move when parent provides a new target (search / GPS / place edit).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        try {
+          _mapController.move(widget.center, widget.zoom);
+        } catch (_) {}
+      });
+    }
+  }
+
   String getTemplateUrl(MapStyle style) {
     switch (style) {
       case MapStyle.standard:

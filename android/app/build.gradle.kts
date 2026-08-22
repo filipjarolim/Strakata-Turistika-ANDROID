@@ -45,7 +45,8 @@ android {
     defaultConfig {
         applicationId = "cz.strakata.turistika.strakataturistikaandroidapp"
         minSdk = maxOf(flutter.minSdkVersion, 23)
-        targetSdk = flutter.targetSdkVersion
+        // Google Play od 31. 8. 2026 vyžaduje target API 36 (Android 16).
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         ndk {

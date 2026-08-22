@@ -15,6 +15,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/notifications_service.dart';
+import 'config/legal_config.dart';
 import 'pages/webview_page.dart';
 import 'services/database/database_service.dart';
 
@@ -42,14 +43,33 @@ import 'services/tracking_state_service.dart'; // Added
 import 'services/vector_tile_provider.dart';
 import 'services/app_shortcuts_service.dart';
 import 'services/gps_shortcut_bridge.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'widgets/legal/legal_actions.dart';
+
+void _recordStartupError(Object e, StackTrace st, String reason) {
+  print('❌ $reason: $e');
+  if (Firebase.apps.isEmpty) return;
+  unawaited(
+    FirebaseCrashlytics.instance.recordError(e, st, reason: reason),
+  );
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
+  // Load .env before auth / Google Sign-In config is used
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+    print('⚠️ dotenv load failed: $e');
+  }
+
+  var firebaseReady = false;
+
+  // Initialize Firebase (requires GoogleService-Info.plist on iOS)
   try {
     await Firebase.initializeApp();
+    firebaseReady = true;
 
     // Initialize Crashlytics and Flutter error forwarding
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
@@ -58,29 +78,25 @@ void main() async {
       return true;
     };
   } catch (e, st) {
-    FirebaseCrashlytics.instance.recordError(
-      e,
-      st,
-      reason: 'Firebase init failed',
+    print(
+      '❌ Firebase init failed: $e\n'
+      'Add ios/Runner/GoogleService-Info.plist from the Firebase console.',
     );
+    print(st);
   }
 
   // Initialize MongoDB connection
   try {
     await DatabaseService().connect();
   } catch (e, st) {
-    FirebaseCrashlytics.instance.recordError(
-      e,
-      st,
-      reason: 'Mongo init failed',
-    );
+    _recordStartupError(e, st, 'Mongo init failed');
   }
 
   // Initialize Auth service
   try {
     await AuthService.initialize();
   } catch (e, st) {
-    FirebaseCrashlytics.instance.recordError(e, st, reason: 'Auth init failed');
+    _recordStartupError(e, st, 'Auth init failed');
   }
 
   // Initialize new services
@@ -89,13 +105,14 @@ void main() async {
     await Future.wait([
       ErrorRecoveryService().initialize(),
 
-      // Notifications: background handler and service init
-      (() async {
-        FirebaseMessaging.onBackgroundMessage(
-          firebaseMessagingBackgroundHandler,
-        );
-        await NotificationsService().initialize();
-      })(),
+      // Notifications require Firebase
+      if (firebaseReady)
+        (() async {
+          FirebaseMessaging.onBackgroundMessage(
+            firebaseMessagingBackgroundHandler,
+          );
+          await NotificationsService().initialize();
+        })(),
 
       // Initialize VectorTileProvider for offline maps
       VectorTileProvider.initialize().catchError((e) {
@@ -114,11 +131,7 @@ void main() async {
       AppShortcutsService().initialize(),
     ]);
   } catch (e, st) {
-    FirebaseCrashlytics.instance.recordError(
-      e,
-      st,
-      reason: 'Local services init failed',
-    );
+    _recordStartupError(e, st, 'Local services init failed');
   }
 
   runApp(const MyApp());
@@ -141,6 +154,30 @@ class MyApp extends StatelessWidget {
       ],
       theme: AppTheme.lightTheme,
       themeMode: ThemeMode.light,
+      // Tap outside any text field to dismiss the keyboard (Android + iOS).
+      builder: (context, child) {
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (event) {
+            final focus = FocusManager.instance.primaryFocus;
+            if (focus == null || !focus.hasFocus) return;
+
+            final renderObject = focus.context?.findRenderObject();
+            if (renderObject is! RenderBox) {
+              focus.unfocus();
+              return;
+            }
+
+            final box = renderObject;
+            final localOffset = box.globalToLocal(event.position);
+            final inside = Offset.zero & box.size;
+            if (!inside.contains(localOffset)) {
+              focus.unfocus();
+            }
+          },
+          child: child,
+        );
+      },
       // Use AuthGate as the initial route to handle permission and auth checks
       home: const AuthGate(),
       routes: {
@@ -150,13 +187,17 @@ class MyApp extends StatelessWidget {
         '/offline-maps': (context) => const OfflineMapsPage(),
         '/exception-request': (context) => const ExceptionRequestPage(),
         '/visit-data-form': (context) => const DynamicFormPage(slug: 'gps-tracking'),
-        '/tos': (context) => const WebViewPage(
+        '/tos': (context) => WebViewPage(
           title: 'Podmínky použití',
-          url: 'https://www.strakata.cz/terms',
+          url: LegalConfig.termsUrl,
         ),
-        '/privacy': (context) => const WebViewPage(
+        '/privacy': (context) => WebViewPage(
           title: 'Zásady ochrany osobních údajů',
-          url: 'https://www.strakata.cz/privacy',
+          url: LegalConfig.privacyUrl,
+        ),
+        '/rules': (context) => WebViewPage(
+          title: 'Pravidla soutěže',
+          url: LegalConfig.rulesUrl,
         ),
       },
     );
@@ -420,31 +461,17 @@ class _MyHomePageState extends State<MyHomePage>
               _profileMenuItem(
                 icon: Icons.description_outlined,
                 title: 'Pravidla soutěže',
-                onTap: () async {
+                onTap: () {
                   Navigator.of(sheetContext).pop();
-                  final url = Uri.parse('https://www.strakata.cz/pravidla');
-                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                  LegalActions.openCompetitionRules(context);
                 },
               ),
               _profileMenuItem(
                 icon: Icons.info_outline_rounded,
                 title: 'O aplikaci',
-                onTap: () async {
+                onTap: () {
                   Navigator.of(sheetContext).pop();
-                  final version = await AppUpdateService.getAppVersionString();
-                  final lastUpdate = await AppUpdateService.getLastUpdateDateString();
-                  if (context.mounted) {
-                    showAboutDialog(
-                      context: context,
-                      applicationName: 'Strakatá Turistika',
-                      applicationVersion: version,
-                      applicationIcon: const Icon(Icons.hiking, size: 44, color: Color(0xFF2E7D32)),
-                      children: [
-                        const SizedBox(height: 12),
-                        Text('Poslední instalovaná aktualizace: $lastUpdate'),
-                      ],
-                    );
-                  }
+                  LegalActions.showAbout(context);
                 },
               ),
             ],

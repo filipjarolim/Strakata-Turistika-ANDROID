@@ -51,7 +51,8 @@ class ScoringConfig {
         'requireAtLeastOnePlace': requireAtLeastOnePlace,
         'placeTypePoints': placeTypePoints,
         'active': active,
-        'updatedAt': updatedAt.toIso8601String(),
+        // DateTime → {$date} → BSON Date; ISO string by rozbil Prisma na webu.
+        'updatedAt': updatedAt,
         'updatedBy': updatedBy,
       };
 
@@ -150,7 +151,11 @@ class ScoringConfigService {
         placeTypePoints: {
           'PEAK': 1.0,
           'TOWER': 1.0,
+          'rozhledny': 1.0,
           'TREE': 1.0,
+          'RUINS': 1.0,
+          'CAVE': 1.0,
+          'UNUSUAL_NAME': 1.0,
           'OTHER': 0.0,
         },
         active: true,

@@ -29,10 +29,6 @@ String? validateFormField(FormContext c, FormFieldWidget field) {
       }
       return null;
     case 'strakata_route_selector':
-      final id = c.extraData['strakataRouteId']?.toString() ?? '';
-      if (id.trim().isEmpty) {
-        return 'Vyberte kategorii Strakaté trasy.';
-      }
       return null;
     case 'title_input':
       if ((c.routeTitle ?? '').trim().isEmpty) {

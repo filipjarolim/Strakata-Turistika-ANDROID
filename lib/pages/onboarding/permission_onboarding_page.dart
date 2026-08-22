@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:io' show Platform;
 import 'package:strakataturistikaandroidapp/widgets/gps/tracking_onboarding_sheet.dart';
 import '../../config/app_colors.dart';
 import '../../config/app_theme.dart';
@@ -35,7 +36,9 @@ class PermissionOnboardingPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Aby aplikace správně fungovala, potřebujeme nastavit přístup k poloze a baterii.',
+                        Platform.isIOS
+                            ? 'Aby aplikace správně fungovala, potřebujeme nastavit přístup k poloze.'
+                            : 'Aby aplikace správně fungovala, potřebujeme nastavit přístup k poloze a baterii.',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.libreFranklin(
                           fontSize: 16,

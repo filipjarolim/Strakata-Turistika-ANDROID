@@ -13,20 +13,6 @@ class MonthlyThemeData {
   });
 }
 
-class StrakataRouteData {
-  final String id;
-  final String label;
-  final String icon;
-  final int order;
-
-  const StrakataRouteData({
-    required this.id,
-    required this.label,
-    required this.icon,
-    required this.order,
-  });
-}
-
 class CompetitionDashboardService {
   static final CompetitionDashboardService _instance = CompetitionDashboardService._internal();
   factory CompetitionDashboardService() => _instance;
@@ -34,12 +20,14 @@ class CompetitionDashboardService {
 
   final DatabaseService _db = DatabaseService();
 
-  Future<MonthlyThemeData?> getCurrentMonthlyTheme() async {
-    final now = DateTime.now();
+  /// Téma měsíce podle [forDate] (výchozí = dnes). Při dodatečném doplňování
+  /// výletu se předává datum návštěvy, aby se načetlo téma správného měsíce.
+  Future<MonthlyThemeData?> getCurrentMonthlyTheme({DateTime? forDate}) async {
+    final date = forDate ?? DateTime.now();
     try {
       final doc = await _db.findOne('monthly_themes', {
-        'year': now.year,
-        'month': now.month,
+        'year': date.year,
+        'month': date.month,
       });
       if (doc == null) return null;
       final rawKeywords = doc['keywords'] as List<dynamic>? ?? const [];
@@ -48,33 +36,12 @@ class CompetitionDashboardService {
           .where((e) => e.isNotEmpty)
           .toList();
       return MonthlyThemeData(
-        year: TypeConverter.toInt(doc['year']) ?? now.year,
-        month: TypeConverter.toInt(doc['month']) ?? now.month,
+        year: TypeConverter.toInt(doc['year']) ?? date.year,
+        month: TypeConverter.toInt(doc['month']) ?? date.month,
         keywords: keywords,
       );
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<List<StrakataRouteData>> getActiveStrakataRoutes() async {
-    try {
-      final docs = await _db.find('strakata_trasy', {'isActive': true});
-      final items = docs
-          .map(
-            (doc) => StrakataRouteData(
-              id: doc['_id']?.toString() ?? doc['id']?.toString() ?? '',
-              label: doc['label']?.toString() ?? doc['name']?.toString() ?? 'Strakatá trasa',
-              icon: doc['icon']?.toString() ?? '🧭',
-              order: TypeConverter.toInt(doc['order']) ?? 999,
-            ),
-          )
-          .where((e) => e.id.isNotEmpty)
-          .toList();
-      items.sort((a, b) => a.order.compareTo(b.order));
-      return items;
-    } catch (_) {
-      return <StrakataRouteData>[];
     }
   }
 }

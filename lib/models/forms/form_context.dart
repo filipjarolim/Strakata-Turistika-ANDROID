@@ -29,6 +29,7 @@ class FormContext extends ChangeNotifier {
   void initializeWith({
     TrackingSummary? summary,
     VisitData? existingVisit,
+    List<Place>? capturedPlaces,
   }) {
     if (summary != null) {
       trackingSummary = summary;
@@ -49,6 +50,16 @@ class FormContext extends ChangeNotifier {
           existingVisit.dogNotAllowed == 'true' || existingVisit.dogNotAllowed == 'on';
       places = List.from(existingVisit.places);
       extraData = Map.from(existingVisit.extraData ?? {});
+    }
+
+    if (capturedPlaces != null && capturedPlaces.isNotEmpty) {
+      final existingIds = {for (final p in places) p.id};
+      for (final p in capturedPlaces) {
+        if (!existingIds.contains(p.id)) {
+          places.add(p);
+          existingIds.add(p.id);
+        }
+      }
     }
     monthlyThemeKeywordCount = null;
     _dataVersion++;

@@ -3,19 +3,20 @@ set -euo pipefail
 
 # Release helper for Strakatá Turistika
 # - Bumps version in pubspec.yaml (patch by default; supports minor/major)
-# - Runs flutter clean && flutter pub get
-# - Runs tools/adb_check.sh (sanity checks) if exists
-# - Builds Android App Bundle (.aab) for release
-# - Git add/commit/push with provided message
+# - Uses Homebrew JDK 21 (Gradle 8 cannot run on system Java 25)
+# - Builds signed Android App Bundle (.aab) and APK
+# - Commits, tags, and pushes to origin
 #
 # Usage:
-#   tools/release.sh "Commit message here"
-#   tools/release.sh --minor "Commit message here"
-#   tools/release.sh --major "Commit message here"
-#
+#   ./release.sh
+#   ./release.sh "Commit message here"
+#   ./release.sh --minor "Commit message here"
+#   ./release.sh --major "Commit message here"
+#   ./release.sh --skip-build "Commit message here"
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PUBSPEC="$PROJECT_DIR/pubspec.yaml"
+JDK_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
 
 if [[ ! -f "$PUBSPEC" ]]; then
   echo "error: pubspec.yaml not found at $PUBSPEC" >&2
@@ -23,18 +24,21 @@ if [[ ! -f "$PUBSPEC" ]]; then
 fi
 
 BUMP="patch"
+SKIP_BUILD=0
 if [[ "${1:-}" == "--minor" || "${1:-}" == "-m" ]]; then
   BUMP="minor"; shift
 elif [[ "${1:-}" == "--major" || "${1:-}" == "-M" ]]; then
   BUMP="major"; shift
+elif [[ "${1:-}" == "--skip-build" ]]; then
+  SKIP_BUILD=1; shift
 fi
 
-if [[ $# -lt 1 ]]; then
-  echo "error: commit message required" >&2
-  echo "Usage: tools/release.sh [--minor|--major] \"Commit message\"" >&2
-  exit 1
+COMMIT_MSG="${1:-}"
+
+if [[ -d "$JDK_HOME" ]]; then
+  export JAVA_HOME="$JDK_HOME"
+  export PATH="$JAVA_HOME/bin:$PATH"
 fi
-COMMIT_MSG="$1"
 
 echo "== Bumping version ($BUMP) in pubspec.yaml =="
 current_line=$(grep -E '^version:' "$PUBSPEC" || true)
@@ -43,7 +47,6 @@ if [[ -z "$current_line" ]]; then
   exit 1
 fi
 
-# Parse version: x.y.z+build
 version_str=$(echo "$current_line" | awk '{print $2}')
 IFS='+.' read -r major minor patch build <<< "$(echo "$version_str" | sed 's/+/\./')"
 major=${major:-0}; minor=${minor:-0}; patch=${patch:-0}; build=${build:-0}
@@ -55,46 +58,63 @@ case "$BUMP" in
 esac
 build=$((build+1))
 new_version="${major}.${minor}.${patch}+${build}"
+new_name="${major}.${minor}.${patch}"
 
-# Replace line in-place (portable for macOS/BSD sed)
 sed -i '' -E "s/^version: .*/version: ${new_version}/" "$PUBSPEC"
 echo "version: ${new_version}"
 
-echo "== Flutter clean & pub get =="
-(
-  cd "$PROJECT_DIR"
-  flutter clean
-  flutter pub get
-)
-
-echo "== Sanity checks (ADB/keystore) =="
-if [[ -x "$PROJECT_DIR/tools/adb_check.sh" ]]; then
-  "$PROJECT_DIR/tools/adb_check.sh" || true
-else
-  echo "warn: tools/adb_check.sh not found or not executable; skipping checks"
+if [[ -z "$COMMIT_MSG" ]]; then
+  COMMIT_MSG="Release v${new_name}: production build for Google Play"
 fi
 
-echo "== Building Android App Bundle (.aab) =="
-(
-  cd "$PROJECT_DIR"
-  if [[ ! -f "$PROJECT_DIR/android/key.properties" ]]; then
-    echo "error: android/key.properties missing. Create it for release signing." >&2
-    echo "       Example:" >&2
-    echo "       storePassword=YOUR_STORE_PASSWORD" >&2
-    echo "       keyPassword=YOUR_KEY_PASSWORD" >&2
-    echo "       keyAlias=upload" >&2
-    echo "       storeFile=/absolute/path/to/upload-keystore.jks" >&2
-    exit 1
-  fi
-  flutter build appbundle --release -t lib/main.dart
-)
+if [[ "$SKIP_BUILD" -eq 0 ]]; then
+  echo "== Flutter clean & pub get =="
+  (
+    cd "$PROJECT_DIR"
+    flutter clean
+    flutter pub get
+  )
 
-echo "== Git commit & push =="
+  echo "== Building Android App Bundle (.aab) and APK =="
+  (
+    cd "$PROJECT_DIR"
+    if [[ ! -f "$PROJECT_DIR/android/key.properties" ]]; then
+      echo "error: android/key.properties missing. Create it for release signing." >&2
+      echo "       Example:" >&2
+      echo "       storePassword=YOUR_STORE_PASSWORD" >&2
+      echo "       keyPassword=YOUR_KEY_PASSWORD" >&2
+      echo "       keyAlias=upload" >&2
+      echo "       storeFile=/absolute/path/to/upload-keystore.jks" >&2
+      exit 1
+    fi
+    flutter build appbundle --release -t lib/main.dart
+    flutter build apk --release -t lib/main.dart
+  )
+else
+  echo "== Skipping Flutter build (--skip-build) =="
+fi
+
+echo "== Git commit, tag & push =="
 (
   cd "$PROJECT_DIR"
+  git rm -r --cached --ignore-unmatch android/build >/dev/null 2>&1 || true
   git add -A
-  git commit -m "$COMMIT_MSG" || true
-  git push
+  git restore --staged --worktree android/build 2>/dev/null || true
+  git status --short
+  if git diff --cached --quiet; then
+    echo "warn: nothing to commit"
+  else
+    git commit -m "$COMMIT_MSG"
+  fi
+  git tag -a -f "v${new_name}" -m "$COMMIT_MSG"
+  git push origin HEAD
+  git push origin "v${new_name}"
 )
 
-echo "Done. AAB located under: build/app/outputs/bundle/release/"
+if [[ "$SKIP_BUILD" -eq 0 ]]; then
+  echo "Done. v${new_name} (${new_version})"
+  echo "  AAB: $PROJECT_DIR/build/app/outputs/bundle/release/app-release.aab"
+  echo "  APK: $PROJECT_DIR/build/app/outputs/flutter-apk/app-release.apk"
+else
+  echo "Done. v${new_name} (${new_version}) pushed."
+fi

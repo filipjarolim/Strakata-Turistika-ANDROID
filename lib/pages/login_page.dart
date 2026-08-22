@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/legal_config.dart';
 import '../config/public_web_url.dart';
 import '../services/auth_service.dart';
 import '../services/haptic_service.dart';
+import '../widgets/legal/legal_actions.dart';
 import '../widgets/ui/app_toast.dart';
 
 /// Stejná struktura a copy jako `/auth/login` na webu (`LoginForm` + `CardWrapper` + `auth/layout`).
@@ -21,6 +23,8 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   late final AnimationController _entrance;
   late final Animation<double> _fade;
   late final TapGestureRecognizer _registerTap;
+  late final TapGestureRecognizer _termsTap;
+  late final TapGestureRecognizer _privacyTap;
 
   static const Color _bg = Color(0xFFFAFAF6);
   static const Color _cardBg = Color(0xFFFAFAF6);
@@ -34,6 +38,8 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   void initState() {
     super.initState();
     _registerTap = TapGestureRecognizer()..onTap = _openRegisterOnWeb;
+    _termsTap = TapGestureRecognizer()..onTap = _openTerms;
+    _privacyTap = TapGestureRecognizer()..onTap = _openPrivacy;
     _entrance = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 450),
@@ -45,8 +51,20 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   @override
   void dispose() {
     _registerTap.dispose();
+    _termsTap.dispose();
+    _privacyTap.dispose();
     _entrance.dispose();
     super.dispose();
+  }
+
+  void _openTerms() {
+    if (!mounted) return;
+    LegalActions.openTermsOfService(context);
+  }
+
+  void _openPrivacy() {
+    if (!mounted) return;
+    LegalActions.openPrivacyPolicy(context);
   }
 
   Future<void> _openRegisterOnWeb() async {
@@ -134,7 +152,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               child: Text(
-                'Strakatá Turistika © $year',
+                '${LegalConfig.appName} © $year',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.libreFranklin(
                   fontSize: 11,
@@ -244,6 +262,8 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
                 const SizedBox(height: 8),
                 _buildGoogleButton(),
                 const SizedBox(height: 16),
+                _buildLegalConsent(),
+                const SizedBox(height: 8),
                 TextButton(
                   onPressed: _isLoading ? null : _signOut,
                   style: TextButton.styleFrom(
@@ -298,6 +318,42 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLegalConsent() {
+    final linkStyle = GoogleFonts.libreFranklin(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      color: _emerald700,
+      decoration: TextDecoration.underline,
+      decorationColor: _emerald700,
+    );
+    return Text.rich(
+      textAlign: TextAlign.center,
+      TextSpan(
+        style: GoogleFonts.libreFranklin(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          height: 1.45,
+          color: Colors.black.withValues(alpha: 0.55),
+        ),
+        children: [
+          const TextSpan(text: 'Pokračováním souhlasíte s '),
+          TextSpan(
+            text: 'Podmínkami použití',
+            style: linkStyle,
+            recognizer: _termsTap,
+          ),
+          const TextSpan(text: ' a '),
+          TextSpan(
+            text: 'Zásadami ochrany osobních údajů',
+            style: linkStyle,
+            recognizer: _privacyTap,
+          ),
+          const TextSpan(text: '.'),
+        ],
       ),
     );
   }

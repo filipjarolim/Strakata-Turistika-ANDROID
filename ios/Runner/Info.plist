@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -24,6 +26,55 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>mailto</string>
+		<string>https</string>
+		<string>http</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Aplikace potřebuje přístup k fotoaparátu pro focení návštěv.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Aplikace potřebuje přístup k poloze i na pozadí, aby mohla zaznamenávat trasy během turistiky.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Aplikace potřebuje přístup k poloze i na pozadí, aby mohla zaznamenávat trasy během turistiky.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Aplikace potřebuje přístup k poloze pro sledování tras a zaznamenávání návštěv.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aplikace potřebuje přístup k fotkám pro výběr snímků z návštěv.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Aplikace používá pohybové senzory pro lepší sledování aktivity při turistice.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Aplikace může použít Face ID pro rychlé odemčení.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>FlutterSceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -41,25 +92,18 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>NSCameraUsageDescription</key>
-	<string>This app needs camera access to take photos of your visits.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs photo library access to select photos of your visits.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app needs your location to track your hiking routes and record your visits.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>This app needs continuous access to your location to track your routes even when the app is in the background.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>This app needs continuous access to your location to track your routes even when the app is in the background.</string>
-	<key>UIBackgroundModes</key>
+	<key>GIDClientID</key>
+	<string>1050635912562-gcdc8km9u9i87bgshh3sncf6hnmk6noh.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
 	<array>
-		<string>location</string>
-		<string>fetch</string>
-		<string>remote-notification</string>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.1050635912562-gcdc8km9u9i87bgshh3sncf6hnmk6noh</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

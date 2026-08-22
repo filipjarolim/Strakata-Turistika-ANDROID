@@ -18,6 +18,13 @@ class VisitRepository {
     return '$timeHex$randomHex';
   }
 
+  static String _escapeRegex(String input) {
+    return input.replaceAllMapped(
+      RegExp(r'[.*+?^${}()|[\]\\]'),
+      (m) => '\\${m[0]}',
+    );
+  }
+
   /// Fetch visits with pagination, filtering, and sorting
   Future<Map<String, dynamic>> getVisits({
     int page = 1,
@@ -41,15 +48,20 @@ class VisitRepository {
       }
 
       if (searchQuery != null && searchQuery.isNotEmpty) {
-        final regex = '.*$searchQuery.*';
-        final options = 'i';
-        query['\$or'] = [
-          {'routeTitle': {'\$regex': regex, '\$options': options}},
-          {'visitedPlaces': {'\$regex': regex, '\$options': options}},
-          {'fullName': {'\$regex': regex, '\$options': options}},
-          {'extraPoints.fullName': {'\$regex': regex, '\$options': options}},
-          {'extraPoints.Příjmení a jméno': {'\$regex': regex, '\$options': options}},
-        ];
+        final trimmed = searchQuery.trim();
+        final clipped = trimmed.length > 80 ? trimmed.substring(0, 80) : trimmed;
+        final safe = _escapeRegex(clipped);
+        if (safe.isNotEmpty) {
+          final regex = '.*$safe.*';
+          const options = 'i';
+          query['\$or'] = [
+            {'routeTitle': {'\$regex': regex, '\$options': options}},
+            {'visitedPlaces': {'\$regex': regex, '\$options': options}},
+            {'fullName': {'\$regex': regex, '\$options': options}},
+            {'extraPoints.fullName': {'\$regex': regex, '\$options': options}},
+            {'extraPoints.Příjmení a jméno': {'\$regex': regex, '\$options': options}},
+          ];
+        }
       }
 
       final totalCount = await _dbService.count(_collectionName, query);
@@ -132,7 +144,7 @@ class VisitRepository {
         if (searchQuery != null && searchQuery.isNotEmpty) 
           {
             '\$match': {
-              'displayName': {'\$regex': searchQuery, '\$options': 'i'}
+              'displayName': {'\$regex': _escapeRegex(searchQuery), '\$options': 'i'}
             }
           },
         {
@@ -240,11 +252,6 @@ class VisitRepository {
       data['isFreeCategory'] = false;
     }
 
-    final strakataId = visit.extraPoints['strakataRouteId']?.toString().trim();
-    if (strakataId != null && strakataId.isNotEmpty) {
-      data['strakataTrasaId'] = strakataId;
-    }
-
     data.removeWhere((_, v) => v == null);
   }
 
@@ -256,7 +263,7 @@ class VisitRepository {
       if (visit.id.isEmpty) {
         idToPersist = _generateObjectId();
         data['_id'] = idToPersist;
-        data['createdAt'] = DateTime.now().toIso8601String();
+        data['createdAt'] = DateTime.now();
       } else {
         idToPersist = visit.id;
         data['_id'] = visit.id;
@@ -272,6 +279,9 @@ class VisitRepository {
       }
 
       _prepareVisitDocumentForPrismaStorage(visit, data);
+
+      // Poslední uživatelská úprava — web (admin) podle tohoto pole řadí a filtruje.
+      data['lastEditedAt'] = DateTime.now();
 
       final setData = Map<String, dynamic>.from(data);
       setData.remove('_id');
@@ -298,7 +308,7 @@ class VisitRepository {
       return idToPersist;
     } catch (e) {
       print('❌ [VisitRepository] Error saving visit: $e');
-      return null;
+      rethrow;
     }
   }
 
@@ -314,7 +324,7 @@ class VisitRepository {
             'extraPoints.towers': towersCount,
             'extraPoints.trees': treesCount,
             'extraPoints.points': points,
-            'updatedAt': DateTime.now().toIso8601String(),
+            'lastEditedAt': DateTime.now(),
           }
         }
       );
@@ -351,9 +361,9 @@ class VisitRepository {
   /// Update the state of a visit (Admin)
   Future<bool> updateVisitState(String visitId, VisitState newState, {String? rejectionReason}) async {
     try {
-      final updateFields = {
+      final updateFields = <String, dynamic>{
         'state': newState.name,
-        'updatedAt': DateTime.now().toIso8601String(),
+        'lastEditedAt': DateTime.now(),
       };
       if (rejectionReason != null) {
         updateFields['rejectionReason'] = rejectionReason;
@@ -381,7 +391,7 @@ class VisitRepository {
         {
           '\$set': {
             'state': newState.name,
-            'updatedAt': DateTime.now().toIso8601String(),
+            'lastEditedAt': DateTime.now(),
           }
         }
       );

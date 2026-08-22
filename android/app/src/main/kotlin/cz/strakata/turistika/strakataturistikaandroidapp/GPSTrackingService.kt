@@ -10,6 +10,7 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class GPSTrackingService : Service() {
@@ -60,6 +61,7 @@ class GPSTrackingService : Service() {
                     Log.d(TAG, "Location update: ${location.latitude}, ${location.longitude}")
                     lastLocation = location
                     updateNotification()
+                    persistLocation(location)
                     
                     // Send location to Flutter via method channel
                     sendLocationToFlutter(location)
@@ -121,6 +123,7 @@ class GPSTrackingService : Service() {
         trackingStartTime = System.currentTimeMillis()
         // Mark running so Flutter can avoid duplicating notifications
         MainActivity.isGpsServiceRunning = true
+        resetPersistFile()
         
         // Acquire wake lock
         if (!wakeLock.isHeld) {
@@ -184,6 +187,26 @@ class GPSTrackingService : Service() {
         requestLocationUpdates()
     }
     
+    private fun persistFile(): File = File(filesDir, PERSIST_FILE)
+
+    private fun resetPersistFile() {
+        try {
+            persistFile().writeText("")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to reset persist file", e)
+        }
+    }
+
+    private fun persistLocation(location: Location) {
+        try {
+            persistFile().appendText(
+                "${location.latitude},${location.longitude},${location.time},${location.accuracy},${location.speed},${location.altitude}\n"
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist location", e)
+        }
+    }
+
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
@@ -251,5 +274,6 @@ class GPSTrackingService : Service() {
         const val EXTRA_MAX_WAIT_MS = "max_wait_ms"
         const val EXTRA_SMALLEST_DISPLACEMENT = "smallest_displacement_m"
         const val EXTRA_PRIORITY = "priority"
+        const val PERSIST_FILE = "gps_track_persist.jsonl"
     }
 } 

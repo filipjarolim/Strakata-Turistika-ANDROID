@@ -10,9 +10,8 @@ import '../models/place_type_config.dart';
 import '../services/auth_service.dart';
 import '../services/scoring_config_service.dart';
 import '../services/cloudinary_service.dart';
-import '../config/app_colors.dart';
 import '../models/forms/extra_data_merge.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../services/track_file_parser.dart';
 
 class DynamicUploadPage extends StatefulWidget {
   final String slug;
@@ -24,95 +23,24 @@ class DynamicUploadPage extends StatefulWidget {
 }
 
 class _DynamicUploadPageState extends State<DynamicUploadPage> {
-  bool _strakataMode = false;
-
   @override
   Widget build(BuildContext context) {
-    final canSwitchMode = widget.slug == 'gps-tracking';
-    final effectiveSlug = canSwitchMode
-        ? (_strakataMode ? 'strakata-upload' : widget.slug)
-        : widget.slug;
-    return Column(
-      children: [
-        if (canSwitchMode)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-            child: FormSectionCard(
-              title: 'Režim nahrávání',
-              subtitle: 'Přepnutí funguje stejně jako na webu.',
-              icon: Icons.compare_arrows_rounded,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _modeButton(
-                      selected: !_strakataMode,
-                      title: 'Klasická trasa',
-                      onTap: () => setState(() => _strakataMode = false),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _modeButton(
-                      selected: _strakataMode,
-                      title: 'Strakatá trasa',
-                      onTap: () => setState(() => _strakataMode = true),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        Expanded(
-          child: FormRenderer(
-            slug: effectiveSlug,
-            onSave: (formContext) =>
-                _handleSave(context, formContext, effectiveSlug),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _modeButton({
-    required bool selected,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: selected ? const Color(0xFFD5F8E4) : const Color(0xFFF4F0E8),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-          child: Center(
-            child: Text(
-              title,
-              style: GoogleFonts.libreFranklin(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-        ),
-      ),
+    return FormRenderer(
+      slug: widget.slug,
+      onSave: (formContext) => _handleSave(context, formContext),
     );
   }
 
   Future<void> _handleSave(
     BuildContext context,
     FormContext formContext,
-    String effectiveSlug,
   ) async {
     showFormLoadingDialog(context);
 
     try {
       final summary = formContext.trackingSummary;
-      final needsPolyline = effectiveSlug == 'gps-tracking' ||
-          effectiveSlug == 'gpx-upload' ||
-          effectiveSlug == 'strakata-upload';
+      final needsPolyline =
+          widget.slug == 'gps-tracking' || widget.slug == 'gpx-upload';
       if (needsPolyline &&
           (summary == null || summary.trackPoints.length < 2)) {
         throw Exception(
@@ -130,12 +58,11 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
       }
       for (final place in formContext.places) {
         final matches = placeTypeConfigs.where((c) => c.name == place.type);
-        if (matches.isEmpty) {
-          throw Exception(
-            'Konfigurace typu místa "${place.type}" nebyla nalezena v databázi.',
-          );
+        if (matches.isNotEmpty) {
+          points += matches.first.points;
+        } else {
+          points += scoringConfig.getPointsForPlaceType(place.type);
         }
-        points += matches.first.points;
       }
 
       List<Map<String, dynamic>>? photos;
@@ -144,6 +71,9 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
       }
 
       final currentUser = AuthService.currentUser;
+      if (currentUser == null) {
+        throw Exception('Pro uložení návštěvy se musíte přihlásit.');
+      }
       final double? distanceKmTop = summary != null
           ? double.parse((summary.totalDistance / 1000).toStringAsFixed(4))
           : null;
@@ -155,23 +85,16 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
 
       String? routeLinkStr;
       if (summary != null && summary.trackPoints.length >= 2) {
+        final forLink = downsampleTrackPoints(summary.trackPoints);
         routeLinkStr = jsonEncode(
-          summary.trackPoints
-              .map((p) => {'lat': p.latitude, 'lng': p.longitude})
-              .toList(),
+          forLink.map((p) => {'lat': p.latitude, 'lng': p.longitude}).toList(),
         );
       }
 
       final mergedExtra = <String, dynamic>{
-        'source': effectiveSlug == 'strakata-upload'
-            ? 'strakata_route'
-            : (effectiveSlug == 'gpx-upload'
-                ? 'gpx_upload'
-                : (effectiveSlug == 'screenshot-upload' ? 'screenshot' : 'gps_tracking')),
-        if (effectiveSlug == 'strakata-upload')
-          'strakataRouteId': formContext.extraData['strakataRouteId'],
-        if (effectiveSlug == 'strakata-upload')
-          'strakataRouteLabel': formContext.extraData['strakataRouteLabel'],
+        'source': widget.slug == 'gpx-upload'
+            ? 'gpx_upload'
+            : (widget.slug == 'screenshot-upload' ? 'screenshot' : 'gps_tracking'),
       };
       if (distanceKmTop != null) {
         mergedExtra['distanceKm'] = distanceKmTop;
@@ -183,14 +106,12 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
 
       final visitToSave = VisitData(
         id: '',
-        userId: currentUser?.id,
-        user: currentUser != null
-            ? {
-                'name': currentUser.name,
-                'email': currentUser.email,
-                'image': currentUser.image,
-              }
-            : null,
+        userId: currentUser.id,
+        user: {
+          'name': currentUser.name,
+          'email': currentUser.email,
+          'image': currentUser.image,
+        },
         year: formContext.visitDate.year,
         visitDate: formContext.visitDate,
         createdAt: DateTime.now(),
@@ -201,19 +122,12 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
         routeDescription: formContext.routeDescription ?? '',
         visitedPlaces: formContext.places.map((p) => p.name).join(', '),
         dogName: extraForVisit['dog_name']?.toString() ??
-            currentUser?.dogName,
+            currentUser.dogName,
         dogNotAllowed: formContext.dogNotAllowed ? 'true' : null,
         routeLink: routeLinkStr,
         extraData: extraForVisit,
         photos: photos,
-        route: summary != null
-            ? {
-                'duration': summary.duration.inSeconds,
-                'totalDistance': summary.totalDistance,
-                'trackPoints':
-                    summary.trackPoints.map((p) => p.toJson()).toList(),
-              }
-            : null,
+        route: summary != null ? routePayloadForStorage(summary) : null,
         places: formContext.places,
         extraPoints: mergedExtra,
         distanceKm: distanceKmTop,
@@ -222,7 +136,6 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
 
       final savedId = await VisitRepository().saveVisit(visitToSave);
 
-      // Close loading dialog
       if (!context.mounted) return;
       Navigator.pop(context);
 

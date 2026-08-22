@@ -48,9 +48,12 @@ class EnhancedGPSTrackingService {
   DateTime? _stationaryCandidateSince;
   int _consecutiveUnlockEligible = 0;
   
-  // Kalman filter parameters - more conservative for better accuracy
-  double _processNoise = 0.05; // Reduced from 0.1
-  double _measurementNoise = 1.0; // tighter measurement noise for stronger smoothing
+  // Kalman filter parameters.
+  // Pozn.: původní processNoise 0.05 dával ustálený gain ~0.05 — filtrovaná
+  // pozice se téměř nehýbala, řezala zatáčky a měřená vzdálenost vycházela
+  // výrazně kratší. Gain ~0.6 stále tlumí šum, ale sleduje skutečný pohyb.
+  double _processNoise = 1.0;
+  double _measurementNoise = 1.0;
   double _kalmanGain = 0.0;
   double _errorCovariance = 1.0;
   
@@ -183,17 +186,22 @@ class EnhancedGPSTrackingService {
   
   // Setup event channel for receiving location updates from Android service
   Future<void> _setupEventChannel() async {
-    _locationEventSubscription = _eventChannel.receiveBroadcastStream().listen(
-      (dynamic event) {
-        if (event is Map) {
-          _handleLocationFromService(event);
-        }
-      },
-      onError: (error) {
-        print('GPS Event Channel Error: $error');
-        FirebaseCrashlytics.instance.log('GPS Event Channel Error: $error');
-      },
-    );
+    if (!Platform.isAndroid) return;
+
+    try {
+      _locationEventSubscription = _eventChannel.receiveBroadcastStream().listen(
+        (dynamic event) {
+          if (event is Map) {
+            _handleLocationFromService(event);
+          }
+        },
+        onError: (error) {
+          print('GPS Event Channel Error: $error');
+        },
+      );
+    } on MissingPluginException catch (e) {
+      print('GPS Event Channel unavailable: $e');
+    }
   }
   
   // Handle location updates from Android background service
@@ -260,42 +268,47 @@ class EnhancedGPSTrackingService {
       
       if (!locationAlwaysStatus.isGranted) {
         print('GPS: Requesting background location (Always)...');
-        
-        // Request background location - Android will show system dialog
-        locationAlwaysStatus = await Permission.locationAlways.request();
-        
+
+        try {
+          locationAlwaysStatus = await Permission.locationAlways.request();
+        } catch (e) {
+          print('GPS: Background permission request failed: $e');
+        }
+
         if (!locationAlwaysStatus.isGranted) {
           print('GPS: Background location permission denied');
-          print('GPS: WARNING - Tracking may not work reliably when screen is locked!');
-          // Continue anyway - we'll show a warning dialog
-        } else {
-          // print('GPS: Background location permission granted ✓');
+          print(
+            'GPS: WARNING - Tracking may not work reliably when screen is locked!',
+          );
         }
-      } else {
-        // print('GPS: Background location permission already granted ✓');
       }
     }
     
-    // Step 3: Request battery optimization exemption for better reliability
-    var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
-    if (!batteryStatus.isGranted) {
-      print('GPS: Requesting battery optimization exemption...');
-      batteryStatus = await Permission.ignoreBatteryOptimizations.request();
-      
-      if (batteryStatus.isGranted) {
-        // print('GPS: Battery optimization exemption granted ✓');
-      } else {
-        print('GPS: Battery optimization exemption denied - tracking may be interrupted');
+    // Step 3: Request battery optimization exemption (Android only)
+    if (Platform.isAndroid) {
+      var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
+      if (!batteryStatus.isGranted) {
+        print('GPS: Requesting battery optimization exemption...');
+        try {
+          batteryStatus = await Permission.ignoreBatteryOptimizations.request();
+        } catch (e) {
+          print('GPS: Battery permission request failed: $e');
+        }
+
+        if (batteryStatus.isGranted) {
+          // print('GPS: Battery optimization exemption granted ✓');
+        } else {
+          print(
+            'GPS: Battery optimization exemption denied - tracking may be interrupted',
+          );
+        }
       }
-    } else {
-      // print('GPS: Battery optimization already exempted ✓');
     }
-    
+
     // Summary
-    final locationAlwaysStatus = await Permission.locationAlways.status;
-    
     // Return true if we have at least basic location permission
-    return permission == LocationPermission.whileInUse || permission == LocationPermission.always;
+    return permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always;
   }
   
   // Start tracking with enhanced background support
@@ -307,7 +320,7 @@ class EnhancedGPSTrackingService {
     // Provide haptic feedback for tracking start
     await HapticService.trackingStart();
     if (!hasPermissions) {
-      FirebaseCrashlytics.instance.log('GPS Tracking failed: No location permissions');
+      print('GPS Tracking failed: No location permissions');
       return false;
     }
     
@@ -775,7 +788,15 @@ class EnhancedGPSTrackingService {
   
   // Predict next position based on current speed and heading
   Position _predictPosition(Position current) {
-    if (current.speed <= 0 || current.heading == null) return current;
+    // Android služba posílá heading vždy 0.0 — predikce by pak posouvala bod
+    // na sever a znehodnotila filtr. Bez věrohodného headingu nepredikujeme.
+    if (current.speed <= 0 ||
+        current.heading == null ||
+        current.heading == 0.0 ||
+        !current.headingAccuracy.isFinite ||
+        current.headingAccuracy <= 0) {
+      return current;
+    }
     
     const earthRadius = 6371000.0; // meters
     final distance = current.speed * 1.0; // 1 second prediction
@@ -864,7 +885,8 @@ class EnhancedGPSTrackingService {
         final double avgAcc = ((_lastValidPosition!.accuracy) + (position.accuracy)) / 2.0;
         final double dynMin = max(
           relaxed ? 0.8 : GpsConfig.minMovementMeters,
-          GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc,
+          min(GpsConfig.dynamicMinMoveCapMeters,
+              GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc),
         );
         final double minMove = dynMin;
         if (distance < minMove) {
@@ -933,7 +955,8 @@ class EnhancedGPSTrackingService {
     final double avgAcc = ((_lastValidPosition!.accuracy) + (current.accuracy)) / 2.0;
     final double dynMin = max(
       GpsConfig.minMovementMeters,
-      GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc,
+      min(GpsConfig.dynamicMinMoveCapMeters,
+          GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc),
     );
     final bool nearZeroMovement = derivedSpeed < GpsConfig.stationarySpeedThresholdMs && distance < dynMin;
     if (nearZeroMovement) {
@@ -1034,7 +1057,8 @@ class EnhancedGPSTrackingService {
       final double avgAcc = ((_lastValidPosition!.accuracy) + (position.accuracy)) / 2.0;
       final double dynMin = max(
         GpsConfig.minMovementMeters,
-        GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc,
+        min(GpsConfig.dynamicMinMoveCapMeters,
+            GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc),
       );
       if (distance >= dynMin) { // Avoid GPS noise with dynamic threshold
         _totalDistance += distance;

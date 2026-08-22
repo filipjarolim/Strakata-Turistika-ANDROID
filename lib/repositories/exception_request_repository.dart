@@ -57,7 +57,7 @@ class ExceptionRequestRepository {
         'status': 'PENDING',
         'adminResponse': null,
         'approvedById': null,
-        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'createdAt': DateTime.now(),
       };
 
       final response = await _dbService.insertOne(_collectionName, document);

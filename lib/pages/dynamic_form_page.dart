@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,6 +20,8 @@ import '../services/cloudinary_service.dart'; // Ensure this exists or use appro
 import '../models/place_type_config.dart';
 import '../models/forms/extra_data_merge.dart';
 import '../widgets/forms/form_field_validator.dart';
+import '../services/route_backup_service.dart';
+import '../services/track_file_parser.dart';
 
 class DynamicFormPage extends StatefulWidget {
   final String slug;
@@ -50,6 +53,7 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     _formContext.initializeWith(
       summary: widget.trackingSummary,
       existingVisit: widget.existingVisit,
+      capturedPlaces: RouteBackupService().capturedPlaces,
     );
   }
 
@@ -189,18 +193,21 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         points += distanceKm * scoringConfig.pointsPerKm;
       }
 
-      // Place points
+      // Place points — chybějící typ v DB nesmí zablokovat uložení celé návštěvy.
       for (var place in _formContext.places) {
         final matches = placeTypeConfigs.where((c) => c.name == place.type);
-        if (matches.isEmpty) {
-          throw Exception('Konfigurace typu místa "${place.type}" nebyla nalezena v databázi.');
+        if (matches.isNotEmpty) {
+          points += matches.first.points;
+        } else {
+          points += scoringConfig.getPointsForPlaceType(place.type);
         }
-        final typeConfig = matches.first;
-        points += typeConfig.points;
       }
 
       // 2. Prepare VisitData object
       final currentUser = AuthService.currentUser;
+      if (currentUser == null || currentUser.id.isEmpty) {
+        throw Exception('Pro uložení návštěvy se musíte přihlásit.');
+      }
 
       List<Map<String, dynamic>>? photos;
       if (_formContext.photoAttachments.isNotEmpty) {
@@ -220,23 +227,16 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         ];
       }
 
-      final routeMap = summary != null
-          ? {
-              'duration': summary.duration.inSeconds,
-              'totalDistance': summary.totalDistance,
-              'trackPoints': summary.trackPoints.map((p) => p.toJson()).toList(),
-            }
-          : null;
+      final routeMap = summary != null ? routePayloadForStorage(summary) : null;
 
       final extraForVisit = Map<String, dynamic>.from(_formContext.extraData);
       mergeComputedRouteMetricsIntoExtraData(extraForVisit, summary);
 
       String? routeLinkStr;
       if (summary != null && summary.trackPoints.length >= 2) {
+        final forLink = downsampleTrackPoints(summary.trackPoints);
         routeLinkStr = jsonEncode(
-          summary.trackPoints
-              .map((p) => {'lat': p.latitude, 'lng': p.longitude})
-              .toList(),
+          forLink.map((p) => {'lat': p.latitude, 'lng': p.longitude}).toList(),
         );
       }
 
@@ -248,15 +248,9 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           : widget.existingVisit?.durationMinutes;
 
       final mergedExtra = Map<String, dynamic>.from(widget.existingVisit?.extraPoints ?? {});
-      mergedExtra['source'] = widget.slug == 'strakata-upload'
-          ? 'strakata_route'
-          : (widget.slug == 'gpx-upload'
-              ? 'gpx_upload'
-              : (widget.slug == 'screenshot-upload' ? 'screenshot' : 'gps_tracking'));
-      if (widget.slug == 'strakata-upload') {
-        mergedExtra['strakataRouteId'] = _formContext.extraData['strakataRouteId'];
-        mergedExtra['strakataRouteLabel'] = _formContext.extraData['strakataRouteLabel'];
-      }
+      mergedExtra['source'] = widget.slug == 'gpx-upload'
+          ? 'gpx_upload'
+          : (widget.slug == 'screenshot-upload' ? 'screenshot' : 'gps_tracking');
       if (distanceKmTop != null) {
         mergedExtra['distanceKm'] = distanceKmTop;
         mergedExtra['distance'] = distanceKmTop;
@@ -265,12 +259,17 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         mergedExtra['elapsedTime'] = durationMinTop;
       }
 
+      List<Place> placesToSave = _formContext.places;
+      try {
+        placesToSave = await _uploadLocalPlacePhotos(placesToSave);
+      } catch (e) {
+        throw Exception('Nahrání fotek bodovaných míst selhalo: $e');
+      }
+
       final visit = VisitData(
         id: widget.existingVisit?.id ?? '',
-        userId: currentUser?.id,
-        user: currentUser != null
-            ? {'name': currentUser.name, 'email': currentUser.email, 'image': currentUser.image}
-            : null,
+        userId: currentUser.id,
+        user: {'name': currentUser.name, 'email': currentUser.email, 'image': currentUser.image},
         year: _formContext.visitDate.year,
         visitDate: _formContext.visitDate,
         createdAt: widget.existingVisit?.createdAt ?? DateTime.now(),
@@ -278,14 +277,14 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         points: points,
         routeTitle: _formContext.routeTitle ?? 'Trasa ${DateTime.now().day}.${DateTime.now().month}.',
         routeDescription: _formContext.routeDescription ?? '',
-        visitedPlaces: _formContext.places.map((p) => p.name).join(', '),
-        dogName: extraForVisit['dog_name']?.toString() ?? currentUser?.dogName,
+        visitedPlaces: placesToSave.map((p) => p.name).join(', '),
+        dogName: extraForVisit['dog_name']?.toString() ?? currentUser.dogName,
         dogNotAllowed: _formContext.dogNotAllowed ? 'true' : null,
         routeLink: routeLinkStr,
         extraData: extraForVisit,
         photos: photos,
         route: routeMap,
-        places: _formContext.places,
+        places: placesToSave,
         extraPoints: mergedExtra,
         distanceKm: distanceKmTop,
         durationMinutes: durationMinTop,
@@ -294,6 +293,8 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
       final savedId = await VisitRepository().saveVisit(visit);
 
       if (savedId != null) {
+        // Záznam je bezpečně v databázi — lokální záloha trasy už není potřeba.
+        await RouteBackupService().clearBackup();
         if (mounted) {
           await showFormStatusDialog(
             context,
@@ -308,7 +309,9 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           await showFormStatusDialog(
             context,
             title: 'Uložení selhalo',
-            message: 'Při ukládání došlo k chybě. Zkuste to znovu.',
+            message:
+                'Při ukládání došlo k chybě. Zkontrolujte připojení k internetu '
+                'a zkuste to znovu — vyplněná data i trasa zůstávají zachována.',
           );
         }
       }
@@ -327,6 +330,40 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  Future<List<Place>> _uploadLocalPlacePhotos(List<Place> places) async {
+    final out = <Place>[];
+    for (final place in places) {
+      if (place.photos.every((p) => !p.isLocal)) {
+        out.add(place);
+        continue;
+      }
+      final uploaded = <PlacePhoto>[];
+      for (final photo in place.photos) {
+        if (!photo.isLocal) {
+          uploaded.add(photo);
+          continue;
+        }
+        final file = File(photo.url);
+        if (!await file.exists()) {
+          throw Exception('Lokální fotka místa "${place.name}" už v telefonu není.');
+        }
+        final response = await CloudinaryService.uploadImageResponse(file);
+        if (response == null) {
+          throw Exception('Nepodařilo se nahrát fotku místa "${place.name}".');
+        }
+        uploaded.add(
+          photo.copyWith(
+            url: response.secureUrl,
+            publicId: response.publicId,
+            isLocal: false,
+          ),
+        );
+      }
+      out.add(place.copyWith(photos: uploaded));
+    }
+    return out;
   }
 
   Widget _buildUploadStepHero(String slug) {

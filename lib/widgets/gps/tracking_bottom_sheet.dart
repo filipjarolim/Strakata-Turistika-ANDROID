@@ -20,6 +20,8 @@ class TrackingBottomSheet extends StatelessWidget {
   final double? currentAltitude;
   final VoidCallback? onSimulateRoute;
   final VoidCallback? onOfflineMaps;
+  final VoidCallback? onAddPlace;
+  final int capturedPlaceCount;
 
   const TrackingBottomSheet({
     super.key,
@@ -37,6 +39,8 @@ class TrackingBottomSheet extends StatelessWidget {
     this.onClose,
     this.onSimulateRoute,
     this.onOfflineMaps,
+    this.onAddPlace,
+    this.capturedPlaceCount = 0,
   });
 
   @override
@@ -254,6 +258,37 @@ class TrackingBottomSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            if (onAddPlace != null)
+              Tooltip(
+                message: 'Vyfotit bodované místo',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onAddPlace,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Badge(
+                        isLabelVisible: capturedPlaceCount > 0,
+                        label: Text('$capturedPlaceCount'),
+                        child: const Icon(
+                          Icons.photo_camera_outlined,
+                          color: Color(0xFF047857),
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (onAddPlace != null) const SizedBox(width: 8),
             Tooltip(
               message: 'Ukončit trasu',
               child: Material(
@@ -435,6 +470,19 @@ class TrackingBottomSheet extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (onAddPlace != null && isTracking)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: AppButton(
+              onPressed: onAddPlace!,
+              text: capturedPlaceCount > 0
+                  ? 'Přidat místo (foto) · $capturedPlaceCount'
+                  : 'Přidat místo (foto)',
+              icon: Icons.photo_camera_outlined,
+              type: AppButtonType.secondary,
+              size: AppButtonSize.medium,
+            ),
+          ),
         if (onSimulateRoute != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),

@@ -20,10 +20,13 @@ import 'package:strakataturistikaandroidapp/services/gps_services.dart';
 import 'package:strakataturistikaandroidapp/services/scoring_config_service.dart';
 import 'package:strakataturistikaandroidapp/services/error_recovery_service.dart';
 import 'package:strakataturistikaandroidapp/services/gps_shortcut_bridge.dart';
+import 'package:strakataturistikaandroidapp/services/route_backup_service.dart';
 import 'package:strakataturistikaandroidapp/pages/dynamic_upload_page.dart';
 import 'package:strakataturistikaandroidapp/pages/dynamic_form_page.dart';
 import 'package:strakataturistikaandroidapp/models/visit_data.dart';
-import 'package:strakataturistikaandroidapp/services/competition_dashboard_service.dart';
+import 'package:strakataturistikaandroidapp/models/place_type_config.dart';
+import 'package:strakataturistikaandroidapp/services/nominatim_service.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'package:strakataturistikaandroidapp/config/app_colors.dart';
 import 'package:strakataturistikaandroidapp/widgets/ui/app_button.dart';
@@ -92,7 +95,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   double _sheetExtent = 0.18;
   double _topQuickDragStartValue = 0.0;
   double _topQuickDragAccum = 0.0;
-  List<StrakataRouteData> _strakataRoutes = const [];
 
   @override
   void initState() {
@@ -106,9 +108,9 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
         await GpsServices.initializeEnhancedGPSTracking(_trackingStateService);
         await VectorTileProvider.initialize();
       } catch (_) {}
+      await _checkUnsavedRouteBackup();
     });
     _startPassiveLocationUpdates();
-    _loadCompetitionData();
     _trackingStateSub = _trackingStateService.trackingStateStream.listen((isTracking) {
       if (!mounted) return;
       if (isTracking) {
@@ -123,15 +125,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
       }
     });
     GpsShortcutBridge.startTracking.addListener(_handleShortcutStartTracking);
-  }
-
-  Future<void> _loadCompetitionData() async {
-    final theme = await CompetitionDashboardService().getCurrentMonthlyTheme();
-    final routes = await CompetitionDashboardService().getActiveStrakataRoutes();
-    if (!mounted) return;
-    setState(() {
-      _strakataRoutes = routes;
-    });
   }
 
   void _initializeAnimations() {
@@ -707,6 +700,148 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     // Removed simulation completion toast per request
   }
 
+  Future<void> _capturePlaceDuringTracking() async {
+    if (!_trackingStateService.isTracking) return;
+    HapticService.lightImpact();
+
+    final loc = _currentLocation;
+    final types = await PlaceTypeConfigService().getPlaceTypeConfigs();
+    if (!mounted) return;
+    if (types.isEmpty) {
+      AppToast.showError(context, 'Nepodařilo se načíst typy míst.');
+      return;
+    }
+
+    String selectedType = types.first.name;
+    final nameController = TextEditingController();
+    XFile? photoFile;
+
+    if (loc != null) {
+      NominatimService.reverseGeocode(loc.latitude, loc.longitude).then((label) {
+        if (nameController.text.trim().isEmpty) {
+          nameController.text = label;
+        }
+      });
+    }
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setSheet) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Center(child: StrakataSheetHandle()),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Bodované místo za pochodu',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Fotka a typ místa se uloží k probíhající trase. Při odeslání je nemusíte znovu doplňovat.',
+                    style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Název místa',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: types.map((t) {
+                      return ChoiceChip(
+                        selected: selectedType == t.name,
+                        label: Text(
+                          t.points > 0 ? '${t.label} (+${t.points})' : t.label,
+                        ),
+                        onSelected: (_) => setSheet(() => selectedType = t.name),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final x = await ImagePicker().pickImage(
+                        source: ImageSource.camera,
+                        imageQuality: 85,
+                      );
+                      if (x != null) setSheet(() => photoFile = x);
+                    },
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: Text(photoFile == null ? 'Vyfotit místo' : 'Fotka pořízena'),
+                  ),
+                  const SizedBox(height: 16),
+                  AppButton(
+                    text: 'Uložit k trase',
+                    onPressed: () => Navigator.pop(ctx, true),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    if (saved != true || !mounted) return;
+    final name = nameController.text.trim();
+    if (name.isEmpty) {
+      AppToast.showError(context, 'Zadejte název místa.');
+      return;
+    }
+    if (photoFile == null) {
+      AppToast.showError(context, 'Vyfoťte místo — fotka je povinná.');
+      return;
+    }
+
+    final place = Place(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: name,
+      type: selectedType,
+      photos: [
+        PlacePhoto(
+          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          url: photoFile!.path,
+          uploadedAt: DateTime.now(),
+          isLocal: true,
+          title: name,
+        ),
+      ],
+      createdAt: DateTime.now(),
+      lat: loc?.latitude,
+      lng: loc?.longitude,
+    );
+    await RouteBackupService().addCapturedPlace(place);
+    await RouteBackupService().saveBackup(_trackingStateService.getSummary());
+    if (mounted) {
+      setState(() {});
+      AppToast.showInfo(
+        context,
+        'Místo uloženo k trase (${RouteBackupService().capturedPlaces.length}).',
+      );
+    }
+  }
+
   List<LatLng> _generateLoopRoute(LatLng start, double targetKm) {
     final List<LatLng> pts = [];
     final totalMeters = (targetKm * 1000).clamp(200, 50000).toDouble();
@@ -745,6 +880,48 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
       pts.add(cur);
     }
     return pts;
+  }
+
+  /// Pokud na disku existuje neuložená trasa (uložení do DB dřív selhalo),
+  /// nabídne uživateli její obnovení, aby o naměřená data nepřišel.
+  Future<void> _checkUnsavedRouteBackup() async {
+    if (_trackingStateService.isTracking) return;
+    var backup = await RouteBackupService().loadBackup();
+    backup ??= await RouteBackupService().loadNativeFallback();
+    if (backup == null || !mounted) return;
+
+    final distanceKm = (backup.totalDistance / 1000).toStringAsFixed(2);
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Neuložená trasa'),
+        content: Text(
+          'Našli jsme trasu ($distanceKm km), kterou se dříve nepodařilo uložit. '
+          'Chcete ji obnovit a odeslat?',
+        ),
+        actions: [
+          AppButton(
+            onPressed: () => Navigator.of(context).pop('delete'),
+            text: 'Smazat',
+            type: AppButtonType.ghost,
+            size: AppButtonSize.small,
+          ),
+          AppButton(
+            onPressed: () => Navigator.of(context).pop('restore'),
+            text: 'Obnovit',
+            type: AppButtonType.primary,
+            size: AppButtonSize.small,
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (action == 'restore') {
+      _showTrackingSummary(backup, null);
+    } else if (action == 'delete') {
+      await RouteBackupService().clearBackup();
+    }
   }
 
   void _showTrackingSummary(TrackingSummary summary, [VisitData? draftVisit]) {
@@ -795,7 +972,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Trasa byla uložena jako návrh. Můžete doplnit informace později.',
+                        'Trasa byla uložena jako návrh. Najdete ji v Můj profil -> Koncepty (nebo Všechny).',
                         style: TextStyle(
                           color: AppColors.secondary,
                           fontWeight: FontWeight.w600,
@@ -806,6 +983,36 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                 ),
               ),
             ),
+          if (draftVisit == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Návrh se nepodařilo uložit do databáze. Trasa je ale zálohovaná v telefonu — pokračujte přes „Doplnit a odeslat“, případně ji obnovíte při příštím otevření této stránky.',
+                        style: TextStyle(
+                          color: Color(0xFF92400E),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (draftVisit == null) const SizedBox(height: 12),
           if (draftVisit != null) const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -867,7 +1074,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                       ),
                     ),
                     child: Text(
-                      'Doplnit později',
+                      draftVisit != null ? 'Doplnit později' : 'Zavřít',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
@@ -1355,6 +1562,8 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                         sheetPosition: _sheetExtent,
                         onSimulateRoute: () => _showSimulateSheet(),
                         onOfflineMaps: () => _showOfflineManager(),
+                        onAddPlace: isTracking ? _capturePlaceDuringTracking : null,
+                        capturedPlaceCount: RouteBackupService().capturedPlaces.length,
                         onClose: () {
                           _sheetController.animateTo(
                             0.42,
