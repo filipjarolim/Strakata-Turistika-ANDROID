@@ -784,6 +784,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                       final x = await ImagePicker().pickImage(
                         source: ImageSource.camera,
                         imageQuality: 85,
+                        requestFullMetadata: false,
                       );
                       if (x != null) setSheet(() => photoFile = x);
                     },

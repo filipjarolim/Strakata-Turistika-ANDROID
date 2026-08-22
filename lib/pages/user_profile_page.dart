@@ -794,7 +794,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
 
     if (source != null) {
-      final image = await picker.pickImage(source: source, maxWidth: 800, maxHeight: 800, imageQuality: 85);
+      final image = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+        requestFullMetadata: false,
+      );
       if (image != null) {
         setModalState(() { onImageSelected(File(image.path)); });
       }

@@ -44,6 +44,8 @@ import 'services/vector_tile_provider.dart';
 import 'services/app_shortcuts_service.dart';
 import 'services/gps_shortcut_bridge.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:image_picker_android/image_picker_android.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'widgets/legal/legal_actions.dart';
 
 void _recordStartupError(Object e, StackTrace st, String reason) {
@@ -54,8 +56,16 @@ void _recordStartupError(Object e, StackTrace st, String reason) {
   );
 }
 
+void _useAndroidPhotoPicker() {
+  final implementation = ImagePickerPlatform.instance;
+  if (implementation is ImagePickerAndroid) {
+    implementation.useAndroidPhotoPicker = true;
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _useAndroidPhotoPicker();
 
   // Load .env before auth / Google Sign-In config is used
   try {
