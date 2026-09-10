@@ -3,7 +3,10 @@ import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'enhanced_gps_tracking_service.dart';
+import '../config/gps_config.dart';
 import '../models/tracking_summary.dart';
+import 'gps_power_mode.dart';
+import 'live_track_checkpoint_service.dart';
 import 'route_backup_service.dart';
 
 class TrackingStateService {
@@ -34,6 +37,7 @@ class TrackingStateService {
   Future<void> initialize() async {
     await _initializeNotifications();
     await _trackingService.initialize();
+    await GpsPowerModeStore().load();
     
     // Check if tracking was already active (e.g., from app restart)
     final summary = _trackingService.getSummary();
@@ -45,7 +49,56 @@ class TrackingStateService {
       if (!Platform.isAndroid) {
         _showTrackingNotification();
       }
+      return;
     }
+
+    await _tryAutoResume();
+  }
+
+  /// Po pádu / kill / sticky restart nativního servisu obnoví měření ze zálohy.
+  Future<void> _tryAutoResume() async {
+    try {
+      final backupService = RouteBackupService();
+      var backup = await backupService.loadBackup();
+      backup ??= await backupService.loadNativeFallback();
+      if (backup == null || backup.trackPoints.length < 2) return;
+
+      final nativeRunning = await _trackingService.isNativeServiceRunning();
+      final active = await backupService.wasSessionActive();
+      final savedAt = backupService.lastSavedAt ??
+          (backup.trackPoints.isNotEmpty
+              ? backup.trackPoints.last.timestamp
+              : null);
+      final recent = savedAt != null &&
+          DateTime.now().difference(savedAt) <= GpsConfig.autoResumeMaxAge;
+
+      if (nativeRunning || (active && recent)) {
+        final ok = await resumeTracking(backup);
+        if (ok) {
+          print(
+            '✅ [TrackingState] Auto-resume (${backup.trackPoints.length} bodů, '
+            '${(backup.totalDistance / 1000).toStringAsFixed(2)} km)',
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ [TrackingState] Auto-resume selhal: $e');
+    }
+  }
+
+  /// Pokračovat v měření z lokální zálohy (dialog obnovení).
+  Future<bool> resumeTracking(TrackingSummary summary) async {
+    final success = await _trackingService.resumeTracking(summary);
+    if (success) {
+      _isTracking = true;
+      _trackingStateController.add(true);
+      _backupTick = 0;
+      _startTrackingUpdates();
+      if (!Platform.isAndroid) {
+        _showTrackingNotification();
+      }
+    }
+    return success;
   }
   
   // Initialize notifications
@@ -94,6 +147,10 @@ class TrackingStateService {
     _trackingService.setRecordingPaused(paused);
   }
 
+  Future<void> applyPowerMode(GpsPowerMode mode) async {
+    await _trackingService.applyPowerMode(mode);
+  }
+
   // Stop tracking
   Future<void> stopTracking() async {
     await _trackingService.stopTracking();
@@ -125,10 +182,15 @@ class TrackingStateService {
         }
         _updateTrackingNotification(info);
 
-        // Průběžná lokální záloha (každých ~15 s), ať trasa přežije pád / přepnutí aplikace.
+        // Průběžná lokální záloha (~6 s) a cloudový koncept (~2 min),
+        // ať trasa přežije pád, kill i vybití telefonu.
         _backupTick++;
-        if (_backupTick % 5 == 0 && summary.trackPoints.length >= 2) {
-          unawaited(RouteBackupService().saveBackup(summary));
+        if (_backupTick % 2 == 0 && summary.trackPoints.length >= 2) {
+          unawaited(RouteBackupService().saveBackup(summary, active: true));
+        }
+        if (summary.trackPoints.length >= 2 &&
+            (_backupTick == 10 || _backupTick % 40 == 0)) {
+          unawaited(LiveTrackCheckpointService().saveDraft(summary));
         }
       } else {
         timer.cancel();

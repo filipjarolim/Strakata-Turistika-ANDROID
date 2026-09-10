@@ -61,7 +61,7 @@ class ExceptionRequestRepository {
       };
 
       final response = await _dbService.insertOne(_collectionName, document);
-      return response != null;
+      return response.isNotEmpty;
     } catch (e) {
       print('❌ Error creating exception request: $e');
       rethrow;

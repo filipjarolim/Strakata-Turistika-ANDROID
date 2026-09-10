@@ -203,6 +203,13 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         }
       }
 
+      if (widget.slug == 'screenshot-upload' &&
+          _formContext.photoAttachments.isEmpty) {
+        throw Exception(
+          'Nahrajte prosím alespoň jeden screenshot mapy nebo záznamu jako doklad o absolvované trase.',
+        );
+      }
+
       // 2. Prepare VisitData object
       final currentUser = AuthService.currentUser;
       if (currentUser == null || currentUser.id.isEmpty) {
@@ -213,8 +220,11 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
       if (_formContext.photoAttachments.isNotEmpty) {
         try {
           photos = await CloudinaryService.uploadVisitPhotoPayloads(_formContext.photoAttachments);
+          if (photos.isEmpty && _formContext.photoAttachments.isNotEmpty) {
+            throw Exception('Nepodařilo se nahrát fotografie. Zkontrolujte připojení k internetu a zkuste to znovu.');
+          }
         } catch (e) {
-          throw Exception('Nahrání fotografií selhalo: $e');
+          throw Exception('Nahrání fotografií selhalo: ${e.toString().replaceFirst(RegExp(r"^Exception:\s*"), "")}');
         }
       }
       final priorPhotos = widget.existingVisit?.photos;
@@ -319,10 +329,11 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     } catch (e) {
       print('Submission error: $e');
       if (mounted) {
+        final cleanMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
         await showFormStatusDialog(
           context,
-          title: 'Chyba',
-          message: 'Došlo k neočekávané chybě: $e',
+          title: 'Chyba při odeslání',
+          message: cleanMsg,
         );
       }
     } finally {

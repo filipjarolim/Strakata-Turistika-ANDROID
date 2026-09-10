@@ -8,7 +8,12 @@ class GpsConfig {
 
   // Movement thresholds
   static const double minMovementMeters = 2.0; // ignore tiny drift
-  static const double maxSpeedMs = 50.0; // unrealistic speed cap
+  static const double maxSpeedMs = 50.0; // hard cap (reported GPS speed)
+  /// Max implied speed between two accepted points (~43 km/h).
+  /// Cuts GPS teleports and dual-stream zigzag without blocking hiking/bike.
+  static const double maxJumpSpeedMs = 12.0;
+  /// Ignore a second fix this soon — almost always a duplicate source.
+  static const int minSampleIntervalMs = 700;
   // Dynamic minimum movement: add fraction of current accuracy to threshold
   static const double dynamicMinMoveAccuracyFactor = 0.3;
   // Horní strop dynamického prahu — jinak by nepřesnost 20 m znamenala
@@ -27,11 +32,28 @@ class GpsConfig {
 
   // Watchdog / recovery
   static const Duration staleUpdateThreshold = Duration(seconds: 12);
+  /// Při stání / úspoře je interval GPS delší — watchdog nesmí čip znovu nahodit.
+  static const Duration staleUpdateThresholdStationary = Duration(seconds: 50);
   static const Duration periodicUpdateInterval = Duration(seconds: 5);
+
+  /// Přepnout na „stání“ až po této době, ať se GNSS nevypíná na každé zastávce.
+  static const Duration motionProfileStationaryDwell = Duration(seconds: 20);
+  /// Zpět na chůzi rychleji, ať se po pauze hned zase kreslí trasa.
+  static const Duration motionProfileMovingDwell = Duration(seconds: 4);
+  /// Akcelerometr: klid delší než toto → BALANCED_POWER (jako Strava auto-pause).
+  static const Duration accelRestToStationary = Duration(seconds: 16);
+  static const double accelRestMagnitude = 0.18;
+  static const double accelWalkingMagnitude = 0.45;
 
   // Fast first fix (FFF) bootstrap
   // Allow a looser initial accuracy to show location quickly on weak signal devices
   static const double firstFixRelaxedAccuracyMeters = 120.0;
+  /// Lokální JSON záloha během měření.
+  static const Duration localBackupInterval = Duration(seconds: 6);
+  /// Upsert konceptu do DB během aktivního měření.
+  static const Duration cloudCheckpointInterval = Duration(minutes: 2);
+  /// Po pádu během výletu automaticky pokračovat, pokud záloha není starší.
+  static const Duration autoResumeMaxAge = Duration(minutes: 45);
   // Consider last-known location if not too old
   static const Duration firstFixMaxAge = Duration(minutes: 15);
   // Try a very quick low-accuracy read first, then escalate

@@ -10,10 +10,16 @@ import '../config/google_auth_config.dart';
 class AuthService {
   static GoogleSignIn get _googleSignIn => GoogleSignIn(
         scopes: GoogleAuthConfig.scopes,
-        // Web client — used as serverClientId so backend can verify ID tokens.
-        serverClientId: GoogleAuthConfig.clientId.isEmpty
-            ? null
-            : GoogleAuthConfig.clientId,
+        // Android: never use the NextAuth (auth-model) web client here.
+        // Play Services requires serverClientId to be in the same GCP project as
+        // the Android OAuth client (Firebase strakata-turistika). Mismatch = error 10.
+        serverClientId: Platform.isAndroid
+            ? (GoogleAuthConfig.androidServerClientId.isEmpty
+                ? null
+                : GoogleAuthConfig.androidServerClientId)
+            : (GoogleAuthConfig.clientId.isEmpty
+                ? null
+                : GoogleAuthConfig.clientId),
         // iOS requires a dedicated iOS OAuth client (not the WEB one).
         clientId: Platform.isIOS && GoogleAuthConfig.iosClientId.isNotEmpty
             ? GoogleAuthConfig.iosClientId
@@ -152,7 +158,14 @@ class AuthService {
         if (attempt > 1) {
           await Future.delayed(Duration(milliseconds: 500 * attempt));
         }
-        
+
+        print(
+          '🔐 Google Sign-In start (attempt $attempt, '
+          'androidServerClientId=${GoogleAuthConfig.androidServerClientId.isEmpty ? "omitted" : "set"}, '
+          'webClientConfigured=${GoogleAuthConfig.clientId.isNotEmpty})',
+        );
+        await _googleSignIn.signOut();
+
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
         
         if (googleUser == null) {

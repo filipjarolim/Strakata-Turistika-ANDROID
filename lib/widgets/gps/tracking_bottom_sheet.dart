@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../config/app_colors.dart';
 import '../../models/tracking_summary.dart';
+import '../../services/gps_power_mode.dart';
 import '../ui/app_button.dart';
 import '../ui/strakata_primitives.dart';
 import '../../pages/dynamic_form_page.dart';
@@ -22,6 +23,8 @@ class TrackingBottomSheet extends StatelessWidget {
   final VoidCallback? onOfflineMaps;
   final VoidCallback? onAddPlace;
   final int capturedPlaceCount;
+  final GpsPowerMode powerMode;
+  final ValueChanged<GpsPowerMode>? onPowerModeChanged;
 
   const TrackingBottomSheet({
     super.key,
@@ -41,6 +44,8 @@ class TrackingBottomSheet extends StatelessWidget {
     this.onOfflineMaps,
     this.onAddPlace,
     this.capturedPlaceCount = 0,
+    this.powerMode = GpsPowerMode.saver,
+    this.onPowerModeChanged,
   });
 
   @override
@@ -90,7 +95,8 @@ class TrackingBottomSheet extends StatelessWidget {
               ), // Increased padding to prevent header cut-off by drag handle
 
               AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
                 opacity: (sheetPosition > 0.25) ? 1.0 : 0.0,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -108,11 +114,53 @@ class TrackingBottomSheet extends StatelessWidget {
                       const SizedBox(height: 16),
                       _buildStatsGrid(),
 
+                      if (isTracking && onPowerModeChanged != null) ...[
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Baterie',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          powerMode == GpsPowerMode.saver
+                              ? 'Při stání a pauze se GPS zklidní — jako u Stravy. Zamkněte telefon.'
+                              : 'Hustší záznam stopy, vyšší spotřeba.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.35,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SegmentedButton<GpsPowerMode>(
+                          segments: const [
+                            ButtonSegment(
+                              value: GpsPowerMode.saver,
+                              label: Text('Úspora'),
+                              icon: Icon(Icons.battery_saver_outlined, size: 18),
+                            ),
+                            ButtonSegment(
+                              value: GpsPowerMode.precise,
+                              label: Text('Přesnost'),
+                              icon: Icon(Icons.gps_fixed, size: 18),
+                            ),
+                          ],
+                          selected: {powerMode},
+                          onSelectionChanged: (s) {
+                            if (s.isNotEmpty) onPowerModeChanged!(s.first);
+                          },
+                        ),
+                      ],
+
                       const SizedBox(height: 32),
 
                       // Manual Entry Button - Only visible when fully expanded (approx > 0.9)
                       AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
+                        duration: const Duration(milliseconds: 220),
                         height: (sheetPosition > 0.9) ? 60 : 0,
                         margin: EdgeInsets.only(
                           bottom: (sheetPosition > 0.9) ? 32 : 0,
@@ -120,7 +168,7 @@ class TrackingBottomSheet extends StatelessWidget {
                         child: SingleChildScrollView(
                           physics: const NeverScrollableScrollPhysics(),
                           child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 300),
+                            duration: const Duration(milliseconds: 160),
                             opacity: (sheetPosition > 0.9) ? 1.0 : 0.0,
                             child: SizedBox(
                               height: 60,
@@ -176,7 +224,7 @@ class TrackingBottomSheet extends StatelessWidget {
   Widget _buildCompactHeader(BuildContext context) {
     // Dynamic transition between "Start Tracking" big button and "Active Tracking" pill
     return AnimatedCrossFade(
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 240),
       crossFadeState: isTracking
           ? CrossFadeState.showSecond
           : CrossFadeState.showFirst,
@@ -195,9 +243,10 @@ class TrackingBottomSheet extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
+              backgroundColor: AppColors.ctaGreen,
               foregroundColor: Colors.white,
               elevation: 4,
+              shadowColor: AppColors.ctaGreen.withValues(alpha: 0.45),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -207,7 +256,7 @@ class TrackingBottomSheet extends StatelessWidget {
       ),
       // Second Child: Active Tracking Pill with Stats + Small Action Button
       secondChild: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         child: Row(
           key: const ValueKey('active_pill'),
           children: [
@@ -215,44 +264,49 @@ class TrackingBottomSheet extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     isPaused ? 'Pozastaveno' : 'Probíhá záznam',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: isPaused
                           ? Colors.orange.shade800
                           : AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        _formatDuration(summary?.duration ?? Duration.zero),
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                  const SizedBox(height: 3),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          _formatDuration(summary?.duration ?? Duration.zero),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(height: 24, width: 1, color: Colors.grey[300]),
-                      const SizedBox(width: 12),
-                      Text(
-                        '${((summary?.totalDistance ?? 0) / 1000).toStringAsFixed(2)} km',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                        const SizedBox(width: 8),
+                        Container(height: 18, width: 1, color: Colors.grey[300]),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${((summary?.totalDistance ?? 0) / 1000).toStringAsFixed(2)} km',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textSecondary,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -265,14 +319,14 @@ class TrackingBottomSheet extends StatelessWidget {
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: onAddPlace,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                     child: Container(
-                      width: 48,
-                      height: 48,
+                      width: 44,
+                      height: 44,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: const Color(0xFFECFDF5),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: const Color(0xFFA7F3D0)),
                       ),
                       child: Badge(
@@ -281,57 +335,57 @@ class TrackingBottomSheet extends StatelessWidget {
                         child: const Icon(
                           Icons.photo_camera_outlined,
                           color: Color(0xFF047857),
-                          size: 22,
+                          size: 20,
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            if (onAddPlace != null) const SizedBox(width: 8),
+            if (onAddPlace != null) const SizedBox(width: 6),
             Tooltip(
               message: 'Ukončit trasu',
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: onStopTracking,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    width: 48,
-                    height: 48,
+                    width: 44,
+                    height: 44,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: Colors.red.shade200),
                     ),
                     child: Icon(
                       Icons.stop_rounded,
                       color: Colors.red.shade700,
-                      size: 26,
+                      size: 24,
                     ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Tooltip(
               message: isPaused ? 'Pokračovat' : 'Pauza',
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: onToggleTracking,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 240),
-                    width: 48,
-                    height: 48,
+                    width: 44,
+                    height: 44,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: isPaused
                           ? Colors.green.shade50
                           : Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: isPaused
                             ? Colors.green.shade200

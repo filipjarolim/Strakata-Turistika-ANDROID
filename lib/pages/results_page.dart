@@ -10,6 +10,7 @@ import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
 import '../widgets/strakata_editorial_background.dart';
 import '../widgets/ui/strakata_primitives.dart';
+import '../widgets/ui/strakata_motion.dart';
 import '../widgets/ui/web_mobile_section_card.dart';
 
 class ResultsPage extends StatefulWidget {
@@ -382,7 +383,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
             ),
           )
         : Center(
-            child: CircularProgressIndicator(color: AppColors.brand),
+            child: const StrakataLoader(label: 'Načítám výsledky…'),
           );
   }
 

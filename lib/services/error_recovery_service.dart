@@ -82,7 +82,7 @@ class ErrorRecoveryService {
   Future<bool> validateDataIntegrity() async {
     try {
       // Check if SharedPreferences is accessible
-      final testValue = await _prefs.setString('test_key', 'test_value');
+      await _prefs.setString('test_key', 'test_value');
       await _prefs.remove('test_key');
 
       

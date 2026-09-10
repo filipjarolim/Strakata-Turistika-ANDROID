@@ -129,7 +129,8 @@ class LegalActions {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Aplikace zpracovává účet, polohu GPS, fotografie a údaje o návštěvách. '
+                  'Aplikace zpracovává účet, fotografie, údaje o návštěvách a polohu GPS. '
+                  '${LegalConfig.backgroundLocationPrivacyParagraph} '
                   'Podrobnosti, včetně práv k údajům, najdete v zásadách ochrany osobních údajů.',
                   style: GoogleFonts.libreFranklin(
                     fontSize: 13,

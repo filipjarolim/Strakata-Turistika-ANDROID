@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,7 +35,17 @@ class NotificationsService {
     );
     await NotificationChannels.ensureCreated(_local);
 
-    // Request FCM permissions (iOS/macOS); on Android it's granted by default
+    // Request notification permissions on Android 13+ (POST_NOTIFICATIONS)
+    if (Platform.isAndroid) {
+      try {
+        await _local
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>()
+            ?.requestNotificationsPermission();
+      } catch (_) {}
+    }
+
+    // Request FCM permissions (iOS/macOS)
     await _messaging.requestPermission(
       alert: true,
       badge: true,

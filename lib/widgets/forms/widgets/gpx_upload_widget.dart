@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -144,9 +145,23 @@ class _GpxUploadWidgetState extends State<GpxUploadWidget> {
       formContext.setTrackingSummary(summary);
       formContext.updateField('visitDate', summary.startTime ?? DateTime.now());
       setState(() => _selectedFileName = fixture.filename);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Testovací trasa ${fixture.label} úspěšně načtena.'),
+          backgroundColor: const Color(0xFF15803D),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('Testovací soubor: $e')));
+      final cleanMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Testovací soubor: $cleanMsg'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -168,7 +183,30 @@ class _GpxUploadWidgetState extends State<GpxUploadWidget> {
       if (path == null || path.isEmpty) {
         throw Exception('Soubor nemá platnou cestu.');
       }
-      final text = await File(path).readAsString();
+      final file = File(path);
+      if (!await file.exists()) {
+        throw Exception('Vybraný soubor nebyl nalezen.');
+      }
+      final size = await file.length();
+      if (size > 25 * 1024 * 1024) {
+        throw Exception('Soubor je příliš velký (maximální povolená velikost je 25 MB).');
+      }
+      if (size == 0) {
+        throw Exception('Vybraný soubor je prázdný.');
+      }
+
+      final bytes = await file.readAsBytes();
+      String text;
+      try {
+        text = utf8.decode(bytes);
+      } catch (_) {
+        try {
+          text = utf8.decode(bytes, allowMalformed: true);
+        } catch (_) {
+          text = latin1.decode(bytes);
+        }
+      }
+
       final parsed = parseTrackFile(text, selected.name);
       if (!parsed.ok || parsed.points == null) {
         throw Exception(parsed.message ?? 'Soubor se nepodařilo zpracovat.');
@@ -178,10 +216,22 @@ class _GpxUploadWidgetState extends State<GpxUploadWidget> {
       formContext.setTrackingSummary(summary);
       formContext.updateField('visitDate', summary.startTime ?? DateTime.now());
       setState(() => _selectedFileName = selected.name);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Trasa „${selected.name}“ byla úspěšně načtena (${summary.trackPoints.length} bodů, ${(summary.totalDistance / 1000).toStringAsFixed(2)} km).'),
+          backgroundColor: const Color(0xFF15803D),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
+      final cleanMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
       messenger.showSnackBar(
-        SnackBar(content: Text('Soubor se nepodařilo načíst: $e')),
+        SnackBar(
+          content: Text(cleanMsg),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

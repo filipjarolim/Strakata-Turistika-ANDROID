@@ -24,6 +24,9 @@ class SharedMapWidget extends StatefulWidget {
   final Function(LatLng)? onTap;
   final EdgeInsets? controlsPadding;
   final bool showControls;
+  /// When false (default for live GPS), parent rebuilds with a new [center]
+  /// do not yank the camera — only [mapController] moves it.
+  final bool syncCameraFromParent;
 
   const SharedMapWidget({
     Key? key,
@@ -40,6 +43,7 @@ class SharedMapWidget extends StatefulWidget {
     this.onTap,
     this.controlsPadding,
     this.showControls = true,
+    this.syncCameraFromParent = true,
   }) : super(key: key);
 
   @override
@@ -60,6 +64,7 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
   @override
   void didUpdateWidget(covariant SharedMapWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.syncCameraFromParent) return;
     if (oldWidget.center != widget.center || oldWidget.zoom != widget.zoom) {
       // Move when parent provides a new target (search / GPS / place edit).
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -208,6 +213,11 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
               userAgentPackageName: 'cz.strakata.turistika.strakataturistikaandroidapp',
               tileProvider: VectorTileProvider(
                 urlTemplate: getTemplateUrl(_currentStyle),
+              ),
+              keepBuffer: 2,
+              panBuffer: 1,
+              tileDisplay: const TileDisplay.fadeIn(
+                duration: Duration(milliseconds: 80),
               ),
             ),
             

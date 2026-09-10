@@ -15,6 +15,7 @@ import '../widgets/ui/app_button.dart';
 import '../widgets/strakata_editorial_background.dart';
 import '../widgets/ui/web_mobile_section_card.dart';
 import '../widgets/ui/web_mobile_patterns.dart';
+import '../widgets/ui/strakata_motion.dart';
 
 /// Domů — editorial layout: pale wash background, large rounded story cards.
 class ExploreTab extends StatelessWidget {
@@ -555,7 +556,7 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
           Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: CircularProgressIndicator(color: AppColors.brand),
+              child: const StrakataLoader(label: 'Načítám…'),
             ),
           )
         else if (_recent.isEmpty)

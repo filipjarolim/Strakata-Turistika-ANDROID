@@ -4,7 +4,7 @@ import 'app_animations.dart';
 class GpsAnimations {
   static AnimationController createPulseController(TickerProvider vsync) {
     return AnimationController(
-      duration: const Duration(seconds: 2), // Keep pulse specific duration
+      duration: AppAnimations.durationGpsPulse,
       vsync: vsync,
     );
   }
@@ -18,7 +18,7 @@ class GpsAnimations {
 
   static AnimationController createSpeedPulseController(TickerProvider vsync) {
     return AnimationController(
-      duration: const Duration(milliseconds: 600), // Unique to speed pulse
+      duration: AppAnimations.durationStandard,
       vsync: vsync,
     );
   }
@@ -47,7 +47,7 @@ class GpsAnimations {
   static Animation<double> createPulseAnimation(AnimationController controller) {
     return Tween<double>(
       begin: 1.0,
-      end: 1.5,
+      end: 1.28,
     ).animate(CurvedAnimation(
       parent: controller,
       curve: Curves.easeInOut,
@@ -56,18 +56,18 @@ class GpsAnimations {
 
   static Animation<Offset> createSlideAnimation(AnimationController controller) {
     return Tween<Offset>(
-      begin: const Offset(0, 1),
+      begin: const Offset(0, 0.08),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: controller,
-      curve: AppAnimations.curveDecelerate,
+      curve: AppAnimations.curveEmphasized,
     ));
   }
 
   static Animation<double> createSpeedPulseAnimation(AnimationController controller) {
     return Tween<double>(
       begin: 1.0,
-      end: 1.3,
+      end: 1.12,
     ).animate(CurvedAnimation(
       parent: controller,
       curve: Curves.easeInOut,
@@ -86,7 +86,7 @@ class GpsAnimations {
 
   static Animation<double> createBounceAnimation(AnimationController controller) {
     return Tween<double>(
-      begin: 0.8,
+      begin: 0.92,
       end: 1.0,
     ).animate(CurvedAnimation(
       parent: controller,
@@ -96,7 +96,7 @@ class GpsAnimations {
 
   static Animation<double> createScaleAnimation(AnimationController controller) {
     return Tween<double>(
-      begin: 0.9,
+      begin: 0.94,
       end: 1.0,
     ).animate(CurvedAnimation(
       parent: controller,
@@ -106,18 +106,18 @@ class GpsAnimations {
 
   static AnimationController createPanelSlideController(TickerProvider vsync) {
     return AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: AppAnimations.durationPageTransition,
       vsync: vsync,
     );
   }
 
   static Animation<Offset> createPanelSlideAnimation(AnimationController controller) {
     return Tween<Offset>(
-      begin: const Offset(0, 1),
+      begin: const Offset(0, 0.12),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: controller,
-      curve: Curves.easeOutCubic,
+      curve: AppAnimations.curveEmphasized,
     ));
   }
 
@@ -127,8 +127,7 @@ class GpsAnimations {
     required AnimationController fadeController,
     AnimationController? panelSlideController,
   }) {
-    // Start animations
-    pulseController.repeat(reverse: true);
+    // Pulse only starts when tracking is active (caller starts repeat).
     slideController.forward();
     fadeController.forward();
     panelSlideController?.forward();
@@ -151,4 +150,4 @@ class GpsAnimations {
     scaleController.dispose();
     panelSlideController?.dispose();
   }
-} 
+}

@@ -1,6 +1,8 @@
 package cz.strakata.turistika.strakataturistikaandroidapp
 
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
 import android.util.Log
@@ -13,8 +15,10 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "gps_tracking_channel"
     private val EVENT_CHANNEL = "gps_location_events"
+    private val ICON_CHANNEL = "app_icon_channel"
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
+    private var iconChannel: MethodChannel? = null
     
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         // super already registers plugins via GeneratedPluginRegistrant
@@ -22,11 +26,13 @@ class MainActivity : FlutterActivity() {
         
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         eventChannel = EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
+        iconChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ICON_CHANNEL)
         
         methodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startGPSTracking" -> {
-                    startGPSTracking()
+                    val resetPersist = (call.arguments as? Map<*, *>)?.get("resetPersist") as? Boolean ?: true
+                    startGPSTracking(resetPersist)
                     result.success(true)
                 }
                 "stopGPSTracking" -> {
@@ -47,17 +53,48 @@ class MainActivity : FlutterActivity() {
                 "isGPSTracking" -> {
                     result.success(isGPSTracking())
                 }
+                "updateTrackingStats" -> {
+                    val args = call.arguments as? Map<*, *>
+                    updateTrackingStats(
+                        (args?.get("title") as? String) ?: "Sledování trasy",
+                        (args?.get("text") as? String) ?: "Klepnutím se vrátíte do aplikace"
+                    )
+                    result.success(true)
+                }
                 "readPersistedTrack" -> {
                     result.success(readPersistedTrack())
                 }
                 "clearPersistedTrack" -> {
                     val file = File(filesDir, GPSTrackingService.PERSIST_FILE)
                     if (file.exists()) file.delete()
+                    val flag = File(filesDir, GPSTrackingService.ACTIVE_FLAG_FILE)
+                    if (flag.exists()) flag.delete()
                     result.success(true)
                 }
                 else -> {
                     result.notImplemented()
                 }
+            }
+        }
+
+        iconChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setIcon" -> {
+                    val args = call.arguments as? Map<*, *>
+                    val alias = args?.get("androidAlias") as? String
+                    if (alias.isNullOrBlank()) {
+                        result.error("bad_args", "Missing androidAlias", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        setLauncherAlias(alias)
+                        result.success("ok")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Failed to switch icon", e)
+                        result.error("icon_switch_failed", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
             }
         }
         
@@ -73,11 +110,62 @@ class MainActivity : FlutterActivity() {
             }
         })
     }
+
+    private fun setLauncherAlias(enabledSuffix: String) {
+        val pm = packageManager
+        val main = ComponentName(this, MainActivity::class.java)
+        val autumn = ComponentName(this, "$packageName.MainActivityAutumn")
+        // Legacy alias from older builds — keep disabled so flutter run stays healthy.
+        val legacyClassic = ComponentName(this, "$packageName.MainActivityClassic")
+        val useAutumn = enabledSuffix == "MainActivityAutumn"
+        val debuggable = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+        try {
+            pm.setComponentEnabledSetting(
+                legacyClassic,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+        } catch (_: Exception) {
+            // Alias may not exist after clean install.
+        }
+
+        // Debug: never disable MainActivity — Flutter tooling launches that class.
+        if (debuggable) {
+            pm.setComponentEnabledSetting(
+                main,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            pm.setComponentEnabledSetting(
+                autumn,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            Log.i("MainActivity", "Debug build: launcher stays on MainActivity (requested=$enabledSuffix)")
+            return
+        }
+
+        // Release: classic = MainActivity, autumn = activity-alias icon.
+        pm.setComponentEnabledSetting(
+            main,
+            if (useAutumn) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            else PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        pm.setComponentEnabledSetting(
+            autumn,
+            if (useAutumn) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        )
+    }
     
-    private fun startGPSTracking() {
-        Log.d("MainActivity", "Starting GPS tracking service")
+    private fun startGPSTracking(resetPersist: Boolean) {
+        Log.d("MainActivity", "Starting GPS tracking service (resetPersist=$resetPersist)")
         val intent = Intent(this, GPSTrackingService::class.java).apply {
             action = GPSTrackingService.ACTION_START_TRACKING
+            putExtra(GPSTrackingService.EXTRA_RESET_PERSIST, resetPersist)
         }
         startForegroundService(intent)
     }
@@ -90,8 +178,22 @@ class MainActivity : FlutterActivity() {
         startService(intent)
     }
     
+    private fun updateTrackingStats(title: String, text: String) {
+        val intent = Intent(this, GPSTrackingService::class.java).apply {
+            action = GPSTrackingService.ACTION_UPDATE_STATS
+            putExtra(GPSTrackingService.EXTRA_STATS_TITLE, title)
+            putExtra(GPSTrackingService.EXTRA_STATS_TEXT, text)
+        }
+        startService(intent)
+    }
+
     private fun isGPSTracking(): Boolean {
-        return isGpsServiceRunning
+        if (isGpsServiceRunning) return true
+        return try {
+            File(filesDir, GPSTrackingService.ACTIVE_FLAG_FILE).exists()
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun readPersistedTrack(): List<Map<String, Any>> {
@@ -133,20 +235,40 @@ class MainActivity : FlutterActivity() {
         }
         startService(intent)
     }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        super.cleanUpFlutterEngine(flutterEngine)
+        methodChannel?.setMethodCallHandler(null)
+        methodChannel = null
+        iconChannel?.setMethodCallHandler(null)
+        iconChannel = null
+        eventChannel?.setStreamHandler(null)
+        eventChannel = null
+        locationEventSink = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        locationEventSink = null
+    }
     
     companion object {
         var locationEventSink: EventChannel.EventSink? = null
         @JvmStatic var isGpsServiceRunning: Boolean = false
         
         fun sendLocationToFlutter(location: Location) {
-            locationEventSink?.success(mapOf(
-                "latitude" to location.latitude,
-                "longitude" to location.longitude,
-                "accuracy" to location.accuracy,
-                "speed" to location.speed,
-                "altitude" to location.altitude,
-                "timestamp" to location.time
-            ))
+            try {
+                locationEventSink?.success(mapOf(
+                    "latitude" to location.latitude,
+                    "longitude" to location.longitude,
+                    "accuracy" to location.accuracy,
+                    "speed" to location.speed,
+                    "altitude" to location.altitude,
+                    "timestamp" to location.time
+                ))
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Failed to deliver location to Flutter event channel: ${e.message}")
+            }
         }
     }
 }

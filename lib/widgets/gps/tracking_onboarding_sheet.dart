@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../ui/app_button.dart';
 import '../ui/strakata_primitives.dart';
+import 'background_location_disclosure.dart';
 
 class TrackingOnboardingSheet extends StatefulWidget {
   final VoidCallback? onComplete;
@@ -34,12 +35,35 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
   bool _isCompleting = false;
   bool _isRequesting = false;
   bool _isChecking = false;
+  bool _disclosureAccepted = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkPermissions();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  /// For GPS tracking, show Prominent Disclosure first and only then the
+  /// Android system permission dialogs — never the other way around.
+  Future<void> _bootstrap() async {
+    await _checkPermissions();
+    if (!mounted || _canContinue || !widget.requireAllForComplete) return;
+
+    final accepted = await _ensureDisclosureAccepted();
+    if (!mounted) return;
+    if (!accepted) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(false);
+      }
+      return;
+    }
+
+    await _requestLocation();
+    if (!mounted) return;
+    if (_locationGranted && !_backgroundGranted) {
+      await _requestBackground();
+    }
   }
 
   @override
@@ -57,8 +81,7 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
 
   bool get _canContinue {
     if (widget.requireAllForComplete) {
-      final batteryOk = Platform.isIOS || !_batteryOptimized;
-      return _locationGranted && _backgroundGranted && batteryOk;
+      return _locationGranted && _backgroundGranted;
     }
     return _locationGranted;
   }
@@ -81,7 +104,11 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
         _batteryOptimized = Platform.isAndroid && !batteryStatus.isGranted;
       });
 
-      if (_canContinue && !_isCompleting) {
+      final allDone = _locationGranted &&
+          _backgroundGranted &&
+          (Platform.isIOS || !_batteryOptimized);
+
+      if (allDone && !_isCompleting) {
         _isCompleting = true;
         Future.delayed(const Duration(milliseconds: 500), () {
           if (!mounted) return;
@@ -112,8 +139,27 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
     }
   }
 
+  /// Google Play: in-app disclosure must appear immediately before the
+  /// system location dialog. Never request location without this step.
+  Future<bool> _ensureDisclosureAccepted() async {
+    if (_disclosureAccepted) return true;
+    if (!mounted) return false;
+    print('GPS: Showing Prominent Disclosure before location permission');
+    final accepted = await BackgroundLocationDisclosure.show(context);
+    if (!mounted) return false;
+    if (accepted) {
+      setState(() => _disclosureAccepted = true);
+    } else {
+      print('GPS: User declined background location disclosure');
+    }
+    return accepted;
+  }
+
   Future<void> _requestLocation() async {
     if (_isRequesting) return;
+    final accepted = await _ensureDisclosureAccepted();
+    if (!accepted) return;
+
     setState(() => _isRequesting = true);
     try {
       final status = await Permission.location.status;
@@ -124,6 +170,7 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
       if (status.isPermanentlyDenied) {
         await openAppSettings();
       } else {
+        print('GPS: Requesting foreground location after disclosure');
         await _safeRequest(Permission.location);
       }
       await _checkPermissions();
@@ -135,8 +182,8 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
     }
   }
 
-  Future<void> _showBackgroundInstructions() async {
-    if (!mounted || _isRequesting) return;
+  Future<void> _showBackgroundSettingsHelp() async {
+    if (!mounted) return;
     final open = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -157,12 +204,20 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Pokračovat'),
+            child: const Text('Otevřít nastavení'),
           ),
         ],
       ),
     );
-    if (open != true) return;
+    if (open == true) {
+      await openAppSettings();
+    }
+  }
+
+  Future<void> _requestBackground() async {
+    if (_isRequesting) return;
+    final accepted = await _ensureDisclosureAccepted();
+    if (!accepted) return;
 
     setState(() => _isRequesting = true);
     try {
@@ -172,12 +227,14 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
         return;
       }
       if (status.isPermanentlyDenied) {
-        await openAppSettings();
-      } else {
-        await _safeRequest(Permission.locationAlways);
-        if (!await Permission.locationAlways.isGranted) {
-          await openAppSettings();
-        }
+        await _showBackgroundSettingsHelp();
+        await _checkPermissions();
+        return;
+      }
+      print('GPS: Requesting background location after disclosure');
+      await _safeRequest(Permission.locationAlways);
+      if (!await Permission.locationAlways.isGranted) {
+        await _showBackgroundSettingsHelp();
       }
       await _checkPermissions();
     } catch (e) {
@@ -186,10 +243,6 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
     } finally {
       if (mounted) setState(() => _isRequesting = false);
     }
-  }
-
-  Future<void> _requestBackground() async {
-    await _showBackgroundInstructions();
   }
 
   Future<void> _requestBattery() async {
@@ -263,7 +316,7 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
           const SizedBox(height: 8),
           Text(
             widget.requireAllForComplete
-                ? 'Pro spolehlivý záznam trasy i při vypnuté obrazovce potřebujeme následující oprávnění.'
+                ? 'Pro záznam trasy i když je aplikace zavřená nebo ji nepoužíváte potřebujeme následující oprávnění.'
                 : 'Pro základní používání stačí přístup k poloze. Doporučujeme dokončit i další kroky před výletem s GPS.',
             style: const TextStyle(
               fontSize: 15,
@@ -283,8 +336,8 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
           _buildStep(
             title: 'Sledování na pozadí',
             description: Platform.isIOS
-                ? 'V nastavení iPhonu zvolte Poloha → „Vždy“.'
-                : 'V nastavení zvolte „Povolit vždy“. Jinak se GPS při zamčeném telefonu vypne.',
+                ? 'Poloha i když je aplikace zavřená — v nastavení iPhonu zvolte Poloha → „Vždy“.'
+                : 'Poloha i když je aplikace zavřená nebo ji nepoužíváte. V nastavení zvolte „Povolit vždy“.',
             isDone: _backgroundGranted,
             onAction: _isRequesting ? null : _requestBackground,
             buttonText: 'Nastavit „Vždy“',
@@ -293,9 +346,9 @@ class _TrackingOnboardingSheetState extends State<TrackingOnboardingSheet>
           if (Platform.isAndroid) ...[
             const SizedBox(height: 20),
             _buildStep(
-              title: 'Vypnout úsporu baterie',
+              title: 'Vypnout úsporu baterie (doporučeno)',
               description:
-                  'Samostatný krok v sekci Baterie — zabrání ukončení aplikace během výletu.',
+                  'Zabrání systému Android uspat aplikaci během dlouhého výletu.',
               isDone: !_batteryOptimized,
               onAction: _isRequesting ? null : _requestBattery,
               buttonText: 'Nastavit baterii',

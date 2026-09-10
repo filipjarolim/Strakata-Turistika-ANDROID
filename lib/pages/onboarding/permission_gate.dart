@@ -3,6 +3,7 @@ import '../../config/app_colors.dart';
 import '../../main.dart'; // For MyHomePage
 import '../../services/gps_services.dart';
 import '../../widgets/strakata_editorial_background.dart';
+import '../../widgets/ui/strakata_motion.dart';
 import 'permission_onboarding_page.dart';
 
 /// Wraps the main app to enforce permissions.
@@ -62,7 +63,7 @@ class _PermissionGateState extends State<PermissionGate>
               fit: StackFit.expand,
               children: [
                 const Positioned.fill(child: StrakataEditorialBackground()),
-                Center(child: CircularProgressIndicator(color: AppColors.brand)),
+                Center(child: const StrakataLoader()),
               ],
             ),
           );

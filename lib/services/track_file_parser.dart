@@ -109,6 +109,14 @@ class TrackParseResult {
       TrackParseResult._(ok: false, message: message);
 }
 
+bool _isValidCoordinate(double? lat, double? lon) {
+  if (lat == null || lon == null) return false;
+  if (!lat.isFinite || !lon.isFinite) return false;
+  if (lat < -90.0 || lat > 90.0) return false;
+  if (lon < -180.0 || lon > 180.0) return false;
+  return true;
+}
+
 Iterable<XmlElement> _byLocalName(XmlNode doc, String local) =>
     doc.findAllElements('*').where((e) => e.name.local == local);
 
@@ -118,7 +126,9 @@ TrackParseResult _parseGpxXml(XmlDocument doc) {
     nodes = _byLocalName(doc, 'rtept').toList();
   }
   if (nodes.isEmpty) {
-    return TrackParseResult.error('Soubor neobsahuje žádné body trasy.');
+    return TrackParseResult.error(
+      'GPX soubor neobsahuje žádné trasové body (<trkpt> ani <rtept>).',
+    );
   }
   final pts = <TrackPoint>[];
   final base = DateTime.now().toUtc();
@@ -126,13 +136,13 @@ TrackParseResult _parseGpxXml(XmlDocument doc) {
     final node = nodes[i];
     final lat = double.tryParse(node.getAttribute('lat') ?? '');
     final lon = double.tryParse(node.getAttribute('lon') ?? '');
-    if (lat == null || lon == null) continue;
+    if (!_isValidCoordinate(lat, lon)) continue;
     final timeText = node.getElement('time')?.innerText;
     final ts = DateTime.tryParse(timeText ?? '') ?? base.add(Duration(seconds: i));
     pts.add(
       TrackPoint(
-        latitude: lat,
-        longitude: lon,
+        latitude: lat!,
+        longitude: lon!,
         timestamp: ts.toLocal(),
         speed: 0,
         accuracy: 5,
@@ -143,30 +153,39 @@ TrackParseResult _parseGpxXml(XmlDocument doc) {
     );
   }
   if (pts.length < 2) {
-    return TrackParseResult.error('Soubor neobsahuje dost platných bodů trasy.');
+    return TrackParseResult.error(
+      'GPX soubor obsahuje pouze ${pts.length} platný bod. Pro trasu jsou potřeba alespoň 2 body.',
+    );
   }
   return TrackParseResult.success(pts);
 }
 
 TrackParseResult _parseKml(String text) {
-  final doc = XmlDocument.parse(text);
+  final XmlDocument doc;
+  try {
+    doc = XmlDocument.parse(text);
+  } on XmlException catch (e) {
+    return TrackParseResult.error(
+      'Neplatná struktura KML souboru: XML chyba (${e.message}).',
+    );
+  }
   final points = <TrackPoint>[];
   for (final el in _byLocalName(doc, 'coordinates')) {
     final raw = el.innerText.trim();
     for (final chunk in raw.split(RegExp(r'[\s\n]+')).where((s) => s.isNotEmpty)) {
       final parts = chunk.split(',').map((x) => double.tryParse(x.trim())).toList();
       if (parts.length >= 2 && parts[0] != null && parts[1] != null) {
-        final lng = parts[0]!;
-        final lat = parts[1]!;
-        if (lat.isFinite && lng.isFinite) {
+        final lng = parts[0];
+        final lat = parts[1];
+        if (_isValidCoordinate(lat, lng)) {
           points.add(
             TrackPoint(
-              latitude: lat,
-              longitude: lng,
+              latitude: lat!,
+              longitude: lng!,
               timestamp: DateTime.now().toLocal(),
               speed: 0,
               accuracy: 5,
-              altitude: null,
+              altitude: parts.length >= 3 ? parts[2] : null,
               heading: null,
               verticalAccuracy: null,
             ),
@@ -176,28 +195,43 @@ TrackParseResult _parseKml(String text) {
     }
   }
   if (points.length < 2) {
-    return TrackParseResult.error('V KML nebyla nalezena žádná LineString / souřadnice.');
+    return TrackParseResult.error(
+      'V KML souboru nebyla nalezena platná trasa (<LineString> / <coordinates> s alespoň 2 body).',
+    );
   }
   return TrackParseResult.success(points);
 }
 
 TrackParseResult _parseTcx(String text) {
-  final doc = XmlDocument.parse(text);
+  final XmlDocument doc;
+  try {
+    doc = XmlDocument.parse(text);
+  } on XmlException catch (e) {
+    return TrackParseResult.error(
+      'Neplatná struktura TCX souboru: XML chyba (${e.message}).',
+    );
+  }
   final points = <TrackPoint>[];
+  final base = DateTime.now().toUtc();
+  var idx = 0;
   for (final tp in _byLocalName(doc, 'Trackpoint')) {
     final latEl = _byLocalName(tp, 'LatitudeDegrees').firstOrNull;
     final lonEl = _byLocalName(tp, 'LongitudeDegrees').firstOrNull;
+    final altEl = _byLocalName(tp, 'AltitudeMeters').firstOrNull;
+    final timeEl = _byLocalName(tp, 'Time').firstOrNull;
+
     final lat = double.tryParse(latEl?.innerText ?? '');
     final lng = double.tryParse(lonEl?.innerText ?? '');
-    if (lat != null && lng != null && lat.isFinite && lng.isFinite) {
+    if (_isValidCoordinate(lat, lng)) {
+      final ts = DateTime.tryParse(timeEl?.innerText ?? '') ?? base.add(Duration(seconds: idx++));
       points.add(
         TrackPoint(
-          latitude: lat,
-          longitude: lng,
-          timestamp: DateTime.now().toLocal(),
+          latitude: lat!,
+          longitude: lng!,
+          timestamp: ts.toLocal(),
           speed: 0,
           accuracy: 5,
-          altitude: null,
+          altitude: double.tryParse(altEl?.innerText ?? ''),
           heading: null,
           verticalAccuracy: null,
         ),
@@ -205,7 +239,9 @@ TrackParseResult _parseTcx(String text) {
     }
   }
   if (points.length < 2) {
-    return TrackParseResult.error('V TCX nebyly nalezeny žádné body Trackpoint.');
+    return TrackParseResult.error(
+      'V TCX souboru nebyly nalezeny platné body trasy (<Trackpoint> s alespoň 2 body).',
+    );
   }
   return TrackParseResult.success(points);
 }
@@ -215,24 +251,24 @@ TrackParseResult _parseGeoJson(String text) {
   try {
     data = jsonDecode(text);
   } catch (_) {
-    return TrackParseResult.error('Neplatný JSON (GeoJSON).');
+    return TrackParseResult.error('Neplatný JSON formát v GeoJSON souboru.');
   }
 
   List<TrackPoint> extractLine(List<dynamic> coords) {
     final out = <TrackPoint>[];
     for (final c in coords) {
       if (c is List && c.length >= 2) {
-        final lng = (c[0] as num).toDouble();
-        final lat = (c[1] as num).toDouble();
-        if (lat.isFinite && lng.isFinite) {
+        final lng = (c[0] as num?)?.toDouble();
+        final lat = (c[1] as num?)?.toDouble();
+        if (_isValidCoordinate(lat, lng)) {
           out.add(
             TrackPoint(
-              latitude: lat,
-              longitude: lng,
+              latitude: lat!,
+              longitude: lng!,
               timestamp: DateTime.now().toLocal(),
               speed: 0,
               accuracy: 5,
-              altitude: null,
+              altitude: c.length >= 3 ? (c[2] as num?)?.toDouble() : null,
               heading: null,
               verticalAccuracy: null,
             ),
@@ -270,7 +306,9 @@ TrackParseResult _parseGeoJson(String text) {
 
   final pts = walk(data);
   if (pts.length < 2) {
-    return TrackParseResult.error('GeoJSON neobsahuje LineString s body.');
+    return TrackParseResult.error(
+      'GeoJSON soubor neobsahuje platnou geometrii trasy (LineString) s alespoň 2 body.',
+    );
   }
   return TrackParseResult.success(pts);
 }
@@ -278,12 +316,22 @@ TrackParseResult _parseGeoJson(String text) {
 TrackParseResult _parseCsv(String text) {
   final lines = text.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty).toList();
   if (lines.length < 2) {
-    return TrackParseResult.error('CSV musí mít hlavičku a alespoň jeden řádek.');
+    return TrackParseResult.error('CSV soubor musí mít hlavičku a alespoň jeden řádek se souřadnicemi.');
   }
-  final header = lines.first.split(',').map((h) => h.trim().toLowerCase()).toList();
-  var latIdx = header.indexWhere((h) => h == 'lat' || h == 'latitude' || h == 'y');
+  final firstLine = lines.first;
+  final String delimiter;
+  if (firstLine.contains(';')) {
+    delimiter = ';';
+  } else if (firstLine.contains('\t')) {
+    delimiter = '\t';
+  } else {
+    delimiter = ',';
+  }
+
+  final header = firstLine.split(delimiter).map((h) => h.trim().toLowerCase().replaceAll('"', '')).toList();
+  var latIdx = header.indexWhere((h) => h == 'lat' || h == 'latitude' || h == 'y' || h == 'sirka' || h == 'zemepisna_sirka');
   var lngIdx = header.indexWhere(
-    (h) => h == 'lng' || h == 'lon' || h == 'longitude' || h == 'x',
+    (h) => h == 'lng' || h == 'lon' || h == 'longitude' || h == 'x' || h == 'delka' || h == 'zemepisna_delka',
   );
   if (latIdx < 0 || lngIdx < 0) {
     latIdx = 0;
@@ -291,15 +339,15 @@ TrackParseResult _parseCsv(String text) {
   }
   final pts = <TrackPoint>[];
   for (var i = 1; i < lines.length; i++) {
-    final cells = lines[i].split(',').map((c) => c.trim()).toList();
+    final cells = lines[i].split(delimiter).map((c) => c.trim().replaceAll('"', '')).toList();
     if (cells.length <= latIdx || cells.length <= lngIdx) continue;
-    final lat = double.tryParse(cells[latIdx]);
-    final lng = double.tryParse(cells[lngIdx]);
-    if (lat != null && lng != null && lat.isFinite && lng.isFinite) {
+    final lat = double.tryParse(cells[latIdx].replaceAll(',', '.'));
+    final lng = double.tryParse(cells[lngIdx].replaceAll(',', '.'));
+    if (_isValidCoordinate(lat, lng)) {
       pts.add(
         TrackPoint(
-          latitude: lat,
-          longitude: lng,
+          latitude: lat!,
+          longitude: lng!,
           timestamp: DateTime.now().toLocal(),
           speed: 0,
           accuracy: 5,
@@ -311,7 +359,7 @@ TrackParseResult _parseCsv(String text) {
     }
   }
   if (pts.length < 2) {
-    return TrackParseResult.error('V CSV nebyly nalezeny platné souřadnice.');
+    return TrackParseResult.error('V CSV souboru nebyly nalezeny alespoň 2 platné souřadnice (lat, lon).');
   }
   return TrackParseResult.success(pts);
 }
@@ -323,23 +371,34 @@ TrackParseResult parseTrackFile(String text, String filename) {
   const supported = {'gpx', 'kml', 'tcx', 'csv', 'json', 'geojson'};
   if (!supported.contains(ext)) {
     return TrackParseResult.error(
-      'Nepodporovaný formát. Použijte GPX, KML, TCX, CSV nebo GeoJSON.',
+      'Nepodporovaný formát souboru (.$ext). Podporované formáty jsou GPX, KML, TCX, GeoJSON a CSV.',
     );
   }
   final t = text.trim();
   if (t.isEmpty) {
-    return TrackParseResult.error('Prázdný soubor.');
+    return TrackParseResult.error('Soubor je prázdný.');
   }
   try {
     if (ext == 'gpx') {
-      return _parseGpxXml(XmlDocument.parse(t));
+      try {
+        final doc = XmlDocument.parse(t);
+        return _parseGpxXml(doc);
+      } on XmlException catch (e) {
+        return TrackParseResult.error(
+          'Neplatná struktura GPX souboru: XML chyba (${e.message}).',
+        );
+      }
     }
     if (ext == 'kml') return _parseKml(t);
     if (ext == 'tcx') return _parseTcx(t);
     if (ext == 'json' || ext == 'geojson') return _parseGeoJson(t);
     if (ext == 'csv') return _parseCsv(t);
-  } catch (_) {
-    return TrackParseResult.error('Nepodařilo se zpracovat soubor.');
+  } on FormatException catch (e) {
+    return TrackParseResult.error('Chyba formátování souboru: ${e.message}');
+  } catch (e) {
+    return TrackParseResult.error(
+      'Nepodařilo se zpracovat soubor: ${e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '')}',
+    );
   }
   return TrackParseResult.error('Nepodporovaný formát souboru.');
 }

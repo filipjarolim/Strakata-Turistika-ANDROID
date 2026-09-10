@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -21,6 +22,8 @@ import 'package:strakataturistikaandroidapp/services/scoring_config_service.dart
 import 'package:strakataturistikaandroidapp/services/error_recovery_service.dart';
 import 'package:strakataturistikaandroidapp/services/gps_shortcut_bridge.dart';
 import 'package:strakataturistikaandroidapp/services/route_backup_service.dart';
+import 'package:strakataturistikaandroidapp/services/live_track_checkpoint_service.dart';
+import 'package:strakataturistikaandroidapp/services/gps_power_mode.dart';
 import 'package:strakataturistikaandroidapp/pages/dynamic_upload_page.dart';
 import 'package:strakataturistikaandroidapp/pages/dynamic_form_page.dart';
 import 'package:strakataturistikaandroidapp/models/visit_data.dart';
@@ -42,7 +45,8 @@ class GpsPage extends StatefulWidget {
   State<GpsPage> createState() => _GpsPageState();
 }
 
-class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
+class _GpsPageState extends State<GpsPage>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final MapController _mapController = MapController();
   final TrackingStateService _trackingStateService = TrackingStateService();
 
@@ -96,9 +100,15 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   double _topQuickDragStartValue = 0.0;
   double _topQuickDragAccum = 0.0;
 
+  GpsPowerMode _powerMode = GpsPowerMode.saver;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    GpsPowerModeStore().load().then((mode) {
+      if (mounted) setState(() => _powerMode = mode);
+    });
     _initializeAnimations();
     _startUpdateTimer();
     _startNetworkMonitor();
@@ -119,9 +129,12 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
         if (_topQuickSheetController.value > 0.0) {
           _animateTopQuickSheet(expand: false);
         }
+        _positionStreamSub?.cancel();
+        _positionStreamSub = null;
       } else {
         _pulseController.stop();
         _panelSlideController.reverse();
+        _startPassiveLocationUpdates();
       }
     });
     GpsShortcutBridge.startTracking.addListener(_handleShortcutStartTracking);
@@ -137,7 +150,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     _panelSlideController = GpsAnimations.createPanelSlideController(this);
     _topQuickSheetController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 260),
       value: 0.0,
     );
 
@@ -155,68 +168,167 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     if (expand) {
       _topQuickSheetController.animateTo(
         1.0,
-        duration: const Duration(milliseconds: 420),
+        duration: const Duration(milliseconds: 260),
         curve: Curves.easeOutCubic,
       );
     } else {
       _topQuickSheetController.animateBack(
         0.0,
-        duration: const Duration(milliseconds: 360),
+        duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
       );
     }
   }
 
-  Future<void> _startPassiveLocationUpdates() async {
-    // Check permissions without requesting them aggressively yet
-    final status = await GpsServices.checkPermissionsStatus();
-    final hasLocation = status['location'] ?? false;
-
-    if (hasLocation) {
-      _positionStreamSub?.cancel();
-      try {
-        _positionStreamSub =
-            Geolocator.getPositionStream(
-              locationSettings: const LocationSettings(
-                accuracy: LocationAccuracy.high,
-                distanceFilter: 5,
+  List<Marker> _buildMapMarkers() {
+    if (_currentLocation == null) return const [];
+    return [
+      Marker(
+        point: _currentLocation!,
+        width: 60,
+        height: 60,
+        child: GestureDetector(
+          onTap: () {
+            _pulseController.forward(from: 0.0);
+            HapticService.selectionClick();
+          },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (_trackingStateService.isTracking)
+                ScaleTransition(
+                  scale: _pulseAnimation,
+                  child: Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: AppColors.ctaGreen.withValues(alpha: 0.28),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              if (_currentHeading != null)
+                Transform.rotate(
+                  angle: (_currentHeading! * (3.14159 / 180)),
+                  child: CustomPaint(
+                    size: const Size(100, 100),
+                    painter: DirectionalConePainter(),
+                  ),
+                ),
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: AppColors.ctaGreen,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
               ),
-            ).listen(
-              (Position position) {
-                if (!mounted) return;
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
 
-                // Only update local state if NOT tracking (tracking service handles source of truth then)
-                if (!_trackingStateService.isTracking) {
-                  setState(() {
-                    _currentLocation = LatLng(
-                      position.latitude,
-                      position.longitude,
-                    );
-                    _currentHeading = position.heading;
-                    _currentAltitude = position.altitude;
-                    // Speed is usually 0 if stationary, but we can capture it
-                    _currentSpeed = position.speed;
-
-                    // Center map if not centered yet
-                    if (!_hasInitiallyCentered && _isMapReady) {
-                      _smoothMoveToLocation(_currentLocation!);
-                      _hasInitiallyCentered = true;
-                    }
-                  });
-                }
-              },
-              onError: (e) {
-                print('Passive location stream error: $e');
-              },
-            );
-      } catch (e) {
-        print('Failed to start passive location: $e');
+  void _applyMapPosition(Position position, {bool moveIfFirst = true}) {
+    if (!mounted || _trackingStateService.isTracking) return;
+    setState(() {
+      _currentLocation = LatLng(position.latitude, position.longitude);
+      _currentHeading = position.heading;
+      _currentAltitude = position.altitude;
+      _currentSpeed = position.speed;
+      if (moveIfFirst && !_hasInitiallyCentered && _isMapReady) {
+        _smoothMoveToLocation(_currentLocation!);
+        _hasInitiallyCentered = true;
       }
+    });
+  }
+
+  Future<void> _startPassiveLocationUpdates() async {
+    // Never request runtime location here — Google Play requires Prominent
+    // Disclosure before any location permission prompt (tracking flow only).
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      print('Passive location: permission not granted ($permission)');
+      return;
+    }
+
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      print('Passive location: GPS service disabled');
+      return;
+    }
+
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) _applyMapPosition(last);
+    } catch (e) {
+      print('Passive location last-known: $e');
+    }
+
+    try {
+      final current = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 8),
+      );
+      _applyMapPosition(current);
+    } catch (e) {
+      print('Passive location first fix: $e');
+      try {
+        final fallback = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.low,
+          timeLimit: const Duration(seconds: 5),
+        );
+        _applyMapPosition(fallback);
+      } catch (e2) {
+        print('Passive location fallback fix: $e2');
+      }
+    }
+
+    if (!mounted || _trackingStateService.isTracking) return;
+
+    _positionStreamSub?.cancel();
+    try {
+      final locationSettings = Platform.isAndroid
+          ? AndroidSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 0,
+              intervalDuration: const Duration(seconds: 2),
+            )
+          : const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 0,
+            );
+      _positionStreamSub = Geolocator.getPositionStream(
+        locationSettings: locationSettings,
+      ).listen(
+        (Position position) => _applyMapPosition(position),
+        onError: (e) => print('Passive location stream error: $e'),
+      );
+    } catch (e) {
+      print('Failed to start passive location: $e');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        !_trackingStateService.isTracking) {
+      _startPassiveLocationUpdates();
     }
   }
 
   void _startUpdateTimer() {
-    _updateTimer = Timer.periodic(const Duration(milliseconds: 800), (timer) {
+    _updateTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
       if (mounted) {
         setState(() {
           // Update current location from tracking service
@@ -330,6 +442,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _updateTimer?.cancel();
     _networkTimer?.cancel();
     _prefetchDebounce?.cancel();
@@ -361,13 +474,23 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
   }
 
   Future<void> _startTracking() async {
+    if (await RouteBackupService().hasUnsavedBackup()) {
+      if (!mounted) return;
+      await _checkUnsavedRouteBackup();
+      return;
+    }
+    if (!mounted) return;
+
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Spustit sledování'),
-          content: const Text('Opravdu chcete spustit GPS sledování?'),
+          content: const Text(
+            'GPS záznam poběží i se zamčeným telefonem — zámek obrazovky výrazně šetří baterii.\n\n'
+            'Při stání a pauze se přesnost GPS sama sníží.',
+          ),
           actions: [
             AppButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -396,13 +519,13 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
 
       // 2. Check permissions status
       final status = await GpsServices.checkPermissionsStatus();
-      bool allGranted =
-          (status['location'] ?? false) &&
-          (status['background'] ?? false) &&
-          (status['battery_granted'] ?? false);
+      final hasLocation = status['location'] ?? false;
+      final hasBackground = status['background'] ?? false;
+      final hasBattery = status['battery_granted'] ?? false;
+      bool canStart = hasLocation && hasBackground;
 
-      if (!allGranted) {
-        // Show SIMPLIFIED Onboarding Sheet
+      if (!canStart || !hasBattery) {
+        // Show Onboarding Sheet if permissions or battery optimization need attention
         final result = await showModalBottomSheet<bool>(
           context: context,
           isScrollControlled: true,
@@ -410,23 +533,18 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
           builder: (context) => const TrackingOnboardingSheet(),
         );
 
-        // If sheet returns true (user clicked "Hotovo" or auto-closed),
-        // we check one last time just to be sure, then valid = true
         if (result == true) {
           final finalStatus = await GpsServices.checkPermissionsStatus();
-          if ((finalStatus['location'] ?? false) &&
-              (finalStatus['background'] ?? false) &&
-              (finalStatus['battery_granted'] ?? false)) {
-            allGranted = true;
-          }
+          canStart = (finalStatus['location'] ?? false) &&
+              (finalStatus['background'] ?? false);
         } else {
           // User cancelled the wizard
           return;
         }
       }
 
-      // 3. Start tracking if permissions are good
-      if (allGranted) {
+      // 3. Start tracking if required permissions are granted
+      if (canStart) {
         await GpsServices.startTracking(
           trackingStateService: _trackingStateService,
           context: context,
@@ -883,8 +1001,10 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     return pts;
   }
 
-  /// Pokud na disku existuje neuložená trasa (uložení do DB dřív selhalo),
-  /// nabídne uživateli její obnovení, aby o naměřená data nepřišel.
+  /// Pokud na disku existuje neuložená / nedokončená trasa, nabídne
+  /// pokračování v měření, uložení konceptu, nebo smazání.
+  /// Nové měření se nespustí, dokud uživatel zálohu nevyřeší — jinak by
+  /// přepsala předchozí výlet (pád appky, vybitý telefon).
   Future<void> _checkUnsavedRouteBackup() async {
     if (_trackingStateService.isTracking) return;
     var backup = await RouteBackupService().loadBackup();
@@ -894,12 +1014,16 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     final distanceKm = (backup.totalDistance / 1000).toStringAsFixed(2);
     final action = await showDialog<String>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Neuložená trasa'),
+        title: const Text('Nedokončená trasa'),
         content: Text(
-          'Našli jsme trasu ($distanceKm km), kterou se dříve nepodařilo uložit. '
-          'Chcete ji obnovit a odeslat?',
+          'Našli jsme trasu ($distanceKm km), která se neuložila — '
+          'aplikace mohla spadnout nebo se telefon vybil.\n\n'
+          'Můžete v měření pokračovat, uložit to, co je naměřené, nebo zálohu smazat.',
         ),
+        actionsOverflowDirection: VerticalDirection.down,
+        actionsOverflowButtonSpacing: 8,
         actions: [
           AppButton(
             onPressed: () => Navigator.of(context).pop('delete'),
@@ -908,8 +1032,14 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
             size: AppButtonSize.small,
           ),
           AppButton(
-            onPressed: () => Navigator.of(context).pop('restore'),
-            text: 'Obnovit',
+            onPressed: () => Navigator.of(context).pop('save'),
+            text: 'Uložit koncept',
+            type: AppButtonType.ghost,
+            size: AppButtonSize.small,
+          ),
+          AppButton(
+            onPressed: () => Navigator.of(context).pop('continue'),
+            text: 'Pokračovat',
             type: AppButtonType.primary,
             size: AppButtonSize.small,
           ),
@@ -918,8 +1048,27 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     );
 
     if (!mounted) return;
-    if (action == 'restore') {
-      _showTrackingSummary(backup, null);
+    if (action == 'continue') {
+      final ok = await _trackingStateService.resumeTracking(backup);
+      if (!mounted) return;
+      if (ok) {
+        _pulseController.repeat(reverse: true);
+        AppToast.showSuccess(context, 'Měření pokračuje ($distanceKm km).');
+      } else {
+        AppToast.showError(
+          context,
+          'Měření se nepodařilo obnovit. Můžete uložit koncept.',
+        );
+        _showTrackingSummary(backup, null);
+      }
+    } else if (action == 'save') {
+      await RouteBackupService().markInactive();
+      final draft = await LiveTrackCheckpointService().saveDraft(
+        backup,
+        clearLocalOnSuccess: true,
+      );
+      if (!mounted) return;
+      _showTrackingSummary(backup, draft);
     } else if (action == 'delete') {
       await RouteBackupService().clearBackup();
     }
@@ -1177,13 +1326,27 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
 
   // follow-location toggle removed; we now only recenter on first fix or via the recenter pill
 
-  void _centerOnLocation() {
+  Future<void> _centerOnLocation() async {
+    if (_currentLocation == null) {
+      await _startPassiveLocationUpdates();
+    }
+    if (!mounted) return;
     if (_currentLocation != null) {
-      // Smooth map movement with animation
       _mapController.move(_currentLocation!, 16.0);
       _bounceController.forward().then((_) => _bounceController.reverse());
-
+      setState(() => _showRecenterButton = false);
       AppToast.showSuccess(context, 'Vycentrováno na vaši polohu');
+      return;
+    }
+    final enabled = await Geolocator.isLocationServiceEnabled();
+    if (!mounted) return;
+    if (!enabled) {
+      GpsServices.showGPSDisabledDialog(context);
+    } else {
+      AppToast.showInfo(
+        context,
+        'Poloha zatím není dostupná. Zapněte GPS a zkuste to znovu.',
+      );
     }
   }
 
@@ -1212,6 +1375,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                 center: _lastMapCenter ?? const LatLng(49.8175, 15.4730),
                 zoom: _lastMapZoom ?? 8.0,
                 showControls: false,
+                syncCameraFromParent: false,
                 onMapReady: () {
                   _isMapReady = true;
                   _currentZoom = _mapController.camera.zoom;
@@ -1236,69 +1400,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                   _lastMapCenter = position.center;
                   _lastMapZoom = position.zoom;
                 },
-                markers: _currentLocation != null
-                    ? [
-                        Marker(
-                          point: _currentLocation!,
-                          width: 60,
-                          height: 60,
-                          child: GestureDetector(
-                            onTap: () {
-                              _pulseController.forward(from: 0.0);
-                              HapticService.selectionClick();
-                            },
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                if (_trackingStateService.isTracking)
-                                  ScaleTransition(
-                                    scale: _pulseAnimation,
-                                    child: Container(
-                                      width: 60,
-                                      height: 60,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                  ),
-                                if (_currentHeading != null)
-                                  Transform.rotate(
-                                    angle: (_currentHeading! * (3.14159 / 180)),
-                                    child: CustomPaint(
-                                      size: const Size(100, 100),
-                                      painter: DirectionalConePainter(),
-                                    ),
-                                  ),
-                                Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 3,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                        blurRadius: 6,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ]
-                    : [],
+                markers: _buildMapMarkers(),
                 polylines:
                     (_trackingStateService.isTracking &&
                         _trackingStateService
@@ -1322,7 +1424,7 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                               .map((p) => p.toLatLng())
                               .toList(),
                           strokeWidth: 4.5,
-                          color: AppColors.primary,
+                          color: AppColors.ctaGreen,
                         ),
                       ]
                     : [],
@@ -1338,55 +1440,48 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     AnimatedScale(
-                      scale: _showRecenterButton ? 1.0 : 0.92,
+                      scale: 1.0,
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOutCubic,
-                      child: AnimatedOpacity(
-                        opacity: _showRecenterButton ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 180),
-                        child: IgnorePointer(
-                          ignoring: !_showRecenterButton,
-                          child: Material(
-                            color: Colors.transparent,
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: _centerOnLocation,
+                          child: ClipRRect(
                             borderRadius: BorderRadius.circular(16),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(16),
-                              onTap: _centerOnLocation,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: BackdropFilter(
-                                  filter: ui.ImageFilter.blur(
-                                    sigmaX: 8,
-                                    sigmaY: 8,
+                            child: BackdropFilter(
+                              filter: ui.ImageFilter.blur(
+                                sigmaX: 8,
+                                sigmaY: 8,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(
+                                    alpha: 0.88,
                                   ),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.88,
-                                      ),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.7,
-                                        ),
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.14,
-                                          ),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 6),
-                                        ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.my_location,
-                                      color: Colors.black87,
-                                      size: 20,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(
+                                      alpha: 0.7,
                                     ),
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.14,
+                                      ),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.my_location,
+                                  color: Colors.black87,
+                                  size: 20,
                                 ),
                               ),
                             ),
@@ -1421,8 +1516,6 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-
-              _buildTopQuickActionSheet(isTracking),
 
               // 4. Offline/Download Indicators (Top Left)
               Positioned(
@@ -1565,6 +1658,11 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                         onOfflineMaps: () => _showOfflineManager(),
                         onAddPlace: isTracking ? _capturePlaceDuringTracking : null,
                         capturedPlaceCount: RouteBackupService().capturedPlaces.length,
+                        powerMode: _powerMode,
+                        onPowerModeChanged: (mode) async {
+                          setState(() => _powerMode = mode);
+                          await _trackingStateService.applyPowerMode(mode);
+                        },
                         onClose: () {
                           _sheetController.animateTo(
                             0.42,
@@ -1577,6 +1675,9 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
                   },
                 ),
               ),
+
+              // 6. Top Quick Action Sheet (always on top)
+              _buildTopQuickActionSheet(isTracking),
             ],
           ),
         );
@@ -1764,8 +1865,8 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
 
   Widget _buildTopQuickActionSheet(bool isTracking) {
     final topInset = MediaQuery.of(context).padding.top;
-    const expandedHeight = 292.0;
-    const collapsedVisible = 46.0;
+    const expandedHeight = 248.0;
+    const collapsedVisible = 52.0;
     const collapsedOffset = expandedHeight - collapsedVisible;
 
     return AnimatedBuilder(
@@ -1773,168 +1874,226 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
       builder: (context, child) {
         final t = _topQuickSheetController.value.clamp(0.0, 1.0);
         final top = ui.lerpDouble(
-          topInset + 8 - collapsedOffset,
-          topInset + 8,
+          topInset + 10 - collapsedOffset,
+          topInset + 10,
           t,
         )!;
         final contentOpacity = Curves.easeOut.transform(t);
-        final isExpandedEnough = t > 0.15;
+        final isExpandedEnough = t > 0.2;
         return Positioned(
-          left: 12,
-          right: 12,
+          left: 14,
+          right: 14,
           top: top,
           height: expandedHeight,
           child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragStart: (_) {
-          _topQuickDragAccum = 0.0;
-          _topQuickDragStartValue = _topQuickSheetController.value;
-        },
-        onVerticalDragUpdate: (details) {
-          _topQuickDragAccum += details.delta.dy;
-          final dragRange = expandedHeight - collapsedVisible;
-          final next = (_topQuickDragStartValue + (_topQuickDragAccum / dragRange))
-              .clamp(-0.08, 1.08);
-          final softened = next < 0
-              ? next * 0.35
-              : (next > 1 ? 1 + (next - 1) * 0.35 : next);
-          _topQuickSheetController.value = softened.clamp(0.0, 1.0);
-        },
-        onVerticalDragEnd: (details) {
-          final velocity = details.primaryVelocity ?? 0.0;
-          final drag = _topQuickDragAccum;
-          final current = _topQuickSheetController.value;
-          if (drag > 12 || velocity > 130) {
-            _animateTopQuickSheet(expand: true);
-          } else if (drag < -12 || velocity < -130) {
-            _animateTopQuickSheet(expand: false);
-          } else {
-            _animateTopQuickSheet(expand: current >= 0.48);
-          }
-          _topQuickDragAccum = 0.0;
-        },
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.75)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.upload_file_rounded, size: 18, color: AppColors.textPrimary),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Rychlé nahrání souboru',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
-                        ),
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              if (!isExpandedEnough) {
+                HapticService.selectionClick();
+                _animateTopQuickSheet(expand: true);
+              }
+            },
+            onVerticalDragStart: (_) {
+              _topQuickDragAccum = 0.0;
+              _topQuickDragStartValue = _topQuickSheetController.value;
+            },
+            onVerticalDragUpdate: (details) {
+              _topQuickDragAccum += details.delta.dy;
+              final dragRange = expandedHeight - collapsedVisible;
+              final next =
+                  (_topQuickDragStartValue + (_topQuickDragAccum / dragRange))
+                      .clamp(-0.08, 1.08);
+              final softened = next < 0
+                  ? next * 0.35
+                  : (next > 1 ? 1 + (next - 1) * 0.35 : next);
+              _topQuickSheetController.value = softened.clamp(0.0, 1.0);
+            },
+            onVerticalDragEnd: (details) {
+              final velocity = details.primaryVelocity ?? 0.0;
+              final drag = _topQuickDragAccum;
+              final current = _topQuickSheetController.value;
+              if (drag > 10 || velocity > 120) {
+                _animateTopQuickSheet(expand: true);
+              } else if (drag < -10 || velocity < -120) {
+                _animateTopQuickSheet(expand: false);
+              } else {
+                _animateTopQuickSheet(expand: current >= 0.45);
+              }
+              _topQuickDragAccum = 0.0;
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(22),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.8)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6),
                       ),
-                      if (isTracking)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFECFDF5),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFFA7F3D0)),
-                          ),
-                          child: const Text(
-                            'Tracking běží',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF047857)),
-                          ),
-                        ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 180),
-                      opacity: contentOpacity,
-                      child: IgnorePointer(
-                        ignoring: !isExpandedEnough,
-                        child: ListView(
-                          physics: const BouncingScrollPhysics(),
-                          padding: EdgeInsets.zero,
-                          children: [
-                            _quickActionRow(
-                              icon: Icons.upload_file_outlined,
-                              title: 'Nahrát GPX',
-                              subtitle: 'Import z externí aplikace',
-                              onTap: () => _openUploadFromTopSheet('gpx-upload'),
-                            ),
-                            _quickActionRow(
-                              icon: Icons.photo_camera_outlined,
-                              title: 'Nahrát screenshot',
-                              subtitle: 'Screenshot trasy z mobilu',
-                              onTap: () => _openUploadFromTopSheet('screenshot-upload'),
-                            ),
-                          ],
-                        ),
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: isExpandedEnough
+                            ? SingleChildScrollView(
+                                physics: const ClampingScrollPhysics(),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.file_upload_outlined,
+                                          size: 20,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Expanded(
+                                          child: Text(
+                                            'Importovat trasu',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isTracking)
+                                          Container(
+                                            margin: const EdgeInsets.only(right: 4),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFECFDF5),
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: const Color(0xFFA7F3D0),
+                                              ),
+                                            ),
+                                            child: const Text(
+                                              'Tracking běží',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                color: Color(0xFF047857),
+                                              ),
+                                            ),
+                                          ),
+                                        IconButton(
+                                          visualDensity: VisualDensity.compact,
+                                          tooltip: 'Sbalit',
+                                          onPressed: () =>
+                                              _animateTopQuickSheet(
+                                                expand: false,
+                                              ),
+                                          icon: const Icon(
+                                            Icons.close_rounded,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      'Když už máš trasu z jiné appky',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    AnimatedOpacity(
+                                      duration: const Duration(milliseconds: 140),
+                                      opacity: contentOpacity,
+                                      child: Column(
+                                        children: [
+                                          _quickActionRow(
+                                            icon: Icons.route_outlined,
+                                            title: 'Nahrát GPX',
+                                            subtitle:
+                                                'Soubor z Garmin / Strava / …',
+                                            onTap: () => _openUploadFromTopSheet(
+                                              'gpx-upload',
+                                            ),
+                                          ),
+                                          _quickActionRow(
+                                            icon: Icons.photo_outlined,
+                                            title: 'Nahrát screenshot',
+                                            subtitle:
+                                                'Snímek obrazovky s trasou',
+                                            onTap: () => _openUploadFromTopSheet(
+                                              'screenshot-upload',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : const SizedBox.shrink(),
                       ),
-                    ),
-                  ),
-                  // Úchyt dole — ve sbaleném stavu je vidět jen spodek panelu (~46 px).
-                  Center(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(999),
-                      onTap: () => _animateTopQuickSheet(
-                        expand: _topQuickSheetController.value < 0.5,
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          top: isExpandedEnough ? 6 : 2,
-                          bottom: isExpandedEnough ? 4 : 2,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
+                      // Always at the bottom — this is what you see when collapsed.
+                      Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: AppColors.ctaGreen.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
                               isExpandedEnough
                                   ? Icons.keyboard_arrow_up_rounded
-                                  : Icons.keyboard_arrow_down_rounded,
-                              size: isExpandedEnough ? 24 : 22,
-                              color: AppColors.textPrimary,
+                                  : Icons.upload_file_rounded,
+                              size: 18,
+                              color: AppColors.ctaGreenDark,
                             ),
-                            if (isExpandedEnough)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 1),
-                                child: Text(
-                                  'Sbalit',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textTertiary,
-                                  ),
-                                ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              isExpandedEnough
+                                  ? 'Klepni nahoru · sbalit'
+                                  : 'Nahrát GPX / screenshot',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
                               ),
-                          ],
-                        ),
+                            ),
+                          ),
+                          Icon(
+                            isExpandedEnough
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
+                            color: Colors.grey.shade600,
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
-  },
-);
   }
 
   Widget _quickActionRow({
@@ -1944,14 +2103,14 @@ class _GpsPageState extends State<GpsPage> with TickerProviderStateMixin {
     required VoidCallback onTap,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 6),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: const Color(0xFFF4F0E8),
               borderRadius: BorderRadius.circular(14),

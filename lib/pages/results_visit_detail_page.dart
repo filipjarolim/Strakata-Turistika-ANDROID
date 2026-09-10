@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -70,11 +72,7 @@ class _ResultsVisitDetailPageState extends State<ResultsVisitDetailPage> {
     final visit = _visit;
     final hasTrack =
         visit.route != null && (visit.route!['trackPoints'] as List?)?.isNotEmpty == true;
-    final photos = (visit.photos ?? const <Map<String, dynamic>>[])
-        .map(visitPhotoUrl)
-        .whereType<String>()
-        .where((u) => u.trim().isNotEmpty)
-        .toList();
+    final photos = _displayPhotoUrls(visit);
     final themeKeywords = _themeKeywords(visit);
     final extraNotes = _extraNotes(visit);
 
@@ -380,10 +378,7 @@ class _ResultsVisitDetailPageState extends State<ResultsVisitDetailPage> {
   }
 
   Widget _placeCard(Place place) {
-    final photoUrls = place.photos
-        .where((p) => !p.isLocal && p.url.trim().isNotEmpty)
-        .map((p) => p.url)
-        .toList();
+    final photoUrls = _placePhotoUrls(place);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
@@ -644,5 +639,43 @@ class _ResultsVisitDetailPageState extends State<ResultsVisitDetailPage> {
         ),
       ),
     );
+  }
+
+  List<String> _displayPhotoUrls(VisitData visit) {
+    final urls = <String>[];
+    void add(String? raw) {
+      final resolved = _resolvablePhotoUrl(raw);
+      if (resolved != null && !urls.contains(resolved)) urls.add(resolved);
+    }
+
+    for (final photo in visit.photos ?? const <Map<String, dynamic>>[]) {
+      add(visitPhotoUrl(photo));
+    }
+    for (final place in visit.places) {
+      for (final photo in place.photos) {
+        add(photo.url);
+      }
+    }
+    return urls;
+  }
+
+  List<String> _placePhotoUrls(Place place) {
+    final urls = <String>[];
+    for (final photo in place.photos) {
+      final resolved = _resolvablePhotoUrl(photo.url);
+      if (resolved != null && !urls.contains(resolved)) urls.add(resolved);
+    }
+    return urls;
+  }
+
+  String? _resolvablePhotoUrl(String? raw) {
+    var url = raw?.trim() ?? '';
+    if (url.isEmpty) return null;
+    if (url.startsWith('file://')) {
+      url = Uri.parse(url).toFilePath();
+    }
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (File(url).existsSync()) return url;
+    return null;
   }
 }

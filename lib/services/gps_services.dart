@@ -11,10 +11,9 @@ import '../services/logging_service.dart';
 import '../widgets/ui/app_toast.dart';
 import '../utils/gps_utils.dart';
 import '../models/tracking_summary.dart';
-import '../repositories/visit_repository.dart';
 import '../services/auth_service.dart';
+import '../services/live_track_checkpoint_service.dart';
 import '../services/route_backup_service.dart';
-import '../services/track_file_parser.dart';
 import '../models/visit_data.dart';
 
 class GpsServices {
@@ -118,10 +117,7 @@ class GpsServices {
       final currentPosition = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.bestForNavigation,
       );
-      if (currentPosition.heading != null) {
-        setDeviceHeading(currentPosition.heading);
-        // print('Initial compass heading: ${currentPosition.heading}°');
-      }
+      setDeviceHeading(currentPosition.heading);
       
       // Start listening to compass updates
       final compassSubscription = Geolocator.getPositionStream(
@@ -132,10 +128,7 @@ class GpsServices {
         ),
       ).listen(
         (Position position) {
-          if (position.heading != null) {
-            setDeviceHeading(position.heading);
-            // print('Compass heading: ${position.heading}°');
-          }
+          setDeviceHeading(position.heading);
         },
         onError: (error) {
           print('Compass error: $error');
@@ -189,52 +182,17 @@ class GpsServices {
       if (trackingSummary.trackPoints.isNotEmpty) {
         // Trasa se nejdřív zálohuje lokálně — kdyby zápis do DB selhal
         // (výpadek sítě, chyba serveru), data zůstanou v telefonu.
-        await RouteBackupService().saveBackup(trackingSummary);
+        await RouteBackupService().saveBackup(trackingSummary, active: false);
+        await RouteBackupService().markInactive();
 
-        // Offer: Save as draft now or fill details now
-        // Default: save as DRAFT immediately for safety
         try {
-          final currentUser = AuthService.currentUser;
-          if (currentUser == null || currentUser.id.isEmpty) {
-            print('⚠️ Draft se do DB neuložil — uživatel není přihlášen. Zůstává lokální záloha.');
-            showTrackingSummary(trackingSummary, null);
-            return;
-          }
-          final now = DateTime.now();
-          
-          final visit = VisitData(
-            id: '', // Repo will assign
-            userId: currentUser.id,
-            user: {'name': currentUser.name, 'email': currentUser.email, 'image': currentUser.image},
-            seasonId: null,
-            year: now.year,
-            visitDate: trackingSummary.startTime,
-            createdAt: now,
-            state: VisitState.DRAFT,
-            points: 0,
-            routeTitle: 'Trasa ${now.day}.${now.month}.${now.year}',
-            routeDescription: 'GPS trasa',
-            visitedPlaces: RouteBackupService().capturedPlaces.map((p) => p.name).join(', '),
-            dogName: currentUser.dogName,
-            dogNotAllowed: null,
-            photos: [],
-            places: List<Place>.from(RouteBackupService().capturedPlaces),
-            route: routePayloadForStorage(trackingSummary),
-            extraData: {},
-            extraPoints: {
-              'source': 'gps_tracking',
-            },
+          final draftVisit = await LiveTrackCheckpointService().saveDraft(
+            trackingSummary,
+            clearLocalOnSuccess: true,
           );
-
-          final repo = VisitRepository();
-          final savedId = await repo.saveVisit(visit);
-          VisitData? draftVisit;
-          if (savedId != null) {
-            draftVisit = visit.copyWith(id: savedId);
-            // Koncept je bezpečně v databázi — lokální záloha už není potřeba.
-            await RouteBackupService().clearBackup();
+          if (draftVisit == null && AuthService.currentUser == null) {
+            print('⚠️ Draft se do DB neuložil — uživatel není přihlášen. Zůstává lokální záloha.');
           }
-
           showTrackingSummary(trackingSummary, draftVisit);
         } catch (e) {
           print('Error autosaving draft: $e');
@@ -251,11 +209,6 @@ class GpsServices {
   static Future<void> checkGPSStatus(BuildContext context) async {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      final permission = await Geolocator.checkPermission();
-      
-      // print('GPS Status:');
-      // print('Service enabled: $serviceEnabled');
-      // print('Permission: $permission');
       
       if (!serviceEnabled) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -283,10 +236,7 @@ class GpsServices {
       
       final location = LatLng(position.latitude, position.longitude);
       setLocationData(location, position.speed, position.altitude, position.heading);
-      
-      if (location != null) {
-        moveMap(location);
-      }
+      moveMap(location);
     } catch (e) {
       LoggingService().log('Location update failed: $e', level: 'ERROR');
     }
@@ -349,13 +299,7 @@ class GpsServices {
   }
 
   static void checkTrackingStatus(TrackingStateService trackingStateService) {
-    final summary = trackingStateService.getSummary();
-    // print('Tracking Status:');
-    // print('Is tracking: ${trackingStateService.isTracking}');
-    // print('Background service running: ${summary.isTracking}');
-    // print('Track points: ${summary.trackPoints.length}');
-    // print('Total distance: ${summary.totalDistance}m');
-    // print('Duration: ${summary.duration}');
+    // print('Tracking Status: isTracking=${trackingStateService.isTracking}');
   }
 
   static Future<void> testCompass({
@@ -367,24 +311,19 @@ class GpsServices {
         desiredAccuracy: LocationAccuracy.high,
       );
       
-      if (position.heading != null) {
-        setDeviceHeading(position.heading);
-        print('Updated device heading to: ${position.heading}°');
-      } else {
-        print('No heading data available - trying alternative method');
-        // Try to get heading from device orientation
-        try {
-          final orientation = await Geolocator.getLastKnownPosition();
-          if (orientation?.heading != null) {
-            setDeviceHeading(orientation!.heading);
-            print('Updated device heading from last known position: ${orientation!.heading}°');
-          }
-        } catch (e) {
-          print('Alternative compass method failed: $e');
-        }
-      }
+      setDeviceHeading(position.heading);
+      print('Updated device heading to: ${position.heading}°');
     } catch (e) {
-      print('Compass test failed: $e');
+      print('Compass test failed, trying alternative method: $e');
+      try {
+        final orientation = await Geolocator.getLastKnownPosition();
+        if (orientation != null) {
+          setDeviceHeading(orientation.heading);
+          print('Updated device heading from last known position: ${orientation.heading}°');
+        }
+      } catch (err) {
+        print('Alternative compass method failed: $err');
+      }
     }
   }
 } 

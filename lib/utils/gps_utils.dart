@@ -142,7 +142,7 @@ class GpsUtils {
       
       for (int i = 0; i < numPoints * 0.3; i++) {
         final double progress = i / (numPoints * 0.3);
-        final double angleProgress = progress * (nextDirection! - direction) / 180 * pi;
+        final double angleProgress = progress * (nextDirection - direction) / 180 * pi;
         
         // Smooth curve using cubic interpolation
         final double currentAngle = direction + (nextDirection - direction) * progress;

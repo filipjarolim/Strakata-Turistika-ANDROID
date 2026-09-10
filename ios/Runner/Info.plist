@@ -35,11 +35,11 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Aplikace potřebuje přístup k fotoaparátu pro focení návštěv.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Aplikace potřebuje přístup k poloze i na pozadí, aby mohla zaznamenávat trasy během turistiky.</string>
+	<string>Aplikace potřebuje přístup k poloze i na pozadí, aby mohla zaznamenávat turistickou trasu a měřit ujetou vzdálenost, i když je aplikace zavřená nebo ji zrovna nepoužíváte.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Aplikace potřebuje přístup k poloze i na pozadí, aby mohla zaznamenávat trasy během turistiky.</string>
+	<string>Aplikace potřebuje přístup k poloze i na pozadí, aby mohla zaznamenávat turistickou trasu a měřit ujetou vzdálenost, i když je aplikace zavřená nebo ji zrovna nepoužíváte.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Aplikace potřebuje přístup k poloze pro sledování tras a zaznamenávání návštěv.</string>
+	<string>Aplikace potřebuje přístup k poloze pro záznam turistické trasy a měření ujeté vzdálenosti.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Aplikace potřebuje přístup k fotkám pro výběr snímků z návštěv.</string>
 	<key>NSMotionUsageDescription</key>
@@ -92,6 +92,30 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>AppIcon</string>
+			</array>
+			<key>UIPrerenderedIcon</key>
+			<false/>
+		</dict>
+		<key>CFBundleAlternateIcons</key>
+		<dict>
+			<key>AppIconAutumn</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>AppIconAutumn</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+		</dict>
+	</dict>
 	<key>GIDClientID</key>
 	<string>1050635912562-gcdc8km9u9i87bgshh3sncf6hnmk6noh.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>

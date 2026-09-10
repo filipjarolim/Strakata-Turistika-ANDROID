@@ -43,6 +43,7 @@ import 'services/tracking_state_service.dart'; // Added
 import 'services/vector_tile_provider.dart';
 import 'services/app_shortcuts_service.dart';
 import 'services/gps_shortcut_bridge.dart';
+import 'services/appearance_preferences_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_picker_android/image_picker_android.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
@@ -109,6 +110,13 @@ void main() async {
     _recordStartupError(e, st, 'Auth init failed');
   }
 
+  // Appearance (seasonal light themes + icon preference)
+  try {
+    await AppearancePreferencesService.instance.load();
+  } catch (e, st) {
+    _recordStartupError(e, st, 'Appearance init failed');
+  }
+
   // Initialize new services
   try {
     // Parallelize independent service initialization
@@ -152,63 +160,71 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Strakatá Turistika',
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('cs', 'CZ'),
-      supportedLocales: const [Locale('cs', 'CZ'), Locale('en', 'US')],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      theme: AppTheme.lightTheme,
-      themeMode: ThemeMode.light,
-      // Tap outside any text field to dismiss the keyboard (Android + iOS).
-      builder: (context, child) {
-        return Listener(
-          behavior: HitTestBehavior.translucent,
-          onPointerDown: (event) {
-            final focus = FocusManager.instance.primaryFocus;
-            if (focus == null || !focus.hasFocus) return;
+    final appearance = AppearancePreferencesService.instance;
+    return ListenableBuilder(
+      listenable: appearance,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'Strakatá Turistika',
+          debugShowCheckedModeBanner: false,
+          locale: const Locale('cs', 'CZ'),
+          supportedLocales: const [Locale('cs', 'CZ'), Locale('en', 'US')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: AppTheme.themeFor(appearance.season),
+          themeMode: ThemeMode.light,
+          themeAnimationDuration: AppAnimations.durationStandard,
+          themeAnimationCurve: AppAnimations.curveStandard,
+          // Tap outside any text field to dismiss the keyboard (Android + iOS).
+          builder: (context, child) {
+            return Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (event) {
+                final focus = FocusManager.instance.primaryFocus;
+                if (focus == null || !focus.hasFocus) return;
 
-            final renderObject = focus.context?.findRenderObject();
-            if (renderObject is! RenderBox) {
-              focus.unfocus();
-              return;
-            }
+                final renderObject = focus.context?.findRenderObject();
+                if (renderObject is! RenderBox) {
+                  focus.unfocus();
+                  return;
+                }
 
-            final box = renderObject;
-            final localOffset = box.globalToLocal(event.position);
-            final inside = Offset.zero & box.size;
-            if (!inside.contains(localOffset)) {
-              focus.unfocus();
-            }
+                final box = renderObject;
+                final localOffset = box.globalToLocal(event.position);
+                final inside = Offset.zero & box.size;
+                if (!inside.contains(localOffset)) {
+                  focus.unfocus();
+                }
+              },
+              child: child,
+            );
           },
-          child: child,
+          // Use AuthGate as the initial route to handle permission and auth checks
+          home: const AuthGate(),
+          routes: {
+            '/login': (context) => const LoginPage(),
+            '/settings': (context) => const SettingsPage(),
+            '/user-profile': (context) => const UserProfilePage(),
+            '/offline-maps': (context) => const OfflineMapsPage(),
+            '/exception-request': (context) => const ExceptionRequestPage(),
+            '/visit-data-form': (context) => const DynamicFormPage(slug: 'gps-tracking'),
+            '/tos': (context) => WebViewPage(
+              title: 'Podmínky použití',
+              url: LegalConfig.termsUrl,
+            ),
+            '/privacy': (context) => WebViewPage(
+              title: 'Zásady ochrany osobních údajů',
+              url: LegalConfig.privacyUrl,
+            ),
+            '/rules': (context) => WebViewPage(
+              title: 'Pravidla soutěže',
+              url: LegalConfig.rulesUrl,
+            ),
+          },
         );
-      },
-      // Use AuthGate as the initial route to handle permission and auth checks
-      home: const AuthGate(),
-      routes: {
-        '/login': (context) => const LoginPage(),
-        '/settings': (context) => const SettingsPage(),
-        '/user-profile': (context) => const UserProfilePage(),
-        '/offline-maps': (context) => const OfflineMapsPage(),
-        '/exception-request': (context) => const ExceptionRequestPage(),
-        '/visit-data-form': (context) => const DynamicFormPage(slug: 'gps-tracking'),
-        '/tos': (context) => WebViewPage(
-          title: 'Podmínky použití',
-          url: LegalConfig.termsUrl,
-        ),
-        '/privacy': (context) => WebViewPage(
-          title: 'Zásady ochrany osobních údajů',
-          url: LegalConfig.privacyUrl,
-        ),
-        '/rules': (context) => WebViewPage(
-          title: 'Pravidla soutěže',
-          url: LegalConfig.rulesUrl,
-        ),
       },
     );
   }

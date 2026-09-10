@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
+import 'season_theme.dart';
 import 'strakata_color_math.dart';
 import 'strakata_design_tokens.dart';
 
-/// Strakatá turistika — Material 3 theme aligned with web (warm off‑white, brand green).
+/// Strakatá turistika — Material 3 light themes (seasonal palettes, no dark mode).
 class AppTheme {
   AppTheme._();
 
@@ -20,9 +21,12 @@ class AppTheme {
     );
   }
 
-  static ThemeData get lightTheme {
-    final scheme = _colorScheme;
-    final radii = StrakataThemeExtension.light;
+  static ThemeData get lightTheme => themeFor(AppColors.activePalette.season);
+
+  static ThemeData themeFor(AppSeason season) {
+    final palette = SeasonPalette.forSeason(season);
+    final scheme = _colorSchemeFor(palette);
+    final radii = StrakataThemeExtension.forPalette(palette);
     final baseText = ThemeData(brightness: Brightness.light, useMaterial3: true).textTheme;
     final franklin = GoogleFonts.libreFranklinTextTheme(baseText).apply(
       bodyColor: AppColors.textPrimary,
@@ -115,16 +119,16 @@ class AppTheme {
     return ThemeData(
       colorScheme: scheme,
       useMaterial3: true,
-      scaffoldBackgroundColor: AppColors.pageBg,
-      canvasColor: AppColors.pageBg,
-      extensions: <ThemeExtension<dynamic>>[StrakataThemeExtension.light],
+      scaffoldBackgroundColor: palette.pageBg,
+      canvasColor: palette.pageBg,
+      extensions: <ThemeExtension<dynamic>>[radii],
       visualDensity: VisualDensity.adaptivePlatformDensity,
       materialTapTargetSize: MaterialTapTargetSize.padded,
       splashFactory: InkSparkle.splashFactory,
       applyElevationOverlayColor: true,
-      focusColor: AppColors.focusRing.withValues(alpha: 0.35),
+      focusColor: palette.focusRing.withValues(alpha: 0.35),
       highlightColor: Colors.transparent,
-      hoverColor: AppColors.brand.withValues(alpha: 0.06),
+      hoverColor: palette.brand.withValues(alpha: 0.06),
       textTheme: textTheme,
       primaryTextTheme: GoogleFonts.libreFranklinTextTheme(baseText).apply(
         bodyColor: scheme.onPrimary,
@@ -215,7 +219,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radii.radiusBase),
-          borderSide: BorderSide(color: AppColors.focusRing, width: 2),
+          borderSide: BorderSide(color: palette.focusRing, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radii.radiusBase),
@@ -322,11 +326,11 @@ class AppTheme {
     );
   }
 
-  static ColorScheme get _colorScheme {
-    final primary = AppColors.brand;
+  static ColorScheme _colorSchemeFor(SeasonPalette palette) {
+    final primary = palette.brand;
     final onPrimary = Colors.white;
-    final primaryContainer = AppColors.brandMuted;
-    final onPrimaryContainer = strakataHsl(142, 72, 18);
+    final primaryContainer = palette.brandMuted;
+    final onPrimaryContainer = Color.lerp(primary, Colors.black, 0.55)!;
 
     return ColorScheme(
       brightness: Brightness.light,
@@ -334,33 +338,33 @@ class AppTheme {
       onPrimary: onPrimary,
       primaryContainer: primaryContainer,
       onPrimaryContainer: onPrimaryContainer,
-      secondary: AppColors.secondary,
+      secondary: palette.secondary,
       onSecondary: Colors.white,
-      secondaryContainer: AppColors.brandSubtle,
+      secondaryContainer: palette.brandSubtle,
       onSecondaryContainer: AppColors.textPrimary,
-      tertiary: strakataHsl(72, 55, 42),
+      tertiary: Color.lerp(palette.brand, palette.heroOverlayTop, 0.35)!,
       onTertiary: Colors.white,
-      tertiaryContainer: AppColors.heroOverlayTop,
+      tertiaryContainer: palette.heroOverlayTop,
       onTertiaryContainer: AppColors.textPrimary,
       error: AppColors.error,
       onError: Colors.white,
       errorContainer: AppColors.errorContainer,
       onErrorContainer: AppColors.onErrorContainer,
-      surface: AppColors.pageBg,
+      surface: palette.pageBg,
       onSurface: AppColors.textPrimary,
       onSurfaceVariant: AppColors.textSecondary,
-      outline: AppColors.border,
-      outlineVariant: AppColors.divider,
+      outline: palette.border,
+      outlineVariant: palette.divider,
       shadow: AppColors.shadow,
       scrim: const Color(0x99000000),
       inverseSurface: strakataHsl(48, 12, 18),
       onInverseSurface: const Color(0xFFF5F5F0),
-      inversePrimary: strakataHsl(142, 72, 75),
+      inversePrimary: Color.lerp(primary, Colors.white, 0.45)!,
       surfaceTint: primary,
-      surfaceContainerHighest: AppColors.surfaceVariant,
+      surfaceContainerHighest: palette.surfaceVariant,
       surfaceContainerHigh: AppColors.surface,
-      surfaceContainer: AppColors.surfaceMuted,
-      surfaceContainerLow: strakataHsl(48, 26, 97),
+      surfaceContainer: palette.surfaceMuted,
+      surfaceContainerLow: Color.lerp(palette.pageBg, Colors.white, 0.5)!,
       surfaceContainerLowest: Colors.white,
     );
   }

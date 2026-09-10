@@ -1,7 +1,7 @@
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
-import 'strakata_color_math.dart';
+import 'season_theme.dart';
 
 /// Decorative gradients (hero bands, chips, dividers)—not for body text.
 class StrakataGradients {
@@ -66,17 +66,20 @@ class StrakataRadii {
   static const double lg = 12;
 }
 
-/// Motion: short 200ms, standard 300ms, Material-standard curve.
+/// Motion: snappy active feedback; avoid long idle loops.
 class StrakataMotion {
   StrakataMotion._();
 
-  static const Duration short = Duration(milliseconds: 200);
-  static const Duration standard = Duration(milliseconds: 300);
-  static const Duration heroFade = Duration(milliseconds: 800);
-  static const Duration sheetOrList = Duration(milliseconds: 500);
+  static const Duration press = Duration(milliseconds: 90);
+  static const Duration short = Duration(milliseconds: 160);
+  static const Duration standard = Duration(milliseconds: 240);
+  static const Duration heroFade = Duration(milliseconds: 480);
+  static const Duration sheetOrList = Duration(milliseconds: 320);
+  static const Duration loaderPulse = Duration(milliseconds: 900);
 
   /// cubic-bezier(0.4, 0, 0.2, 1)
   static const Cubic curveStandard = Cubic(0.4, 0.0, 0.2, 1.0);
+  static const Cubic curveEmphasized = Cubic(0.2, 0.0, 0.0, 1.0);
 }
 
 /// Extended tokens for widgets that need web parity beyond [ColorScheme].
@@ -115,22 +118,28 @@ class StrakataThemeExtension extends ThemeExtension<StrakataThemeExtension> {
   final double sectionGapWide;
   final double maxContentWidth;
 
-  static final StrakataThemeExtension light = StrakataThemeExtension(
-    heroOverlayTop: const Color(0xFFF2F9C4),
-    brandMuted: strakataHsl(152, 76, 88),
-    brandSubtle: strakataHsl(72, 62, 90),
-    focusRing: strakataHsl(142, 72, 40),
-    gradientBrown: [StrakataGradients.brownStart, StrakataGradients.brownEnd],
-    gradientGreen: [StrakataGradients.greenStart, StrakataGradients.greenEnd],
-    gradientYellowLime: [StrakataGradients.yellowLimeStart, StrakataGradients.yellowLimeEnd],
-    radiusApp: StrakataRadii.app,
-    radiusBase: StrakataRadii.base,
-    radiusSm: StrakataRadii.sm,
-    radiusMd: StrakataRadii.md,
-    radiusLg: StrakataRadii.lg,
-    sectionGapWide: StrakataLayout.sectionGapWide,
-    maxContentWidth: StrakataLayout.maxContentWidth,
+  static final StrakataThemeExtension light = forPalette(
+    SeasonPalette.forSeason(AppSeason.spring),
   );
+
+  static StrakataThemeExtension forPalette(SeasonPalette palette) {
+    return StrakataThemeExtension(
+      heroOverlayTop: palette.heroOverlayTop,
+      brandMuted: palette.brandMuted,
+      brandSubtle: palette.brandSubtle,
+      focusRing: palette.focusRing,
+      gradientBrown: List<Color>.from(palette.gradientBrown),
+      gradientGreen: List<Color>.from(palette.gradientGreen),
+      gradientYellowLime: List<Color>.from(palette.gradientYellowLime),
+      radiusApp: StrakataRadii.app,
+      radiusBase: StrakataRadii.base,
+      radiusSm: StrakataRadii.sm,
+      radiusMd: StrakataRadii.md,
+      radiusLg: StrakataRadii.lg,
+      sectionGapWide: StrakataLayout.sectionGapWide,
+      maxContentWidth: StrakataLayout.maxContentWidth,
+    );
+  }
 
   @override
   StrakataThemeExtension copyWith({

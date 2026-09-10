@@ -12,7 +12,28 @@
           "package_name": "cz.strakata.turistika.strakataturistikaandroidapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "558455103518-8eg484un46c3bjvrbgkp4ig3gc86360r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "cz.strakata.turistika.strakataturistikaandroidapp",
+            "certificate_hash": "1866ae13ef1c500fa4edd1752dea2f40adf51f90"
+          }
+        },
+        {
+          "client_id": "558455103518-qtr8cje6t9jd8rep4k8u9taauf3t348i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "cz.strakata.turistika.strakataturistikaandroidapp",
+            "certificate_hash": "4e4da2a2e91e72f57c37243ff51a0168bb056fdd"
+          }
+        },
+        {
+          "client_id": "558455103518-isefaa5bo562hal5huqq7jdtd7ukuceq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAnX2OXaLphDkGqoLDQIu7Odj76GpXUDOs"
@@ -20,7 +41,15 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "558455103518-4i16qnhhtf6l68733otu7nsostsg7r72.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "cz.strakata.turistika.strakataturistikaandroidapp"
+              }
+            }
+          ]
         }
       }
     }

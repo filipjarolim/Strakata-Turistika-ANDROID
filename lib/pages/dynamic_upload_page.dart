@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import '../widgets/forms/form_renderer.dart';
@@ -31,6 +32,40 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
     );
   }
 
+  Future<List<Place>> _uploadLocalPlacePhotos(List<Place> places) async {
+    final out = <Place>[];
+    for (final place in places) {
+      if (place.photos.every((p) => !p.isLocal)) {
+        out.add(place);
+        continue;
+      }
+      final uploaded = <PlacePhoto>[];
+      for (final photo in place.photos) {
+        if (!photo.isLocal) {
+          uploaded.add(photo);
+          continue;
+        }
+        final file = File(photo.url);
+        if (!await file.exists()) {
+          throw Exception('Lokální fotka místa "${place.name}" už v telefonu není.');
+        }
+        final response = await CloudinaryService.uploadImageResponse(file);
+        if (response == null) {
+          throw Exception('Nepodařilo se nahrát fotku místa "${place.name}".');
+        }
+        uploaded.add(
+          photo.copyWith(
+            url: response.secureUrl,
+            publicId: response.publicId,
+            isLocal: false,
+          ),
+        );
+      }
+      out.add(place.copyWith(photos: uploaded));
+    }
+    return out;
+  }
+
   Future<void> _handleSave(
     BuildContext context,
     FormContext formContext,
@@ -38,6 +73,11 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
     showFormLoadingDialog(context);
 
     try {
+      final currentUser = AuthService.currentUser;
+      if (currentUser == null || currentUser.id.isEmpty) {
+        throw Exception('Pro uložení návštěvy se musíte nejdříve přihlásit.');
+      }
+
       final summary = formContext.trackingSummary;
       final needsPolyline =
           widget.slug == 'gps-tracking' || widget.slug == 'gpx-upload';
@@ -45,6 +85,13 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
           (summary == null || summary.trackPoints.length < 2)) {
         throw Exception(
           'Chybí platná GPS/GPX data. Dokončete krok nahrání souboru nebo záznamu.',
+        );
+      }
+
+      if (widget.slug == 'screenshot-upload' &&
+          formContext.photoAttachments.isEmpty) {
+        throw Exception(
+          'Nahrajte prosím alespoň jeden screenshot mapy nebo záznamu jako doklad o absolvované trase.',
         );
       }
 
@@ -67,13 +114,31 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
 
       List<Map<String, dynamic>>? photos;
       if (formContext.photoAttachments.isNotEmpty) {
-        photos = await CloudinaryService.uploadVisitPhotoPayloads(formContext.photoAttachments);
+        try {
+          photos = await CloudinaryService.uploadVisitPhotoPayloads(
+            formContext.photoAttachments,
+          );
+          if (photos.isEmpty && formContext.photoAttachments.isNotEmpty) {
+            throw Exception(
+              'Nepodařilo se nahrát fotografie. Zkontrolujte připojení k internetu a zkuste to znovu.',
+            );
+          }
+        } catch (e) {
+          throw Exception(
+            'Nahrání fotografií selhalo: ${e.toString().replaceFirst(RegExp(r"^Exception:\s*"), "")}',
+          );
+        }
       }
 
-      final currentUser = AuthService.currentUser;
-      if (currentUser == null) {
-        throw Exception('Pro uložení návštěvy se musíte přihlásit.');
+      List<Place> placesToSave = formContext.places;
+      try {
+        placesToSave = await _uploadLocalPlacePhotos(placesToSave);
+      } catch (e) {
+        throw Exception(
+          'Nahrání fotek bodovaných míst selhalo: ${e.toString().replaceFirst(RegExp(r"^Exception:\s*"), "")}',
+        );
       }
+
       final double? distanceKmTop = summary != null
           ? double.parse((summary.totalDistance / 1000).toStringAsFixed(4))
           : null;
@@ -120,7 +185,7 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
         routeTitle: formContext.routeTitle ??
             'Trasa ${DateTime.now().day}.${DateTime.now().month}.',
         routeDescription: formContext.routeDescription ?? '',
-        visitedPlaces: formContext.places.map((p) => p.name).join(', '),
+        visitedPlaces: placesToSave.map((p) => p.name).join(', '),
         dogName: extraForVisit['dog_name']?.toString() ??
             currentUser.dogName,
         dogNotAllowed: formContext.dogNotAllowed ? 'true' : null,
@@ -128,7 +193,7 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
         extraData: extraForVisit,
         photos: photos,
         route: summary != null ? routePayloadForStorage(summary) : null,
-        places: formContext.places,
+        places: placesToSave,
         extraPoints: mergedExtra,
         distanceKm: distanceKmTop,
         durationMinutes: durationMinTop,
@@ -137,7 +202,7 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
       final savedId = await VisitRepository().saveVisit(visitToSave);
 
       if (!context.mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context); // Close loading dialog
 
       if (savedId != null) {
         await showFormStatusDialog(
@@ -145,19 +210,25 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
           title: 'Úspěch!',
           message: 'Vaše návštěva byla úspěšně uložena k revizi.',
           onConfirm: () {
-            Navigator.popUntil(context, (route) => route.isFirst);
+            Navigator.of(context).popUntil((route) => route.isFirst);
           },
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Chyba při ukládání návštěvy.')),
+        await showFormStatusDialog(
+          context,
+          title: 'Uložení selhalo',
+          message:
+              'Server nepotvrdil uložení návštěvy. Zkontrolujte připojení k internetu a zkuste to znovu — vyplněné údaje zůstávají zachovány.',
         );
       }
     } catch (e) {
       if (!context.mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Chyba: ${e.toString()}')),
+      Navigator.pop(context); // Close loading dialog
+      final cleanMsg = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      await showFormStatusDialog(
+        context,
+        title: 'Chyba při odeslání',
+        message: cleanMsg,
       );
     }
   }

@@ -24,7 +24,7 @@ class CloudinaryService {
         print('❌ Image file does not exist: ${imageFile.path}');
         return null;
       }
-      return cloudinary.uploadFile(
+      return await cloudinary.uploadFile(
         CloudinaryFile.fromFile(
           imageFile.path,
           resourceType: CloudinaryResourceType.Image,

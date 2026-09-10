@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -11,10 +11,13 @@ import '../services/haptic_service.dart';
 
 import '../models/tracking_summary.dart';
 import '../config/gps_config.dart';
+import 'gps_power_mode.dart';
+import 'route_backup_service.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 enum _MotionProfile { stationary, walking, running, driving }
 
-class EnhancedGPSTrackingService {
+class EnhancedGPSTrackingService with WidgetsBindingObserver {
   static final EnhancedGPSTrackingService _instance = EnhancedGPSTrackingService._internal();
   factory EnhancedGPSTrackingService() => _instance;
   EnhancedGPSTrackingService._internal();
@@ -39,14 +42,18 @@ class EnhancedGPSTrackingService {
   double? _lastDerivedSpeedMs;
   bool _hasFirstFix = false;
   DateTime? _lastRawAt;
+  DateTime? _lastNativeAt;
   DateTime? _lastAcceptedAt;
   DateTime? _relaxedUntil;
+  bool _lifecycleObserverAttached = false;
   
   // Stationary lock / hysteresis to suppress GPS drift when not moving
   bool _stationaryLocked = false;
   Position? _stationaryAnchor;
   DateTime? _stationaryCandidateSince;
   int _consecutiveUnlockEligible = 0;
+  int _consecutiveJumpRejections = 0;
+  Position? _lastJumpCandidate;
   
   // Kalman filter parameters.
   // Pozn.: původní processNoise 0.05 dával ustálený gain ~0.05 — filtrovaná
@@ -76,6 +83,11 @@ class EnhancedGPSTrackingService {
   StreamSubscription<Position>? _iosPositionSubscription;
   StreamSubscription<Position>? _androidBackupSubscription;
   Timer? _watchdogTimer;
+  StreamSubscription<UserAccelerometerEvent>? _accelSub;
+  DateTime? _accelStillSince;
+  _MotionProfile? _pendingProfile;
+  DateTime? _pendingProfileSince;
+  DateTime? _lastNotificationAt;
   
   // Speed filtering (reduce jitter when stationary)
   double? _lastFilteredSpeed;
@@ -105,7 +117,18 @@ class EnhancedGPSTrackingService {
     return active.isNegative ? Duration.zero : active;
   }
   List<TrackPoint> get trackPoints => List.unmodifiable(_trackPoints);
+  DateTime? get lastNativeAt => _lastNativeAt;
   bool get backgroundServiceRunning => _backgroundServiceRunning;
+
+  Future<bool> isNativeServiceRunning() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final result = await _methodChannel.invokeMethod('isGPSTracking');
+      return result == true;
+    } catch (_) {
+      return false;
+    }
+  }
   
   // Get current heading
   double? get currentHeading {
@@ -121,12 +144,23 @@ class EnhancedGPSTrackingService {
     if (paused && !_recordingPaused) {
       _recordingPaused = true;
       _pauseStartedAt = now;
+      unawaited(_commitMotionProfile(_MotionProfile.stationary, immediate: true));
     } else if (!paused && _recordingPaused) {
       if (_pauseStartedAt != null) {
         _pausedBeforeCurrentSegment += now.difference(_pauseStartedAt!);
       }
       _pauseStartedAt = null;
       _recordingPaused = false;
+      unawaited(_commitMotionProfile(_MotionProfile.walking, immediate: true));
+    }
+  }
+
+  Future<void> applyPowerMode(GpsPowerMode mode) async {
+    await GpsPowerModeStore().setMode(mode);
+    if (_isTracking) {
+      await _applyAdaptiveSettingsForPlatform(
+        _currentProfile ?? _MotionProfile.walking,
+      );
     }
   }
 
@@ -182,6 +216,26 @@ class EnhancedGPSTrackingService {
   Future<void> initialize() async {
     await _initializeNotifications();
     await _setupEventChannel();
+    if (!_lifecycleObserverAttached) {
+      WidgetsBinding.instance.addObserver(this);
+      _lifecycleObserverAttached = true;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_isTracking) return;
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      unawaited(RouteBackupService().saveBackup(getSummary(), active: true));
+    }
+    if (state == AppLifecycleState.resumed) {
+      // App was paused (screenshot, recents, lock). EventChannel drops
+      // events while paused; a second GPS stream would zigzag the track.
+      _stopAndroidBackupStream();
+      unawaited(_ingestNativeBacklog());
+    }
   }
   
   // Setup event channel for receiving location updates from Android service
@@ -207,106 +261,68 @@ class EnhancedGPSTrackingService {
   // Handle location updates from Android background service
   void _handleLocationFromService(Map<dynamic, dynamic> locationData) {
     if (!_isTracking) return;
-    
+
+    _lastNativeAt = DateTime.now();
+    // Native service is alive — never keep a parallel Geolocator stream.
+    if (_androidBackupSubscription != null) {
+      _stopAndroidBackupStream();
+    }
+
+    final lat = locationData['latitude']?.toDouble();
+    final lng = locationData['longitude']?.toDouble();
+    if (!_isPlausibleCoordinate(lat, lng)) {
+      print('GPS: Native point rejected — invalid coordinates ($lat, $lng)');
+      return;
+    }
+
+    final rawTs = locationData['timestamp'];
+    final tsMs = rawTs is num ? rawTs.toInt() : 0;
+    final timestamp = tsMs > 100000000000
+        ? DateTime.fromMillisecondsSinceEpoch(tsMs)
+        : DateTime.now();
+
     final position = Position(
-      latitude: locationData['latitude']?.toDouble() ?? 0.0,
-      longitude: locationData['longitude']?.toDouble() ?? 0.0,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(locationData['timestamp'] ?? 0),
+      latitude: lat!,
+      longitude: lng!,
+      timestamp: timestamp,
       accuracy: locationData['accuracy']?.toDouble() ?? 0.0,
-      altitude: locationData['altitude']?.toDouble(),
+      altitude: locationData['altitude']?.toDouble() ?? 0.0,
       altitudeAccuracy: 0.0,
       heading: 0.0,
       headingAccuracy: 0.0,
       speed: locationData['speed']?.toDouble() ?? 0.0,
       speedAccuracy: 0.0,
     );
-    
+
     onPositionUpdate(position);
   }
+
+  bool _isPlausibleCoordinate(double? lat, double? lng) {
+    if (lat == null || lng == null) return false;
+    if (!lat.isFinite || !lng.isFinite) return false;
+    if (lat.abs() < 0.001 && lng.abs() < 0.001) return false;
+    if (lat.abs() > 90 || lng.abs() > 180) return false;
+    return true;
+  }
   
-  // Request location permissions with battery optimization
-  Future<bool> _requestPermissions() async {
-    // print('GPS: Requesting all necessary permissions...');
-    
-    // First check if location service is enabled
+  /// Checks location permission only. Never shows the system dialog here —
+  /// runtime requests must go through the in-app Prominent Disclosure first.
+  Future<bool> _hasLocationPermission() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       print('GPS: Location service is not enabled');
       return false;
     }
-    
-    // Step 1: Use Geolocator directly to request location permission
-    // This triggers Android's native permission dialog more reliably
-    // print('GPS: Checking location permission status...');
-    LocationPermission permission = await Geolocator.checkPermission();
-    
-    if (permission == LocationPermission.denied) {
-      print('GPS: Location permission denied, requesting...');
-      permission = await Geolocator.requestPermission();
-      
-      if (permission == LocationPermission.denied) {
-        print('GPS: Location permission denied by user');
-        return false;
-      }
-    }
-    
-    if (permission == LocationPermission.deniedForever) {
-      print('GPS: Location permission permanently denied - user needs to go to settings');
+
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      print(
+        'GPS: Location permission not granted — UI must request it after disclosure',
+      );
       return false;
     }
-    
-    // print('GPS: Basic location permission granted ✓ (${permission.name})');
-    
-    // Step 2: Request background location permission
-    // This must be done AFTER basic permission is granted
-    if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
-      // Give Android time to process the foreground permission
-      await Future.delayed(const Duration(milliseconds: 1000));
-      
-      // print('GPS: Now requesting background location permission...');
-      var locationAlwaysStatus = await Permission.locationAlways.status;
-      
-      if (!locationAlwaysStatus.isGranted) {
-        print('GPS: Requesting background location (Always)...');
 
-        try {
-          locationAlwaysStatus = await Permission.locationAlways.request();
-        } catch (e) {
-          print('GPS: Background permission request failed: $e');
-        }
-
-        if (!locationAlwaysStatus.isGranted) {
-          print('GPS: Background location permission denied');
-          print(
-            'GPS: WARNING - Tracking may not work reliably when screen is locked!',
-          );
-        }
-      }
-    }
-    
-    // Step 3: Request battery optimization exemption (Android only)
-    if (Platform.isAndroid) {
-      var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
-      if (!batteryStatus.isGranted) {
-        print('GPS: Requesting battery optimization exemption...');
-        try {
-          batteryStatus = await Permission.ignoreBatteryOptimizations.request();
-        } catch (e) {
-          print('GPS: Battery permission request failed: $e');
-        }
-
-        if (batteryStatus.isGranted) {
-          // print('GPS: Battery optimization exemption granted ✓');
-        } else {
-          print(
-            'GPS: Battery optimization exemption denied - tracking may be interrupted',
-          );
-        }
-      }
-    }
-
-    // Summary
-    // Return true if we have at least basic location permission
     return permission == LocationPermission.whileInUse ||
         permission == LocationPermission.always;
   }
@@ -315,7 +331,7 @@ class EnhancedGPSTrackingService {
   Future<bool> startTracking() async {
     if (_isTracking) return false;
     
-    final hasPermissions = await _requestPermissions();
+    final hasPermissions = await _hasLocationPermission();
     
     // Provide haptic feedback for tracking start
     await HapticService.trackingStart();
@@ -324,6 +340,8 @@ class EnhancedGPSTrackingService {
       return false;
     }
     
+    await RouteBackupService().beginNewSession();
+
     _isTracking = true;
     _startTime = DateTime.now();
     _trackPoints.clear();
@@ -342,7 +360,13 @@ class EnhancedGPSTrackingService {
     _stationaryAnchor = null;
     _stationaryCandidateSince = null;
     _consecutiveUnlockEligible = 0;
+    _consecutiveJumpRejections = 0;
+    _lastJumpCandidate = null;
     _resetRecordingPauseState();
+    await GpsPowerModeStore().load();
+    _currentProfile = _MotionProfile.walking;
+    _pendingProfile = null;
+    _accelStillSince = null;
     
     FirebaseCrashlytics.instance.log('Enhanced GPS Tracking started');
     
@@ -367,6 +391,8 @@ class EnhancedGPSTrackingService {
     if (Platform.isIOS) {
       _startOrUpdateIosStream(_MotionProfile.walking);
     }
+
+    _startMotionSensor();
     
     // Kick off fast-first-fix bootstrap to quickly display user's approximate location
     // This runs fire-and-forget and will relax accuracy thresholds only for the first fix
@@ -377,11 +403,98 @@ class EnhancedGPSTrackingService {
     
     return true;
   }
+
+  /// Obnoví měření z lokální zálohy po pádu / vybití / kill procesu.
+  /// Nativní persist soubor se NEmaže — nové body se připojí za stávající.
+  Future<bool> resumeTracking(TrackingSummary summary) async {
+    if (_isTracking) return true;
+
+    final hasPermissions = await _hasLocationPermission();
+    if (!hasPermissions) {
+      print('GPS resume failed: No location permissions');
+      return false;
+    }
+
+    final backup = RouteBackupService();
+    backup.adoptSession(
+      startTime: summary.startTime ?? backup.sessionStartTime,
+    );
+    await GpsPowerModeStore().load();
+
+    _isTracking = true;
+    _startTime = summary.startTime ??
+        backup.sessionStartTime ??
+        (summary.trackPoints.isNotEmpty
+            ? summary.trackPoints.first.timestamp
+            : DateTime.now());
+    _trackPoints = List<TrackPoint>.from(summary.trackPoints);
+    _rawPositions.clear();
+    _filteredPositions.clear();
+    _totalDistance = summary.totalDistance;
+    _averageSpeed = summary.averageSpeed;
+    _maxSpeed = summary.maxSpeed;
+    _totalElevationGain = summary.totalElevationGain;
+    _totalElevationLoss = summary.totalElevationLoss;
+    _minAltitude = summary.minAltitude;
+    _maxAltitude = summary.maxAltitude;
+    _lastDerivedSpeedMs = null;
+    _stationaryLocked = false;
+    _stationaryAnchor = null;
+    _stationaryCandidateSince = null;
+    _consecutiveUnlockEligible = 0;
+    _consecutiveJumpRejections = 0;
+    _lastJumpCandidate = null;
+    _resetRecordingPauseState();
+
+    if (_trackPoints.isNotEmpty) {
+      final last = _trackPoints.last;
+      _lastValidPosition = Position(
+        latitude: last.latitude,
+        longitude: last.longitude,
+        timestamp: last.timestamp,
+        accuracy: last.accuracy,
+        altitude: last.altitude ?? 0.0,
+        altitudeAccuracy: last.verticalAccuracy ?? 0.0,
+        heading: last.heading ?? 0.0,
+        headingAccuracy: 0.0,
+        speed: last.speed,
+        speedAccuracy: 0.0,
+      );
+      _hasFirstFix = true;
+      _lastAcceptedAt = last.timestamp;
+    } else {
+      _lastValidPosition = null;
+      _hasFirstFix = false;
+    }
+
+    FirebaseCrashlytics.instance.log(
+      'Enhanced GPS Tracking resumed (${_trackPoints.length} points)',
+    );
+
+    await _startBackgroundService(resetPersist: false);
+    await _applyAdaptiveSettingsForPlatform(_MotionProfile.walking);
+    _startPeriodicLocationRetrieval();
+    _startBackgroundServiceMonitoring();
+    if (!(Platform.isAndroid && _backgroundServiceRunning)) {
+      await _showTrackingNotification();
+      _startNotificationUpdates();
+    }
+    if (Platform.isIOS) {
+      _startOrUpdateIosStream(_MotionProfile.walking);
+    }
+    _startReliabilityWatchdog();
+    _startMotionSensor();
+    unawaited(_ingestNativeBacklog());
+    unawaited(RouteBackupService().saveBackup(getSummary(), active: true));
+    return true;
+  }
   
   // Start Android background service
-  Future<void> _startBackgroundService() async {
+  Future<void> _startBackgroundService({bool resetPersist = true}) async {
     try {
-      final result = await _methodChannel.invokeMethod('startGPSTracking');
+      final result = await _methodChannel.invokeMethod('startGPSTracking', {
+        'resetPersist': resetPersist,
+      });
       _backgroundServiceRunning = result == true;
       // print('GPS: Background service started: $_backgroundServiceRunning');
       // After starting, push current settings if already profiled
@@ -423,19 +536,11 @@ class EnhancedGPSTrackingService {
   Future<void> _bootstrapFirstFix() async {
     if (!_isTracking) return;
     try {
-      // 1) Use last known location if reasonably fresh and within relaxed accuracy
-      final lastKnown = await Geolocator.getLastKnownPosition();
-      if (!_hasFirstFix && lastKnown != null) {
-        final isFresh = DateTime.now().difference(lastKnown.timestamp) <= GpsConfig.firstFixMaxAge;
-        final isAccOk = lastKnown.accuracy <= GpsConfig.firstFixRelaxedAccuracyMeters;
-        if (isFresh && isAccOk) {
-          onPositionUpdate(lastKnown);
-        }
-      }
-      
+      // Last-known can be kilometres away (cached fix from another day).
+      // Never record it as a track point — it would add a huge first segment.
       if (_hasFirstFix) return;
-      
-      // 2) Quick low-accuracy read with short timeout
+
+      // 1) Quick low-accuracy read with short timeout
       try {
         final quick = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.low,
@@ -447,10 +552,10 @@ class EnhancedGPSTrackingService {
       } catch (_) {
         // ignore quick attempt failures
       }
-      
+
       if (_hasFirstFix) return;
-      
-      // 3) Escalate to a bounded high-accuracy attempt
+
+      // 2) Escalate to a bounded high-accuracy attempt
       try {
         final precise = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
@@ -472,26 +577,41 @@ class EnhancedGPSTrackingService {
         timer.cancel();
         return;
       }
+      if (_recordingPaused) return;
       final now = DateTime.now();
-      final rawStale = _lastRawAt == null || now.difference(_lastRawAt!) > GpsConfig.staleUpdateThreshold;
-      final acceptedStale = _lastAcceptedAt == null || now.difference(_lastAcceptedAt!) > GpsConfig.staleUpdateThreshold;
-      
+      final staleLimit = (_currentProfile == _MotionProfile.stationary)
+          ? GpsConfig.staleUpdateThresholdStationary
+          : GpsConfig.staleUpdateThreshold;
+      final rawStale = _lastRawAt == null || now.difference(_lastRawAt!) > staleLimit;
+      final acceptedStale = _lastAcceptedAt == null || now.difference(_lastAcceptedAt!) > staleLimit;
+
       if (rawStale) {
-        // print('GPS: Watchdog detected stale RAW updates; enabling backup stream and restarting service');
         if (Platform.isAndroid) {
-          _ensureAndroidBackupStream();
+          try {
+            final isRunning = await _methodChannel.invokeMethod('isGPSTracking');
+            _backgroundServiceRunning = isRunning == true;
+          } catch (_) {}
+
+          if (_backgroundServiceRunning) {
+            // Native service is still tracking. Missing Flutter events usually
+            // mean the app is paused — starting a second stream zigzags the
+            // route and inflates distance (hundreds of km).
+            print('GPS: Watchdog: native service alive, not starting backup stream');
+            return;
+          }
+
+          print('GPS: Watchdog: native service down, restarting');
           await _startBackgroundService();
-          if (_currentProfile != null) {
-            await _applyAdaptiveSettingsForPlatform(_currentProfile!);
+          if (!_backgroundServiceRunning) {
+            _ensureAndroidBackupStream();
           }
         }
       } else if (acceptedStale) {
-        // Raw is coming but filters might be too strict → relax briefly and nudge settings faster
+        // Raw is coming but filters might be too strict → relax briefly
         _relaxedUntil = now.add(const Duration(seconds: 20));
-        // print('GPS: Watchdog relaxing filters for 20s due to no accepted positions');
-        if (Platform.isAndroid) {
-          await _applyAdaptiveSettingsForPlatform(_MotionProfile.running);
-          _ensureAndroidBackupStream();
+        print('GPS: Watchdog relaxing filters for 20s due to no accepted positions');
+        if (Platform.isAndroid && _currentProfile != null) {
+          await _applyAdaptiveSettingsForPlatform(_currentProfile!);
         }
       }
     });
@@ -508,10 +628,11 @@ class EnhancedGPSTrackingService {
   
   void _ensureAndroidBackupStream() {
     if (!Platform.isAndroid) return;
+    if (_backgroundServiceRunning) return;
     if (_androidBackupSubscription != null) return;
     final settings = const LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 1,
+      distanceFilter: 5,
     );
     _androidBackupSubscription = Geolocator.getPositionStream(locationSettings: settings).listen(
       (pos) {
@@ -525,7 +646,7 @@ class EnhancedGPSTrackingService {
         _androidBackupSubscription = null;
       },
     );
-    // print('GPS: Android backup stream started');
+    print('GPS: Android backup stream started (native service not running)');
   }
   
   void _stopAndroidBackupStream() {
@@ -570,6 +691,7 @@ class EnhancedGPSTrackingService {
     }
     _recordingPaused = false;
     _pauseStartedAt = null;
+    unawaited(RouteBackupService().saveBackup(getSummary(), active: false));
     
     // Stop Android background service
     await _stopBackgroundService();
@@ -578,6 +700,7 @@ class EnhancedGPSTrackingService {
     _periodicLocationTimer?.cancel();
     _backgroundCheckTimer?.cancel();
     _stopReliabilityWatchdog();
+    _stopMotionSensor();
     _stopAndroidBackupStream();
     await _iosPositionSubscription?.cancel();
     _iosPositionSubscription = null;
@@ -607,36 +730,43 @@ class EnhancedGPSTrackingService {
   
   // Advanced position processing with Kalman filtering
   void onPositionUpdate(Position position) {
+    _lastRawAt = DateTime.now();
     if (_recordingPaused) return;
+    if (!_isPlausibleCoordinate(position.latitude, position.longitude)) {
+      print('GPS: Position rejected — invalid coordinates');
+      return;
+    }
+
     _rawPositions.add(position);
     _lastRawAt = DateTime.now();
-    
-    // Apply Kalman filter for noise reduction
+
+    // Validate the RAW fix first. Kalman must not smear GPS jumps into the track.
+    if (!_isValidPosition(position)) {
+      return;
+    }
+
     final filteredPosition = _applyKalmanFilter(position);
     _filteredPositions.add(filteredPosition);
-    
-    // Apply additional filters
-    if (_isValidPosition(filteredPosition)) {
-      // Use previous lastValidPosition for distance/stat calculations, then update it
-      _addTrackPoint(filteredPosition);
-      _updateStatistics(filteredPosition);
-      _lastValidPosition = filteredPosition;
-      // After accepting a point, manage stationary lock engagement
-      _maybeEngageStationaryLock(filteredPosition);
-      if (!_hasFirstFix) {
-        _hasFirstFix = true;
-        // After first fix, restart periodic timer with the normal interval.
-        if (_periodicLocationTimer != null) {
-          _startPeriodicLocationRetrieval();
-        }
+
+    _addTrackPoint(filteredPosition);
+    _updateStatistics(filteredPosition);
+    _lastValidPosition = filteredPosition;
+    if (_trackPoints.length == 2 || _trackPoints.length % 10 == 0) {
+      if (!testSuppressSideEffects) {
+        unawaited(RouteBackupService().saveBackup(getSummary(), active: true));
       }
-      _lastAcceptedAt = DateTime.now();
-      // Ensure notification reflects fresh stats
-      // ignore: discarded_futures
-      _updateTrackingNotification();
-      // Adapt settings based on current motion state
-      _maybeUpdateAdaptiveSettings(filteredPosition);
-    } else {
+    }
+    _maybeEngageStationaryLock(filteredPosition);
+    if (!_hasFirstFix) {
+      _hasFirstFix = true;
+      if (_periodicLocationTimer != null) {
+        _startPeriodicLocationRetrieval();
+      }
+    }
+    _lastAcceptedAt = DateTime.now();
+    if (!testSuppressSideEffects) {
+      unawaited(_updateTrackingNotification());
+      unawaited(_maybeUpdateAdaptiveSettings(filteredPosition));
     }
   }
   
@@ -682,13 +812,40 @@ class EnhancedGPSTrackingService {
     return _MotionProfile.driving;
   }
 
-  // Update native/iOS settings when profile changes
   Future<void> _maybeUpdateAdaptiveSettings(Position position) async {
     final profile = _selectMotionProfile(
       position.speed.isFinite && position.speed >= 0 ? position.speed : (_lastFilteredSpeed ?? 0.0),
     );
-    if (_currentProfile == profile) return;
+    await _commitMotionProfile(profile);
+  }
+
+  Future<void> _commitMotionProfile(
+    _MotionProfile profile, {
+    bool immediate = false,
+  }) async {
+    if (_currentProfile == profile) {
+      _pendingProfile = null;
+      _pendingProfileSince = null;
+      return;
+    }
+    if (!immediate) {
+      if (_pendingProfile != profile) {
+        _pendingProfile = profile;
+        _pendingProfileSince = DateTime.now();
+        return;
+      }
+      final dwell = profile == _MotionProfile.stationary
+          ? GpsConfig.motionProfileStationaryDwell
+          : GpsConfig.motionProfileMovingDwell;
+      if (_pendingProfileSince == null ||
+          DateTime.now().difference(_pendingProfileSince!) < dwell) {
+        return;
+      }
+    }
     _currentProfile = profile;
+    _pendingProfile = null;
+    _pendingProfileSince = null;
+    print('GPS: Motion profile → $profile');
     await _applyAdaptiveSettingsForPlatform(profile);
   }
 
@@ -698,7 +855,6 @@ class EnhancedGPSTrackingService {
       try {
         final settings = _androidSettingsFor(profile);
         await _methodChannel.invokeMethod('updateGPSSettings', settings);
-        // print('GPS: Android settings updated for profile: $profile');
       } catch (e) {
         print('GPS: Failed to update Android GPS settings: $e');
       }
@@ -710,69 +866,81 @@ class EnhancedGPSTrackingService {
   }
 
   Map<String, dynamic> _androidSettingsFor(_MotionProfile profile) {
+    final saver = GpsPowerModeStore().mode != GpsPowerMode.precise;
     switch (profile) {
       case _MotionProfile.stationary:
         return {
-          'intervalMs': 10000,
-          'fastestIntervalMs': 5000,
-          'maxWaitTimeMs': 15000,
-          'smallestDisplacementM': 8.0,
-          'priority': 102, // BALANCED_POWER
+          'intervalMs': saver ? 25000 : 15000,
+          'fastestIntervalMs': saver ? 15000 : 8000,
+          'maxWaitTimeMs': saver ? 50000 : 25000,
+          'smallestDisplacementM': saver ? 25.0 : 12.0,
+          'priority': 102, // BALANCED_POWER — GNSS nemusí běžet nonstop
         };
       case _MotionProfile.walking:
-        return {
-          'intervalMs': 4000,
-          'fastestIntervalMs': 2000,
-          'maxWaitTimeMs': 6000,
-          'smallestDisplacementM': 3.0,
-          'priority': 100, // HIGH_ACCURACY
-        };
+        return saver
+            ? {
+                'intervalMs': 12000,
+                'fastestIntervalMs': 8000,
+                'maxWaitTimeMs': 24000,
+                'smallestDisplacementM': 10.0,
+                'priority': 100,
+              }
+            : {
+                'intervalMs': 5000,
+                'fastestIntervalMs': 3000,
+                'maxWaitTimeMs': 8000,
+                'smallestDisplacementM': 4.0,
+                'priority': 100,
+              };
       case _MotionProfile.running:
         return {
-          'intervalMs': 2000,
-          'fastestIntervalMs': 1000,
-          'maxWaitTimeMs': 3000,
-          'smallestDisplacementM': 2.0,
+          'intervalMs': saver ? 4000 : 2000,
+          'fastestIntervalMs': saver ? 2000 : 1000,
+          'maxWaitTimeMs': saver ? 8000 : 3000,
+          'smallestDisplacementM': 3.0,
           'priority': 100,
         };
       case _MotionProfile.driving:
         return {
-          'intervalMs': 1000,
-          'fastestIntervalMs': 500,
-          'maxWaitTimeMs': 1500,
-          'smallestDisplacementM': 5.0,
+          'intervalMs': 2000,
+          'fastestIntervalMs': 1000,
+          'maxWaitTimeMs': 4000,
+          'smallestDisplacementM': 8.0,
           'priority': 100,
         };
     }
   }
 
   void _startOrUpdateIosStream(_MotionProfile profile) {
-    // Build generic iOS stream settings compatible with current Geolocator
     int distanceFilter;
     LocationAccuracy accuracy;
+    final saver = GpsPowerModeStore().mode != GpsPowerMode.precise;
     switch (profile) {
       case _MotionProfile.stationary:
+        distanceFilter = saver ? 20 : 10;
+        accuracy = LocationAccuracy.medium;
+        break;
+      case _MotionProfile.walking:
+        distanceFilter = saver ? 10 : 5;
+        accuracy = LocationAccuracy.best;
+        break;
+      case _MotionProfile.running:
+        distanceFilter = 3;
+        accuracy = LocationAccuracy.best;
+        break;
+      case _MotionProfile.driving:
         distanceFilter = 8;
         accuracy = LocationAccuracy.best;
         break;
-      case _MotionProfile.walking:
-        distanceFilter = 3;
-        accuracy = LocationAccuracy.bestForNavigation;
-        break;
-      case _MotionProfile.running:
-        distanceFilter = 2;
-        accuracy = LocationAccuracy.bestForNavigation;
-        break;
-      case _MotionProfile.driving:
-        distanceFilter = 5;
-        accuracy = LocationAccuracy.bestForNavigation;
-        break;
     }
-    final settings = LocationSettings(
+    final settings = AppleSettings(
       accuracy: accuracy,
       distanceFilter: distanceFilter,
+      activityType: ActivityType.fitness,
+      pauseLocationUpdatesAutomatically: profile == _MotionProfile.stationary,
+      allowBackgroundLocationUpdates: true,
+      showBackgroundLocationIndicator: true,
     );
-    // Restart subscription only if needed
     _iosPositionSubscription?.cancel();
     _iosPositionSubscription = Geolocator.getPositionStream(locationSettings: settings).listen(
       (pos) {
@@ -785,13 +953,48 @@ class EnhancedGPSTrackingService {
       },
     );
   }
+
+  void _startMotionSensor() {
+    _stopMotionSensor();
+    try {
+      _accelSub = userAccelerometerEventStream(
+        samplingPeriod: SensorInterval.normalInterval,
+      ).listen(_onUserAccel, onError: (_) {
+        _stopMotionSensor();
+      });
+    } catch (_) {}
+  }
+
+  void _stopMotionSensor() {
+    _accelSub?.cancel();
+    _accelSub = null;
+    _accelStillSince = null;
+  }
+
+  void _onUserAccel(UserAccelerometerEvent event) {
+    if (!_isTracking || _recordingPaused) return;
+    final mag = sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+    if (mag < GpsConfig.accelRestMagnitude) {
+      _accelStillSince ??= DateTime.now();
+      if (DateTime.now().difference(_accelStillSince!) >=
+              GpsConfig.accelRestToStationary &&
+          _currentProfile != _MotionProfile.stationary) {
+        unawaited(_commitMotionProfile(_MotionProfile.stationary, immediate: true));
+      }
+    } else {
+      _accelStillSince = null;
+      if (mag > GpsConfig.accelWalkingMagnitude &&
+          _currentProfile == _MotionProfile.stationary) {
+        unawaited(_commitMotionProfile(_MotionProfile.walking, immediate: true));
+      }
+    }
+  }
   
   // Predict next position based on current speed and heading
   Position _predictPosition(Position current) {
     // Android služba posílá heading vždy 0.0 — predikce by pak posouvala bod
     // na sever a znehodnotila filtr. Bez věrohodného headingu nepredikujeme.
     if (current.speed <= 0 ||
-        current.heading == null ||
         current.heading == 0.0 ||
         !current.headingAccuracy.isFinite ||
         current.headingAccuracy <= 0) {
@@ -803,7 +1006,7 @@ class EnhancedGPSTrackingService {
     
     final lat1 = current.latitude * pi / 180;
     final lng1 = current.longitude * pi / 180;
-    final bearing = current.heading! * pi / 180;
+    final bearing = current.heading * pi / 180;
     
     final lat2 = asin(sin(lat1) * cos(distance / earthRadius) + cos(lat1) * sin(distance / earthRadius) * cos(bearing));
     final lng2 = lng1 + atan2(sin(bearing) * sin(distance / earthRadius) * cos(lat1), cos(distance / earthRadius) - sin(lat1) * sin(lat2));
@@ -824,117 +1027,168 @@ class EnhancedGPSTrackingService {
   
   // Validate position quality with strict filtering
   bool _isValidPosition(Position position) {
-    // Check accuracy - relaxed for first fix and during watchdog relax window
     final bool relaxed = !_hasFirstFix || _inRelaxedMode();
     final maxAcc = relaxed ? GpsConfig.firstFixRelaxedAccuracyMeters : GpsConfig.maxAccuracyMeters;
     if (position.accuracy > maxAcc) {
       print('GPS: Position rejected - accuracy too poor: ${position.accuracy}m');
       return false;
     }
-    
-    // Check for unrealistic speed (more than 50 m/s = 180 km/h) - much stricter
+
     if (position.speed > GpsConfig.maxSpeedMs) {
       print('GPS: Position rejected - unrealistic speed: ${position.speed}m/s');
       return false;
     }
-    
-    // Check for unrealistic position changes - much stricter
-    if (_lastValidPosition != null) {
-      final distance = Geolocator.distanceBetween(
-        _lastValidPosition!.latitude,
-        _lastValidPosition!.longitude,
+
+    if (_lastValidPosition == null) {
+      print('GPS: Position accepted - lat: ${position.latitude}, lon: ${position.longitude}, accuracy: ${position.accuracy}m');
+      return true;
+    }
+
+    final distance = Geolocator.distanceBetween(
+      _lastValidPosition!.latitude,
+      _lastValidPosition!.longitude,
+      position.latitude,
+      position.longitude,
+    );
+
+    final dtMs = position.timestamp
+        .difference(_lastValidPosition!.timestamp)
+        .inMilliseconds;
+    if (dtMs <= GpsConfig.minSampleIntervalMs) {
+      print('GPS: Position rejected — duplicate/too soon (${dtMs}ms, ${distance.toStringAsFixed(1)}m)');
+      return false;
+    }
+
+    final dtSec = dtMs / 1000.0;
+    final derivedSpeed = distance / dtSec;
+
+    // Determine max jump speed: if driving profile or reported speed is fast (>8 m/s), allow up to maxSpeedMs (50 m/s)
+    final isFastProfile = _currentProfile == _MotionProfile.driving || (position.speed.isFinite && position.speed > 8.0);
+    final effectiveMaxJump = isFastProfile ? GpsConfig.maxSpeedMs : GpsConfig.maxJumpSpeedMs;
+
+    if (derivedSpeed > effectiveMaxJump) {
+      // Check for legitimate relocation after signal loss/tunnel or fast transit:
+      // If fixes have plausible accuracy (<= 25m) and are consistent across consecutive updates, or after a long gap (> 25s):
+      final bool goodAccuracy = position.accuracy <= 25.0;
+      if (goodAccuracy && _lastJumpCandidate != null) {
+        final distBetweenCandidates = Geolocator.distanceBetween(
+          _lastJumpCandidate!.latitude,
+          _lastJumpCandidate!.longitude,
+          position.latitude,
+          position.longitude,
+        );
+        final dtBetweenCandidates = position.timestamp
+            .difference(_lastJumpCandidate!.timestamp)
+            .inMilliseconds / 1000.0;
+        final speedBetweenCandidates = dtBetweenCandidates > 0
+            ? distBetweenCandidates / dtBetweenCandidates
+            : 0.0;
+        if (speedBetweenCandidates <= GpsConfig.maxSpeedMs) {
+          _consecutiveJumpRejections++;
+        } else {
+          _consecutiveJumpRejections = 1;
+        }
+      } else {
+        _consecutiveJumpRejections = 1;
+      }
+      _lastJumpCandidate = position;
+
+      // If at least 3 consecutive fixes agree on the new location or time gap is large (>25s) with good accuracy:
+      // Break out of the jump trap and accept as a new anchor
+      if (goodAccuracy && (_consecutiveJumpRejections >= 3 || dtSec > 25.0)) {
+        print('GPS: Jump recovery triggered after ${_consecutiveJumpRejections} consistent fixes / gap ${dtSec.toStringAsFixed(1)}s');
+        _consecutiveJumpRejections = 0;
+        _lastJumpCandidate = null;
+        _lastDerivedSpeedMs = null;
+        _stationaryLocked = false;
+        _stationaryAnchor = null;
+      } else {
+        print(
+          'GPS: Position rejected — GPS jump ${distance.toStringAsFixed(1)}m in ${dtSec.toStringAsFixed(2)}s '
+          '(${derivedSpeed.toStringAsFixed(1)} m/s > ${effectiveMaxJump.toStringAsFixed(1)}) [attempt $_consecutiveJumpRejections]',
+        );
+        return false;
+      }
+    } else {
+      _consecutiveJumpRejections = 0;
+      _lastJumpCandidate = null;
+    }
+
+    if (_stationaryLocked && _stationaryAnchor != null) {
+      final distFromAnchor = Geolocator.distanceBetween(
+        _stationaryAnchor!.latitude,
+        _stationaryAnchor!.longitude,
         position.latitude,
         position.longitude,
       );
-      
-      // If distance is too large for the time difference, it's likely a GPS error
-      final timeDiff = position.timestamp.difference(_lastValidPosition!.timestamp).inSeconds;
-      if (timeDiff > 0) {
-        // Maximum realistic speed: 50 m/s (180 km/h)
-        if (distance / timeDiff > GpsConfig.maxSpeedMs) {
-          print('GPS: Position rejected - unrealistic movement: ${distance}m in ${timeDiff}s (${(distance/timeDiff).toStringAsFixed(1)} m/s)');
-          return false;
-        }
-        // Stationary lock gating: keep rejecting tiny drift until clear unlock
-        final derivedSpeed = distance / timeDiff; // m/s
-        if (_stationaryLocked && _stationaryAnchor != null) {
-          final distFromAnchor = Geolocator.distanceBetween(
-            _stationaryAnchor!.latitude,
-            _stationaryAnchor!.longitude,
-            position.latitude,
-            position.longitude,
-          );
-          final bool unlockEligible = distFromAnchor >= GpsConfig.stationaryUnlockDistance || derivedSpeed >= GpsConfig.stationaryUnlockSpeedMs;
-          if (unlockEligible) {
-            _consecutiveUnlockEligible++;
-          } else {
-            _consecutiveUnlockEligible = 0;
-          }
-          if (_consecutiveUnlockEligible < GpsConfig.stationaryUnlockConsecutive) {
-            print('GPS: Rejected - stationary lock active (distFromAnchor=${distFromAnchor.toStringAsFixed(2)}m, speed=${derivedSpeed.toStringAsFixed(2)} m/s)');
-            return false;
-          } else {
-            // Unlock and allow this position to pass further checks
-            _stationaryLocked = false;
-            _stationaryAnchor = null;
-            _consecutiveUnlockEligible = 0;
-            print('GPS: Stationary lock released');
-          }
-        }
-        // Minimum movement threshold: ignore tiny drift, dynamic based on accuracy
-        final double avgAcc = ((_lastValidPosition!.accuracy) + (position.accuracy)) / 2.0;
-        final double dynMin = max(
-          relaxed ? 0.8 : GpsConfig.minMovementMeters,
-          min(GpsConfig.dynamicMinMoveCapMeters,
-              GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc),
-        );
-        final double minMove = dynMin;
-        if (distance < minMove) {
-          print('GPS: Position rejected - too small movement: ${distance}m (< $minMove m)');
-          return false;
-        }
-        // Derived speed and acceleration checks
-        // Accuracy gating at very low speeds; skip when relaxed
-        if (!relaxed) {
-          if (derivedSpeed < 0.3 && position.accuracy > GpsConfig.stationaryAccuracyCap) {
-            print('GPS: Rejected - stationary but accuracy ${position.accuracy}m worse than ${GpsConfig.stationaryAccuracyCap}m');
-            return false;
-          }
-          if (derivedSpeed < 1.0 && position.accuracy > GpsConfig.slowAccuracyCap) {
-            print('GPS: Rejected - slow movement requires <${GpsConfig.slowAccuracyCap}m accuracy (got ${position.accuracy}m)');
-            return false;
-          }
-        }
-        // Acceleration spike filter (profile-aware)
-        if (_lastDerivedSpeedMs != null) {
-          final accel = (derivedSpeed - _lastDerivedSpeedMs!) / timeDiff; // m/s^2
-          double accelLimit;
-          switch (_currentProfile) {
-            case _MotionProfile.stationary:
-              accelLimit = GpsConfig.accelStationary; // small bumps only
-              break;
-            case _MotionProfile.walking:
-              accelLimit = GpsConfig.accelWalking;
-              break;
-            case _MotionProfile.running:
-              accelLimit = GpsConfig.accelRunning;
-              break;
-            case _MotionProfile.driving:
-              accelLimit = GpsConfig.accelDriving;
-              break;
-            default:
-              accelLimit = GpsConfig.accelRunning;
-          }
-          if (accel.abs() > accelLimit) {
-            print('GPS: Rejected - acceleration spike ${accel.toStringAsFixed(1)} m/s^2 > ${accelLimit}');
-            return false;
-          }
-        }
-        // Update last derived speed for next validation if we accept later
-        _lastDerivedSpeedMs = derivedSpeed;
+      final bool unlockEligible = distFromAnchor >= GpsConfig.stationaryUnlockDistance ||
+          derivedSpeed >= GpsConfig.stationaryUnlockSpeedMs;
+      if (unlockEligible) {
+        _consecutiveUnlockEligible++;
+      } else {
+        _consecutiveUnlockEligible = 0;
+      }
+      if (_consecutiveUnlockEligible < GpsConfig.stationaryUnlockConsecutive) {
+        print('GPS: Rejected - stationary lock active (distFromAnchor=${distFromAnchor.toStringAsFixed(2)}m, speed=${derivedSpeed.toStringAsFixed(2)} m/s)');
+        return false;
+      }
+      _stationaryLocked = false;
+      _stationaryAnchor = null;
+      _consecutiveUnlockEligible = 0;
+      print('GPS: Stationary lock released');
+    }
+
+    final double avgAcc = ((_lastValidPosition!.accuracy) + (position.accuracy)) / 2.0;
+    final double dynMin = max(
+      relaxed ? 0.8 : GpsConfig.minMovementMeters,
+      min(GpsConfig.dynamicMinMoveCapMeters,
+          GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc),
+    );
+    if (distance < dynMin) {
+      print('GPS: Position rejected - too small movement: ${distance}m (< $dynMin m)');
+      return false;
+    }
+
+    if (!relaxed) {
+      if (derivedSpeed < 0.3 && position.accuracy > GpsConfig.stationaryAccuracyCap) {
+        print('GPS: Rejected - stationary but accuracy ${position.accuracy}m worse than ${GpsConfig.stationaryAccuracyCap}m');
+        return false;
+      }
+      if (derivedSpeed < 1.0 && position.accuracy > GpsConfig.slowAccuracyCap) {
+        print('GPS: Rejected - slow movement requires <${GpsConfig.slowAccuracyCap}m accuracy (got ${position.accuracy}m)');
+        return false;
       }
     }
-    
+
+    if (_lastDerivedSpeedMs != null && !relaxed) {
+      final accel = (derivedSpeed - _lastDerivedSpeedMs!) / dtSec;
+      // Never reject initial movement from rest / slow pace (< 3.0 m/s / ~11 km/h)
+      if (derivedSpeed > 3.0 || _lastDerivedSpeedMs! > 3.0) {
+        double accelLimit;
+        switch (_currentProfile) {
+          case _MotionProfile.stationary:
+            accelLimit = GpsConfig.accelStationary;
+            break;
+          case _MotionProfile.walking:
+            accelLimit = GpsConfig.accelWalking;
+            break;
+          case _MotionProfile.running:
+            accelLimit = GpsConfig.accelRunning;
+            break;
+          case _MotionProfile.driving:
+            accelLimit = GpsConfig.accelDriving;
+            break;
+          default:
+            accelLimit = GpsConfig.accelRunning;
+        }
+        if (accel.abs() > accelLimit) {
+          print('GPS: Rejected - acceleration spike ${accel.toStringAsFixed(1)} m/s^2 > $accelLimit');
+          return false;
+        }
+      }
+    }
+    _lastDerivedSpeedMs = derivedSpeed;
+
     print('GPS: Position accepted - lat: ${position.latitude}, lon: ${position.longitude}, accuracy: ${position.accuracy}m');
     return true;
   }
@@ -1025,7 +1279,9 @@ class EnhancedGPSTrackingService {
     _trackPoints.add(trackPoint);
     
     // Update notification
-    _updateTrackingNotification();
+    if (!testSuppressSideEffects) {
+      unawaited(_updateTrackingNotification());
+    }
   }
   
   // Calculate heading between two points in degrees
@@ -1052,19 +1308,18 @@ class EnhancedGPSTrackingService {
         position.latitude,
         position.longitude,
       );
-      
-      // Only add distance if it's realistic (not GPS noise)
-      final double avgAcc = ((_lastValidPosition!.accuracy) + (position.accuracy)) / 2.0;
-      final double dynMin = max(
-        GpsConfig.minMovementMeters,
-        min(GpsConfig.dynamicMinMoveCapMeters,
-            GpsConfig.dynamicMinMoveAccuracyFactor * avgAcc),
-      );
-      if (distance >= dynMin) { // Avoid GPS noise with dynamic threshold
-        _totalDistance += distance;
-        print('GPS: Distance added: ${distance.toStringAsFixed(2)}m, total: ${_totalDistance.toStringAsFixed(2)}m');
-      } else {
-        print('GPS: Distance too small, ignoring: ${distance.toStringAsFixed(2)}m');
+
+      // Source of truth = same anchor filter as final stats. DynMin incremental
+      // adds under-count slow walks when GPS accuracy is 12–20 m (forest).
+      if (_trackPoints.length >= 2) {
+        final previous = _totalDistance;
+        _totalDistance = _sumFilteredDistance(_trackPoints);
+        if ((_totalDistance - previous).abs() > 0.05) {
+          print(
+            'GPS: Distance reconciled: ${previous.toStringAsFixed(2)}m → ${_totalDistance.toStringAsFixed(2)}m '
+            '(step ${distance.toStringAsFixed(2)}m)',
+          );
+        }
       }
       
       // Update speed statistics using derived speed where possible
@@ -1085,50 +1340,168 @@ class EnhancedGPSTrackingService {
       }
       
       // Update elevation statistics
-      if (position.altitude != null && _lastValidPosition!.altitude != null) {
-        final elevationChange = position.altitude! - _lastValidPosition!.altitude!;
-        if (elevationChange > 0) {
-          _totalElevationGain += elevationChange;
-        } else {
-          _totalElevationLoss += elevationChange.abs();
-        }
+      final elevationChange = position.altitude - _lastValidPosition!.altitude;
+      if (elevationChange > 0) {
+        _totalElevationGain += elevationChange;
+      } else {
+        _totalElevationLoss += elevationChange.abs();
       }
       
       // Update min/max altitude
-      if (position.altitude != null) {
-        _minAltitude = _minAltitude == null ? position.altitude! : min(_minAltitude!, position.altitude!);
-        _maxAltitude = _maxAltitude == null ? position.altitude! : max(_maxAltitude!, position.altitude!);
-      }
+      _minAltitude = _minAltitude == null ? position.altitude : min(_minAltitude!, position.altitude);
+      _maxAltitude = _maxAltitude == null ? position.altitude : max(_maxAltitude!, position.altitude);
     }
   }
-  
+
+  double _sumFilteredDistance(List<TrackPoint> points) {
+    if (points.length < 2) return 0;
+    double total = 0;
+    TrackPoint anchor = points.first;
+    for (int i = 1; i < points.length; i++) {
+      final current = points[i];
+      final distance = Geolocator.distanceBetween(
+        anchor.latitude,
+        anchor.longitude,
+        current.latitude,
+        current.longitude,
+      );
+      if (distance < GpsConfig.minMovementMeters) continue;
+
+      final dtMs = current.timestamp.difference(anchor.timestamp).inMilliseconds;
+      final speed = dtMs > 0 ? distance / (dtMs / 1000.0) : double.infinity;
+      // Skip teleport jumps without polluting cumulative distance
+      if (speed > GpsConfig.maxSpeedMs) {
+        anchor = current;
+        continue;
+      }
+      total += distance;
+      anchor = current;
+    }
+    return total;
+  }
+
+  @visibleForTesting
+  double testSumFilteredDistance(List<TrackPoint> points) => _sumFilteredDistance(points);
+
+  @visibleForTesting
+  bool testIsValidPosition(Position position) => _isValidPosition(position);
+
+  @visibleForTesting
+  void testResetState() {
+    _isTracking = false;
+    _startTime = null;
+    _lastValidPosition = null;
+    _lastDerivedSpeedMs = null;
+    _hasFirstFix = false;
+    _stationaryLocked = false;
+    _stationaryAnchor = null;
+    _consecutiveJumpRejections = 0;
+    _lastJumpCandidate = null;
+    _trackPoints.clear();
+    _rawPositions.clear();
+    _filteredPositions.clear();
+    _totalDistance = 0.0;
+    _resetRecordingPauseState();
+  }
+
+  @visibleForTesting
+  void testSetStationaryLocked(bool locked, Position? anchor) {
+    _stationaryLocked = locked;
+    _stationaryAnchor = anchor;
+  }
+
+  /// Starts an in-memory tracking session without platform GPS / permissions.
+  @visibleForTesting
+  void testBeginTrackingSession({DateTime? startTime}) {
+    _isTracking = true;
+    _startTime = startTime ?? DateTime.now();
+    _trackPoints.clear();
+    _rawPositions.clear();
+    _filteredPositions.clear();
+    _totalDistance = 0.0;
+    _averageSpeed = 0.0;
+    _maxSpeed = 0.0;
+    _totalElevationGain = 0.0;
+    _totalElevationLoss = 0.0;
+    _minAltitude = null;
+    _maxAltitude = null;
+    _lastValidPosition = null;
+    _lastDerivedSpeedMs = null;
+    _stationaryLocked = false;
+    _stationaryAnchor = null;
+    _stationaryCandidateSince = null;
+    _consecutiveUnlockEligible = 0;
+    _consecutiveJumpRejections = 0;
+    _lastJumpCandidate = null;
+    _hasFirstFix = false;
+    _resetRecordingPauseState();
+    _currentProfile = _MotionProfile.walking;
+  }
+
+  @visibleForTesting
+  bool get testRecordingPaused => _recordingPaused;
+
+  @visibleForTesting
+  List<TrackPoint> get testTrackPoints => List.unmodifiable(_trackPoints);
+
+  /// Skip notifications / backups / adaptive platform calls during unit tests.
+  @visibleForTesting
+  bool testSuppressSideEffects = false;
+
   // Calculate final statistics with improved accuracy
   void _calculateFinalStatistics() {
     if (_trackPoints.length < 2) return;
-    
-    // Recalculate total distance using all track points with filtering
-    _totalDistance = 0.0;
-    for (int i = 1; i < _trackPoints.length; i++) {
-      final distance = Geolocator.distanceBetween(
-        _trackPoints[i - 1].latitude,
-        _trackPoints[i - 1].longitude,
-        _trackPoints[i].latitude,
-        _trackPoints[i].longitude,
-      );
-      
-      // Only add realistic distances (filter out GPS noise)
-      if (distance >= GpsConfig.minMovementMeters) {
-        _totalDistance += distance;
-      }
-    }
-    
-    // Calculate final average speed
+
+    _totalDistance = _sumFilteredDistance(_trackPoints);
+
     final totalTime = trackingDuration.inSeconds;
     if (totalTime > 0) {
       _averageSpeed = _totalDistance / totalTime;
     }
-    
+
     print('GPS: Final statistics - Total distance: ${_totalDistance.toStringAsFixed(2)}m, Average speed: ${_averageSpeed.toStringAsFixed(2)} m/s');
+  }
+
+  Future<void> _ingestNativeBacklog() async {
+    if (!Platform.isAndroid || !_isTracking) return;
+    try {
+      final raw = await _methodChannel.invokeMethod<List<dynamic>>('readPersistedTrack');
+      if (raw == null || raw.isEmpty) return;
+      final lastTs = _trackPoints.isEmpty ? null : _trackPoints.last.timestamp;
+      var ingested = 0;
+      for (final e in raw) {
+        if (e is! Map) continue;
+        final map = Map<dynamic, dynamic>.from(e);
+        final tsMs = (map['timestamp'] as num?)?.toInt() ?? 0;
+        if (tsMs <= 0) continue;
+        final ts = DateTime.fromMillisecondsSinceEpoch(tsMs);
+        if (lastTs != null && !ts.isAfter(lastTs)) continue;
+        final lat = (map['latitude'] as num?)?.toDouble();
+        final lng = (map['longitude'] as num?)?.toDouble();
+        if (!_isPlausibleCoordinate(lat, lng)) continue;
+        onPositionUpdate(
+          Position(
+            latitude: lat!,
+            longitude: lng!,
+            timestamp: ts,
+            accuracy: (map['accuracy'] as num?)?.toDouble() ?? 25.0,
+            altitude: (map['altitude'] as num?)?.toDouble() ?? 0.0,
+            altitudeAccuracy: 0.0,
+            heading: 0.0,
+            headingAccuracy: 0.0,
+            speed: (map['speed'] as num?)?.toDouble() ?? 0.0,
+            speedAccuracy: 0.0,
+          ),
+        );
+        ingested++;
+      }
+      if (ingested > 0) {
+        print('GPS: Ingested $ingested native backlog points after resume');
+        _totalDistance = _sumFilteredDistance(_trackPoints);
+      }
+    } catch (e) {
+      print('GPS: Native backlog ingest failed: $e');
+    }
   }
   
   // Initialize notifications
@@ -1204,22 +1577,33 @@ class EnhancedGPSTrackingService {
   // Update tracking notification with current stats
   Future<void> _updateTrackingNotification() async {
     if (!_isTracking) return;
-    // Skip updates if Android native foreground service is active to avoid duplicates
-    if (Platform.isAndroid && _backgroundServiceRunning) {
+    final now = DateTime.now();
+    if (_lastNotificationAt != null &&
+        now.difference(_lastNotificationAt!) < const Duration(seconds: 15)) {
       return;
     }
-    
+    _lastNotificationAt = now;
+
     final duration = trackingDuration;
     final hours = duration.inHours;
     final minutes = duration.inMinutes % 60;
     final seconds = duration.inSeconds % 60;
-    
     final distanceKm = _totalDistance / 1000;
-    final speedKmh = _averageSpeed * 3.6; // Convert m/s to km/h
-    
-    final title = 'Strakatá turistika';
-    final body = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')} • ${distanceKm.toStringAsFixed(2)} km • ${speedKmh.toStringAsFixed(1)} km/h';
-    
+    final body =
+        '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')} • ${distanceKm.toStringAsFixed(2)} km';
+
+    if (Platform.isAndroid && _backgroundServiceRunning) {
+      try {
+        await _methodChannel.invokeMethod('updateTrackingStats', {
+          'title': 'Sledování trasy',
+          'text': body,
+        });
+      } catch (e) {
+        print('GPS: Failed to update native notification: $e');
+      }
+      return;
+    }
+
     const androidDetails = AndroidNotificationDetails(
       'gps_tracking',
       'Strakatá turistika',
@@ -1235,16 +1619,20 @@ class EnhancedGPSTrackingService {
       icon: '@mipmap/ic_launcher',
       largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
     );
-    
+
     const notificationDetails = NotificationDetails(android: androidDetails);
-    
-    await _notifications.show(
-      _trackingNotificationId,
-      title,
-      body,
-      notificationDetails,
-      payload: 'gps_tracking_page',
-    );
+
+    try {
+      await _notifications.show(
+        _trackingNotificationId,
+        'Strakatá turistika',
+        body,
+        notificationDetails,
+        payload: 'gps_tracking_page',
+      );
+    } catch (e) {
+      print('GPS: Failed to update local notification: $e');
+    }
   }
   
   // Get tracking summary
@@ -1277,12 +1665,19 @@ class EnhancedGPSTrackingService {
     _minAltitude = null;
     _maxAltitude = null;
     _lastValidPosition = null;
+    _consecutiveJumpRejections = 0;
+    _lastJumpCandidate = null;
   }
   
   // Dispose resources
   void dispose() {
+    if (_lifecycleObserverAttached) {
+      WidgetsBinding.instance.removeObserver(this);
+      _lifecycleObserverAttached = false;
+    }
     _locationEventSubscription?.cancel();
     _periodicLocationTimer?.cancel();
     _backgroundCheckTimer?.cancel();
+    _stopMotionSensor();
   }
 } 

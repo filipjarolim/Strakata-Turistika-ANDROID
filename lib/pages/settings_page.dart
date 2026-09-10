@@ -17,6 +17,7 @@ import '../widgets/ui/web_mobile_patterns.dart';
 import '../widgets/legal/legal_actions.dart';
 import 'offline_maps_page.dart';
 import '../services/app_update_service.dart';
+import '../widgets/settings/appearance_settings_section.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -72,6 +73,8 @@ class SettingsPage extends StatelessWidget {
                     children: [
                       _buildProfileCard(user),
                       const SizedBox(height: 28),
+                      const AppearanceSettingsSection(),
+                      const SizedBox(height: 24),
                       if (user != null) ...[
                         _buildSettingsSection(
                           title: 'Účet',
