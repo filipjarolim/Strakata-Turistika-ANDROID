@@ -13,6 +13,7 @@ import '../services/scoring_config_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/forms/extra_data_merge.dart';
 import '../services/track_file_parser.dart';
+import '../utils/visit_scoring.dart';
 
 class DynamicUploadPage extends StatefulWidget {
   final String slug;
@@ -99,10 +100,15 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
       final scoringConfig = await ScoringConfigService().getConfig();
       final placeTypeConfigs =
           await PlaceTypeConfigService().getPlaceTypeConfigs();
-      if (summary != null) {
-        final distanceKm = summary.totalDistance / 1000;
-        points += distanceKm * scoringConfig.pointsPerKm;
-      }
+      // GPS/GPX summary, jinak ručně zadané km (screenshot) — musí se započítat stejně.
+      final scoredDistanceKm = resolveScoringDistanceKm(
+        summary: summary,
+        extraData: formContext.extraData,
+      );
+      points += distancePointsForKm(
+        scoredDistanceKm,
+        scoringConfig.pointsPerKm,
+      );
       for (final place in formContext.places) {
         final matches = placeTypeConfigs.where((c) => c.name == place.type);
         if (matches.isNotEmpty) {
@@ -139,14 +145,14 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
         );
       }
 
-      final double? distanceKmTop = summary != null
-          ? double.parse((summary.totalDistance / 1000).toStringAsFixed(4))
-          : null;
-      final int? durationMinTop =
-          summary != null ? (summary.duration.inSeconds / 60).ceil() : null;
-
       final extraForVisit = Map<String, dynamic>.from(formContext.extraData);
       mergeComputedRouteMetricsIntoExtraData(extraForVisit, summary);
+
+      final double? distanceKmTop = scoredDistanceKm != null
+          ? double.parse(scoredDistanceKm.toStringAsFixed(4))
+          : resolveScoringDistanceKm(extraData: extraForVisit);
+      final int? durationMinTop =
+          summary != null ? (summary.duration.inSeconds / 60).ceil() : null;
 
       String? routeLinkStr;
       if (summary != null && summary.trackPoints.length >= 2) {

@@ -141,12 +141,15 @@ class _ResultsVisitDetailPageState extends State<ResultsVisitDetailPage> {
                           _badge(Icons.flag_outlined, _statusText(visit.state)),
                         ],
                       ),
-                      if (visit.rejectionReason?.trim().isNotEmpty == true) ...[
+                      if (visit.state == VisitState.REJECTED) ...[
                         const SizedBox(height: 12),
                         WebMobileSectionCard(
                           padding: const EdgeInsets.all(14),
                           child: Text(
-                            'Důvod zamítnutí: ${visit.rejectionReason}',
+                            visit.rejectionReason?.trim().isNotEmpty == true
+                                ? 'Důvod zamítnutí: ${visit.rejectionReason}'
+                                : 'Výprava byla zamítnuta. Administrátor neuvedl konkrétní důvod — '
+                                    'v případě nejasností kontaktujte pořadatele.',
                             style: GoogleFonts.libreFranklin(
                               fontSize: 13,
                               color: const Color(0xFFB91C1C),

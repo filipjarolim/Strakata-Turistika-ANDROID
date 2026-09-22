@@ -416,7 +416,7 @@ class VisitData {
           (e) => e.name == map['state'],
           orElse: () => VisitState.DRAFT,
         ),
-        rejectionReason: map['rejectionReason']?.toString(),
+        rejectionReason: _readRejectionReason(map),
         createdAt: map['createdAt'] is DateTime
             ? map['createdAt'] as DateTime
             : DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? parsedDate,
@@ -506,6 +506,37 @@ String? visitPhotoUrl(Map<String, dynamic> map) {
   for (final key in ['url', 'secure_url', 'secureUrl', 'src', 'path']) {
     final value = map[key]?.toString().trim();
     if (value != null && value.isNotEmpty) return value;
+  }
+  return null;
+}
+
+/// Důvod zamítnutí z různých klíčů, které může admin/web zapsat.
+String? _readRejectionReason(Map<String, dynamic> map) {
+  for (final key in [
+    'rejectionReason',
+    'rejectReason',
+    'rejection_reason',
+    'reason',
+    'důvodZamítnutí',
+    'duvodZamitnuti',
+    'zamitnutiDuvod',
+  ]) {
+    final value = map[key]?.toString().trim();
+    if (value != null && value.isNotEmpty) return value;
+  }
+  final extra = map['extraPoints'];
+  if (extra is Map) {
+    for (final key in ['rejectionReason', 'reason', 'důvodZamítnutí', 'duvodZamitnuti']) {
+      final value = extra[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+  }
+  final extraData = map['extraData'];
+  if (extraData is Map) {
+    for (final key in ['rejectionReason', 'reason', 'důvodZamítnutí', 'duvodZamitnuti']) {
+      final value = extraData[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
   }
   return null;
 }

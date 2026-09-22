@@ -22,6 +22,7 @@ import '../models/forms/extra_data_merge.dart';
 import '../widgets/forms/form_field_validator.dart';
 import '../services/route_backup_service.dart';
 import '../services/track_file_parser.dart';
+import '../utils/visit_scoring.dart';
 
 class DynamicFormPage extends StatefulWidget {
   final String slug;
@@ -187,11 +188,15 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
       final scoringConfig = await ScoringConfigService().getConfig();
       final placeTypeConfigs = await PlaceTypeConfigService().getPlaceTypeConfigs();
 
-      // Distance points
-      if (summary != null) {
-        final distanceKm = summary.totalDistance / 1000;
-        points += distanceKm * scoringConfig.pointsPerKm;
-      }
+      // GPS/GPX summary, jinak ručně zadané km (screenshot) — musí se započítat stejně.
+      final scoredDistanceKm = resolveScoringDistanceKm(
+        summary: summary,
+        extraData: _formContext.extraData,
+      );
+      points += distancePointsForKm(
+        scoredDistanceKm,
+        scoringConfig.pointsPerKm,
+      );
 
       // Place points — chybějící typ v DB nesmí zablokovat uložení celé návštěvy.
       for (var place in _formContext.places) {
@@ -250,9 +255,10 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         );
       }
 
-      final double? distanceKmTop = summary != null
-          ? double.parse((summary.totalDistance / 1000).toStringAsFixed(4))
-          : widget.existingVisit?.distanceKm;
+      final double? distanceKmTop = scoredDistanceKm != null
+          ? double.parse(scoredDistanceKm.toStringAsFixed(4))
+          : (resolveScoringDistanceKm(extraData: extraForVisit) ??
+              widget.existingVisit?.distanceKm);
       final int? durationMinTop = summary != null
           ? (summary.duration.inSeconds / 60).ceil()
           : widget.existingVisit?.durationMinutes;
