@@ -49,3 +49,6 @@ app.*.map.json
 /android/build/
 android/key.properties
 .env.backup
+
+*.aab
+*.apk

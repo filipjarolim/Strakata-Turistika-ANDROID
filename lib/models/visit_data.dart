@@ -278,27 +278,10 @@ class VisitData {
     }
   }
 
-  double? _derivedDistanceKmFromRoute() {
-    if (route == null) return null;
-    final m = route!['totalDistance'];
-    if (m == null) return null;
-    final meters = TypeConverter.toDoubleWithDefault(m, 0.0);
-    if (meters <= 0) return null;
-    return (meters / 1000 * 1000).round() / 1000;
-  }
-
-  int? _derivedDurationMinutesFromRoute() {
-    if (route == null) return null;
-    final sec = route!['duration'];
-    if (sec == null) return null;
-    final s = TypeConverter.toDoubleWithDefault(sec, 0.0).round();
-    if (s <= 0) return null;
-    return (s / 60).ceil();
-  }
-
   Map<String, dynamic> toMap() {
-    final km = distanceKm ?? _derivedDistanceKmFromRoute();
-    final dur = durationMinutes ?? _derivedDurationMinutesFromRoute();
+    // Stejná resoluce jako UI — legacy screenshot payload má km jen v extraData.
+    final km = resolvedDistanceKm;
+    final dur = resolvedDurationMinutes;
 
     return {
       '_id': id,

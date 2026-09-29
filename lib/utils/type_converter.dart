@@ -26,15 +26,20 @@ class TypeConverter {
   }
 
   /// Safely converts a dynamic value to a double.
-  /// Handles int, double, String, and Int64 (fixnum).
+  /// Handles int, double, String (včetně české čárky "12,5"), and Int64 (fixnum).
   static double? toDouble(dynamic value) {
     if (value == null) return null;
     if (value is double) return value;
     if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value.replaceAll(',', '.'));
-    
+    if (value is String) {
+      final normalized = value.replaceAll(',', '.').trim();
+      if (normalized.isEmpty) return null;
+      return double.tryParse(normalized);
+    }
+
     try {
-      return double.tryParse(value.toString());
+      final normalized = value.toString().replaceAll(',', '.').trim();
+      return double.tryParse(normalized);
     } catch (_) {
       return null;
     }

@@ -34,4 +34,11 @@ void main() {
       expect(distancePointsForKm(null, 2.0), 0.0);
     });
   });
+
+  group('meetsMinDistanceKm', () {
+    test('exact boundary passes', () {
+      expect(meetsMinDistanceKm(3.0, 3.0), isTrue);
+      expect(meetsMinDistanceKm(2.99, 3.0), isFalse);
+    });
+  });
 }
