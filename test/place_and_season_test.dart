@@ -36,6 +36,22 @@ void main() {
     expect(seasonEndingYear(DateTime(2026, 11, 1)), 2027);
   });
 
+  test('výsledky drží běžící sezónu od 1. listopadu a schovají budoucí', () {
+    final before = seasonsShownForResults(
+      [2027, 2026, 2025],
+      DateTime(2026, 10, 31),
+    );
+    expect(before.first, 2026);
+    expect(before, isNot(contains(2027)));
+
+    final after = seasonsShownForResults(
+      [2026, 2025],
+      DateTime(2026, 11, 1),
+    );
+    expect(after.first, 2027);
+    expect(after, contains(2026));
+  });
+
   test('zveřejněné pořadí drží sloupec Pořadí i když má první méně bodů', () {
     final page = pagePublishedStandings(
       rows: const [

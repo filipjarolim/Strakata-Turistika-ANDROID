@@ -143,8 +143,9 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
       final seasons = await _visitRepository.getAvailableSeasons();
       if (!mounted) return;
       setState(() {
-        availableSeasons = seasons;
-        selectedSeason = seasons.isNotEmpty ? seasons.first : null;
+        availableSeasons = seasonsShownForResults(seasons, DateTime.now());
+        selectedSeason =
+            availableSeasons.isNotEmpty ? availableSeasons.first : null;
       });
       if (_animationController != null) {
         _animationController!.forward();

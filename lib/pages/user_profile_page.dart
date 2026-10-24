@@ -89,9 +89,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   List<int> _seasonYears() {
-    final years = _userVisits.map((v) => v.year).where((y) => y > 0).toSet().toList()..sort((a, b) => b.compareTo(a));
-    if (years.isEmpty) return [seasonEndingYear(DateTime.now())];
-    return years;
+    return seasonsShownForResults(
+      _userVisits.map((v) => v.year),
+      DateTime.now(),
+    );
   }
 
   List<VisitData> _visitsForSelectedYear() {

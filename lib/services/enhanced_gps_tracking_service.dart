@@ -11,6 +11,7 @@ import '../services/haptic_service.dart';
 
 import '../models/tracking_summary.dart';
 import '../config/gps_config.dart';
+import 'gps_battery_profile.dart';
 import 'gps_power_mode.dart';
 import 'route_backup_service.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -36,8 +37,9 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   bool _backgroundServiceRunning = false;
   
   // Advanced tracking algorithms
-  final List<Position> _rawPositions = [];
-  final List<Position> _filteredPositions = [];
+  /// Kotva pro průběžnou vzdálenost. Celá trasa se znovu nesčítá po každém bodu,
+  /// jinak je 4h+ záznam kvadratický a žere CPU i baterii.
+  TrackPoint? _distanceAnchor;
   Position? _lastValidPosition;
   double? _lastDerivedSpeedMs;
   bool _hasFirstFix = false;
@@ -107,11 +109,17 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   double get totalDistance => _totalDistance;
   double get averageSpeed => _averageSpeed;
   double get maxSpeed => _maxSpeed;
+  /// Testy dlouhého výletu posouvají čas bez čekání. V aplikaci zůstává nástěnné hodiny.
+  @visibleForTesting
+  DateTime Function()? testClock;
+
+  DateTime _clockNow() => testClock?.call() ?? DateTime.now();
+
   Duration get trackingDuration {
     if (_startTime == null) return Duration.zero;
-    final wall = DateTime.now().difference(_startTime!);
+    final wall = _clockNow().difference(_startTime!);
     final currentPause = (_recordingPaused && _pauseStartedAt != null)
-        ? DateTime.now().difference(_pauseStartedAt!)
+        ? _clockNow().difference(_pauseStartedAt!)
         : Duration.zero;
     final active = wall - _pausedBeforeCurrentSegment - currentPause;
     return active.isNegative ? Duration.zero : active;
@@ -140,7 +148,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   /// Pause or resume recording (time and track points). Does nothing if not tracking.
   void setRecordingPaused(bool paused) {
     if (!_isTracking) return;
-    final now = DateTime.now();
+    final now = _clockNow();
     if (paused && !_recordingPaused) {
       _recordingPaused = true;
       _pauseStartedAt = now;
@@ -202,6 +210,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
       );
       
       _trackPoints.add(trackPoint);
+      _appendDistancePoint(trackPoint);
       _updateStatistics(position);
       // Update last valid position so next point uses this one for distance/time
       _lastValidPosition = position;
@@ -345,8 +354,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
     _isTracking = true;
     _startTime = DateTime.now();
     _trackPoints.clear();
-    _rawPositions.clear();
-    _filteredPositions.clear();
+    _resetDistanceAnchor();
     _totalDistance = 0.0;
     _averageSpeed = 0.0;
     _maxSpeed = 0.0;
@@ -428,9 +436,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
             ? summary.trackPoints.first.timestamp
             : DateTime.now());
     _trackPoints = List<TrackPoint>.from(summary.trackPoints);
-    _rawPositions.clear();
-    _filteredPositions.clear();
-    _totalDistance = summary.totalDistance;
+    _rebuildDistanceFromTrack();
     _averageSpeed = summary.averageSpeed;
     _maxSpeed = summary.maxSpeed;
     _totalElevationGain = summary.totalElevationGain;
@@ -737,7 +743,6 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
       return;
     }
 
-    _rawPositions.add(position);
     _lastRawAt = DateTime.now();
 
     // Validate the RAW fix first. Kalman must not smear GPS jumps into the track.
@@ -746,7 +751,6 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
     }
 
     final filteredPosition = _applyKalmanFilter(position);
-    _filteredPositions.add(filteredPosition);
 
     _addTrackPoint(filteredPosition);
     _updateStatistics(filteredPosition);
@@ -867,48 +871,13 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
 
   Map<String, dynamic> _androidSettingsFor(_MotionProfile profile) {
     final saver = GpsPowerModeStore().mode != GpsPowerMode.precise;
-    switch (profile) {
-      case _MotionProfile.stationary:
-        return {
-          'intervalMs': saver ? 25000 : 15000,
-          'fastestIntervalMs': saver ? 15000 : 8000,
-          'maxWaitTimeMs': saver ? 50000 : 25000,
-          'smallestDisplacementM': saver ? 25.0 : 12.0,
-          'priority': 102, // BALANCED_POWER — GNSS nemusí běžet nonstop
-        };
-      case _MotionProfile.walking:
-        return saver
-            ? {
-                'intervalMs': 12000,
-                'fastestIntervalMs': 8000,
-                'maxWaitTimeMs': 24000,
-                'smallestDisplacementM': 10.0,
-                'priority': 100,
-              }
-            : {
-                'intervalMs': 5000,
-                'fastestIntervalMs': 3000,
-                'maxWaitTimeMs': 8000,
-                'smallestDisplacementM': 4.0,
-                'priority': 100,
-              };
-      case _MotionProfile.running:
-        return {
-          'intervalMs': saver ? 4000 : 2000,
-          'fastestIntervalMs': saver ? 2000 : 1000,
-          'maxWaitTimeMs': saver ? 8000 : 3000,
-          'smallestDisplacementM': 3.0,
-          'priority': 100,
-        };
-      case _MotionProfile.driving:
-        return {
-          'intervalMs': 2000,
-          'fastestIntervalMs': 1000,
-          'maxWaitTimeMs': 4000,
-          'smallestDisplacementM': 8.0,
-          'priority': 100,
-        };
-    }
+    final motion = switch (profile) {
+      _MotionProfile.stationary => GpsMotionProfile.stationary,
+      _MotionProfile.walking => GpsMotionProfile.walking,
+      _MotionProfile.running => GpsMotionProfile.running,
+      _MotionProfile.driving => GpsMotionProfile.driving,
+    };
+    return androidGpsSettings(profile: motion, saver: saver);
   }
 
   void _startOrUpdateIosStream(_MotionProfile profile) {
@@ -1277,6 +1246,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
     );
     
     _trackPoints.add(trackPoint);
+    _appendDistancePoint(trackPoint);
     
     // Update notification
     if (!testSuppressSideEffects) {
@@ -1309,17 +1279,11 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
         position.longitude,
       );
 
-      // Source of truth = same anchor filter as final stats. DynMin incremental
-      // adds under-count slow walks when GPS accuracy is 12–20 m (forest).
-      if (_trackPoints.length >= 2) {
-        final previous = _totalDistance;
-        _totalDistance = _sumFilteredDistance(_trackPoints);
-        if ((_totalDistance - previous).abs() > 0.05) {
-          print(
-            'GPS: Distance reconciled: ${previous.toStringAsFixed(2)}m → ${_totalDistance.toStringAsFixed(2)}m '
-            '(step ${distance.toStringAsFixed(2)}m)',
-          );
-        }
+      if (_trackPoints.length >= 2 && distance >= GpsConfig.minMovementMeters) {
+        print(
+          'GPS: Distance ${_totalDistance.toStringAsFixed(2)}m '
+          '(step ${distance.toStringAsFixed(2)}m)',
+        );
       }
       
       // Update speed statistics using derived speed where possible
@@ -1350,6 +1314,43 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
       // Update min/max altitude
       _minAltitude = _minAltitude == null ? position.altitude : min(_minAltitude!, position.altitude);
       _maxAltitude = _maxAltitude == null ? position.altitude : max(_maxAltitude!, position.altitude);
+    }
+  }
+
+  void _resetDistanceAnchor() {
+    _distanceAnchor = null;
+  }
+
+  /// Stejná pravidla jako [_sumFilteredDistance], ale jen pro nový bod.
+  void _appendDistancePoint(TrackPoint current) {
+    final anchor = _distanceAnchor;
+    if (anchor == null) {
+      _distanceAnchor = current;
+      return;
+    }
+    final distance = Geolocator.distanceBetween(
+      anchor.latitude,
+      anchor.longitude,
+      current.latitude,
+      current.longitude,
+    );
+    if (distance < GpsConfig.minMovementMeters) return;
+
+    final dtMs = current.timestamp.difference(anchor.timestamp).inMilliseconds;
+    final speed = dtMs > 0 ? distance / (dtMs / 1000.0) : double.infinity;
+    if (speed > GpsConfig.maxSpeedMs) {
+      _distanceAnchor = current;
+      return;
+    }
+    _totalDistance += distance;
+    _distanceAnchor = current;
+  }
+
+  void _rebuildDistanceFromTrack() {
+    _distanceAnchor = null;
+    _totalDistance = 0;
+    for (final point in _trackPoints) {
+      _appendDistancePoint(point);
     }
   }
 
@@ -1398,8 +1399,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
     _consecutiveJumpRejections = 0;
     _lastJumpCandidate = null;
     _trackPoints.clear();
-    _rawPositions.clear();
-    _filteredPositions.clear();
+    _resetDistanceAnchor();
     _totalDistance = 0.0;
     _resetRecordingPauseState();
   }
@@ -1416,8 +1416,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
     _isTracking = true;
     _startTime = startTime ?? DateTime.now();
     _trackPoints.clear();
-    _rawPositions.clear();
-    _filteredPositions.clear();
+    _resetDistanceAnchor();
     _totalDistance = 0.0;
     _averageSpeed = 0.0;
     _maxSpeed = 0.0;
@@ -1655,8 +1654,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   // Clear tracking data
   void clearData() {
     _trackPoints.clear();
-    _rawPositions.clear();
-    _filteredPositions.clear();
+    _resetDistanceAnchor();
     _totalDistance = 0.0;
     _averageSpeed = 0.0;
     _maxSpeed = 0.0;
