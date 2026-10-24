@@ -196,7 +196,7 @@ class VectorTileProvider extends TileProvider {
         total++;
         final key = '${zoom}_${x}_${y}';
         final hit = getCachedTileSync(key, layer);
-        if (hit != null && hit.isValid) cached++;
+        if (bytesFromCachedTile(hit) != null) cached++;
       }
     }
     if (total == 0) return 0.0;
@@ -444,11 +444,16 @@ class ResilientCachedTileImageProvider extends ImageProvider<ResilientCachedTile
   }
 
   Future<ui.Codec> _loadAsync(ResilientCachedTileImageProvider key) async {
-    // Try network first
+    final cached = VectorTileProvider.getCachedTileSync(key.tileKey, key.layer);
+    // Čerstvá dlaždice jde rovnou z telefonu — bez signálu se mapa nesmí čekat na síť.
+    if (cached != null && cached.isValid) {
+      final bytes = bytesFromCachedTile(cached);
+      if (bytes != null) return await ui.instantiateImageCodec(bytes);
+    }
+
     try {
       final response = await http.get(Uri.parse(key.url), headers: key.headers);
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
-        // Cache compressed tile
         try {
           final data = VectorTileData.compress(response.bodyBytes, key.layer);
           await VectorTileProvider.cacheTile(key.tileKey, data, key.layer);
@@ -473,11 +478,8 @@ class ResilientCachedTileImageProvider extends ImageProvider<ResilientCachedTile
       }
     } catch (_) {}
 
-    final cached = VectorTileProvider.getCachedTileSync(key.tileKey, key.layer);
-    if (cached != null && cached.isValid) {
-      final bytes = cached.decompress();
-      return await ui.instantiateImageCodec(bytes);
-    }
+    final fallback = bytesFromCachedTile(cached);
+    if (fallback != null) return await ui.instantiateImageCodec(fallback);
 
     throw Exception('Tile unavailable: ${key.url}');
   }
@@ -538,10 +540,22 @@ class VectorTileData {
   /// Get compression ratio
   double get compressionRatio => originalSize > 0 ? compressedSize / originalSize : 1.0;
   
-  /// Check if data is still valid
+  /// Čerstvá dlaždice se nemusí znovu stahovat. Starší pořád jde vykreslit offline.
   bool get isValid {
     final age = DateTime.now().difference(timestamp);
-    return age.inDays < 30; // 30 days validity
+    return age.inDays < 30;
+  }
+}
+
+/// Dlaždice uložená v telefonu, i když už je starší než 30 dní.
+Uint8List? bytesFromCachedTile(VectorTileData? cached) {
+  if (cached == null) return null;
+  try {
+    final bytes = cached.decompress();
+    if (bytes.isEmpty) return null;
+    return bytes;
+  } catch (_) {
+    return null;
   }
 }
 

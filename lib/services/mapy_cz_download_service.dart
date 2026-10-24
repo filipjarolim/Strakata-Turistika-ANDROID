@@ -576,16 +576,10 @@ class MapyCzDownloadService {
     };
   }
 
-  /// Zoom-dependent stepping to drastically reduce high-zoom tiles
-  static int _getStepForZoom(int z) {
-    if (z <= 12) return 1;      // full coverage
-    if (z == 13) return 1;
-    if (z == 14) return 1;
-    if (z == 15) return 2;
-    if (z == 16) return 4;
-    if (z == 17) return 6;      // slightly coarser than 4, still dense
-    return 8;                    // z >= 18
-  }
+  /// Každá dlaždice v rozsahu. Řidší krok nechával v podrobné mapě díry offline.
+  static int tileStepForZoom(int z) => 1;
+
+  static int _getStepForZoom(int z) => tileStepForZoom(z);
 
   /// Check if tile center lies within Czech Republic bounding limits
   static bool _isTileCenterInCzechRepublic(int x, int y, int z) {

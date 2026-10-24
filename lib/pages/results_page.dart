@@ -610,7 +610,10 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
           ),
         ),
         const SizedBox(height: 12),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               'Řadit podle:',
@@ -620,7 +623,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                 color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(width: 12),
             ChoiceChip(
               label: const Text('Bodů'),
               selected: !_sortByVisits,
@@ -631,7 +633,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                 }
               },
             ),
-            const SizedBox(width: 8),
             ChoiceChip(
               label: const Text('Návštěv'),
               selected: _sortByVisits,
@@ -712,16 +713,20 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                       ? LinearGradient(colors: [badgeColor, badgeColor.withValues(alpha: 0.5)], begin: Alignment.topLeft, end: Alignment.bottomRight)
                       : null,
                   ),
-                  child: CircleAvatar(
-                    radius: 24,
-                    backgroundColor: const Color(0xFFF3F4F6),
-                    backgroundImage: entry.userImage != null && entry.userImage!.trim().isNotEmpty
-                        ? NetworkImage(entry.userImage!.trim())
-                        : null,
-                    onBackgroundImageError: (_, __) {},
-                    child: entry.userImage == null || entry.userImage!.trim().isEmpty
-                        ? Icon(Icons.person_rounded, color: Colors.grey[400], size: 24)
-                        : null,
+                  child: Builder(
+                    builder: (context) {
+                      final imageUrl = entry.userImage?.trim();
+                      final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+                      return CircleAvatar(
+                        radius: 24,
+                        backgroundColor: const Color(0xFFF3F4F6),
+                        backgroundImage: hasImage ? NetworkImage(imageUrl) : null,
+                        onBackgroundImageError: hasImage ? (_, __) {} : null,
+                        child: hasImage
+                            ? null
+                            : Icon(Icons.person_rounded, color: Colors.grey[400], size: 24),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
