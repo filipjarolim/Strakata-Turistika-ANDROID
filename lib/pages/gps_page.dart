@@ -901,7 +901,9 @@ class _GpsPageState extends State<GpsPage>
                     onPressed: () async {
                       final x = await ImagePicker().pickImage(
                         source: ImageSource.camera,
-                        imageQuality: 85,
+                        maxWidth: 2560,
+                        maxHeight: 2560,
+                        imageQuality: 90,
                         requestFullMetadata: false,
                       );
                       if (x != null) setSheet(() => photoFile = x);

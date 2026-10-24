@@ -1,6 +1,7 @@
 import 'dart:math';
 import '../services/database/database_service.dart';
 import '../models/visit_data.dart';
+import '../utils/published_standings.dart';
 import '../utils/type_converter.dart';
 
 class VisitRepository {
@@ -37,7 +38,15 @@ class VisitRepository {
   }) async {
     try {
       final query = <String, dynamic>{};
-      if (seasonYear != null) query['seasonYear'] = seasonYear;
+      final and = <Map<String, dynamic>>[];
+      if (seasonYear != null) {
+        and.add({
+          '\$or': [
+            {'seasonYear': seasonYear},
+            {'year': seasonYear},
+          ],
+        });
+      }
       if (userId != null) query['userId'] = userId;
       
       // Handle state filtering logic
@@ -54,15 +63,24 @@ class VisitRepository {
         if (safe.isNotEmpty) {
           final regex = '.*$safe.*';
           const options = 'i';
-          query['\$or'] = [
-            {'routeTitle': {'\$regex': regex, '\$options': options}},
-            {'visitedPlaces': {'\$regex': regex, '\$options': options}},
-            {'fullName': {'\$regex': regex, '\$options': options}},
-            {'extraPoints.fullName': {'\$regex': regex, '\$options': options}},
-            {'extraPoints.Příjmení a jméno': {'\$regex': regex, '\$options': options}},
-          ];
+          and.add({
+            '\$or': [
+              {'routeTitle': {'\$regex': regex, '\$options': options}},
+              {'visitedPlaces': {'\$regex': regex, '\$options': options}},
+              {'fullName': {'\$regex': regex, '\$options': options}},
+              {'extraPoints.fullName': {'\$regex': regex, '\$options': options}},
+              {'extraPoints.Příjmení a jméno': {'\$regex': regex, '\$options': options}},
+            ],
+          });
         }
       }
+      if (onlyApproved) {
+        final testingIds = await _testingSeasonIds();
+        if (testingIds.isNotEmpty) {
+          and.add({'seasonId': {'\$nin': testingIds}});
+        }
+      }
+      if (and.isNotEmpty) query['\$and'] = and;
 
       final totalCount = await _dbService.count(_collectionName, query);
       final docs = await _dbService.find(
@@ -94,11 +112,25 @@ class VisitRepository {
     bool sortByVisits = false,
   }) async {
     try {
+      final fromSheet = await _leaderboardFromPublishedSheet(
+        season: season,
+        page: page,
+        limit: limit,
+        searchQuery: searchQuery,
+        sortByVisits: sortByVisits,
+      );
+      if (fromSheet != null) return fromSheet;
+
+      final testingIds = await _testingSeasonIds();
       final pipeline = <Map<String, Object>>[
         {
           '\$match': {
-            'seasonYear': season,
+            '\$or': [
+              {'seasonYear': season},
+              {'year': season},
+            ],
             'state': 'APPROVED',
+            if (testingIds.isNotEmpty) 'seasonId': {'\$nin': testingIds},
           }
         },
         {
@@ -107,7 +139,7 @@ class VisitRepository {
                '\$ifNull': ['\$userId', {'\$ifNull': ['\$extraPoints.fullName', '\$fullName', 'Neznámý']}]
             },
             'normalizedName': {
-               '\$ifNull': ['\$extraPoints.fullName', {'\$ifNull': ['\$fullName', 'Neznámý']}]
+               '\$ifNull': ['\$user.name', {'\$ifNull': ['\$extraPoints.fullName', {'\$ifNull': ['\$fullName', 'Neznámý']}]}]
             }
           }
         },
@@ -119,25 +151,17 @@ class VisitRepository {
             'lastVisitDate': {'\$max': {'\$ifNull': ['\$visitDate', '\$createdAt']}},
             'userId': {'\$first': '\$userId'},
             'legacyName': {'\$first': '\$normalizedName'},
-          }
-        },
-        {
-          '\$lookup': {
-            'from': 'users',
-            'localField': 'userId',
-            'foreignField': '_id',
-            'as': 'userDocs'
-          }
-        },
-        {
-          '\$addFields': {
-            'userDoc': {'\$first': '\$userDocs'},
+            'user': {'\$first': '\$user'},
+            'dogName': {'\$first': '\$dogName'},
           }
         },
         {
           '\$addFields': {
             'displayName': {
-              '\$ifNull': ['\$userDoc.name', '\$legacyName']
+              '\$ifNull': ['\$user.name', '\$legacyName']
+            },
+            'dogName': {
+              '\$ifNull': ['\$user.dogName', '\$dogName']
             }
           }
         },
@@ -178,6 +202,55 @@ class VisitRepository {
     } catch (e) {
       print('❌ [VisitRepository] Error fetching leaderboard: $e');
       return {'data': [], 'total': 0, 'hasMore': false};
+    }
+  }
+
+  Future<List<String>> _testingSeasonIds() async {
+    try {
+      final rows = await _dbService.find('seasons', {'isTesting': true}, limit: 50);
+      return rows
+          .map((row) => (row['_id'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> _leaderboardFromPublishedSheet({
+    required int season,
+    required int page,
+    required int limit,
+    String? searchQuery,
+    required bool sortByVisits,
+  }) async {
+    try {
+      final docs = await _dbService.find(
+        'season_standings',
+        {'seasonYear': season},
+        limit: 5000,
+      );
+      if (docs.isEmpty) return null;
+      final rows = docs.map((doc) {
+        final points = doc['points'];
+        final rank = doc['rank'];
+        return PublishedStanding(
+          name: (doc['participantName'] ?? '').toString(),
+          points: points is num ? points.toDouble() : double.tryParse('$points') ?? 0,
+          rank: rank is num ? rank.toInt() : int.tryParse('$rank'),
+          dogName: doc['dogName']?.toString(),
+        );
+      }).where((row) => row.name.trim().isNotEmpty).toList();
+      if (rows.isEmpty) return null;
+      return pagePublishedStandings(
+        rows: rows,
+        page: page,
+        limit: limit,
+        searchQuery: searchQuery,
+        sortByVisits: sortByVisits,
+      );
+    } catch (_) {
+      return null;
     }
   }
 

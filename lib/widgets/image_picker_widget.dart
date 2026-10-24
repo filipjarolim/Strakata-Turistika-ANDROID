@@ -128,9 +128,9 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
 
     try {
       final List<XFile> images = await _picker.pickMultiImage(
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
+        maxWidth: 2560,
+        maxHeight: 2560,
+        imageQuality: 90,
         requestFullMetadata: false,
       );
 
@@ -153,9 +153,9 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
     try {
       final XFile? photo = await _picker.pickImage(
         source: ImageSource.camera,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
+        maxWidth: 2560,
+        maxHeight: 2560,
+        imageQuality: 90,
         requestFullMetadata: false,
       );
 

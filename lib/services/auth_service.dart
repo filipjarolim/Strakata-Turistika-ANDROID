@@ -78,7 +78,8 @@ class AuthService {
   static User? get currentUser => _currentUser;
   
   // Check if user is logged in
-  static bool get isLoggedIn => _currentUser != null;
+  static bool get isLoggedIn =>
+      _currentUser != null && _currentUser!.id.isNotEmpty;
   
   // Update current user (for profile updates)
   static void updateCurrentUser(User user) {
@@ -275,14 +276,14 @@ class AuthService {
   
   // Sign Out
   static Future<void> signOut() async {
+    // Lokální session pryč i když Google plugin spadne, jinak se uživatel
+    // po dalším startu načte znovu ze SharedPreferences.
+    _currentUser = null;
+    await _clearSessionFromStorage();
     try {
       await _googleSignIn.signOut();
-      _currentUser = null;
-      await _clearSessionFromStorage();
     } catch (e) {
       print('❌ Sign Out Error: $e');
-      // Always clear in-memory session even if plugin call failed.
-      _currentUser = null;
     }
   }
   

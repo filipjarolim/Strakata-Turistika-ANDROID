@@ -12,6 +12,7 @@ import '../widgets/strakata_editorial_background.dart';
 import '../widgets/ui/strakata_primitives.dart';
 import '../widgets/ui/strakata_motion.dart';
 import '../widgets/ui/web_mobile_section_card.dart';
+import '../utils/season_year.dart';
 
 class ResultsPage extends StatefulWidget {
   const ResultsPage({super.key});
@@ -389,7 +390,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
 
   Widget _buildTopSummary() {
     final season = selectedSeason;
-    final isCurrent = season != null && season == DateTime.now().year;
+    final isCurrent = season != null && season == seasonEndingYear(DateTime.now());
     
     final totalCompetitors = _leaders.length;
     final totalVisits = _leaders.fold<int>(0, (sum, entry) => sum + entry.visitsCount);

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -18,11 +17,9 @@ import '../services/auth_service.dart';
 import '../services/scoring_config_service.dart';
 import '../services/cloudinary_service.dart'; // Ensure this exists or use appropriate service
 import '../models/place_type_config.dart';
-import '../models/forms/extra_data_merge.dart';
 import '../widgets/forms/form_field_validator.dart';
 import '../services/route_backup_service.dart';
-import '../services/track_file_parser.dart';
-import '../utils/visit_scoring.dart';
+import '../utils/visit_submit.dart';
 
 class DynamicFormPage extends StatefulWidget {
   final String slug;
@@ -182,44 +179,19 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
     try {
       final summary =
           _formContext.trackingSummary ?? widget.trackingSummary;
+      final currentUser = AuthService.currentUser;
+      final priorPhotos = widget.existingVisit?.photos;
 
-      // 1. Calculate points
-      double points = 0.0;
+      ensureVisitCanBeSaved(
+        slug: widget.slug,
+        user: currentUser,
+        summary: summary,
+        newPhotoCount: _formContext.photoAttachments.length,
+        existingPhotoCount: priorPhotos?.length ?? 0,
+      );
+
       final scoringConfig = await ScoringConfigService().getConfig();
       final placeTypeConfigs = await PlaceTypeConfigService().getPlaceTypeConfigs();
-
-      // GPS/GPX summary, jinak ručně zadané km (screenshot) — musí se započítat stejně.
-      final scoredDistanceKm = resolveScoringDistanceKm(
-        summary: summary,
-        extraData: _formContext.extraData,
-      );
-      points += distancePointsForKm(
-        scoredDistanceKm,
-        scoringConfig.pointsPerKm,
-      );
-
-      // Place points — chybějící typ v DB nesmí zablokovat uložení celé návštěvy.
-      for (var place in _formContext.places) {
-        final matches = placeTypeConfigs.where((c) => c.name == place.type);
-        if (matches.isNotEmpty) {
-          points += matches.first.points;
-        } else {
-          points += scoringConfig.getPointsForPlaceType(place.type);
-        }
-      }
-
-      if (widget.slug == 'screenshot-upload' &&
-          _formContext.photoAttachments.isEmpty) {
-        throw Exception(
-          'Nahrajte prosím alespoň jeden screenshot mapy nebo záznamu jako doklad o absolvované trase.',
-        );
-      }
-
-      // 2. Prepare VisitData object
-      final currentUser = AuthService.currentUser;
-      if (currentUser == null || currentUser.id.isEmpty) {
-        throw Exception('Pro uložení návštěvy se musíte přihlásit.');
-      }
 
       List<Map<String, dynamic>>? photos;
       if (_formContext.photoAttachments.isNotEmpty) {
@@ -232,7 +204,6 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
           throw Exception('Nahrání fotografií selhalo: ${e.toString().replaceFirst(RegExp(r"^Exception:\s*"), "")}');
         }
       }
-      final priorPhotos = widget.existingVisit?.photos;
       if ((photos == null || photos.isEmpty) && priorPhotos != null && priorPhotos.isNotEmpty) {
         photos = priorPhotos.map((e) => Map<String, dynamic>.from(e)).toList();
       } else if (photos != null && priorPhotos != null && priorPhotos.isNotEmpty) {
@@ -242,39 +213,6 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         ];
       }
 
-      final routeMap = summary != null ? routePayloadForStorage(summary) : null;
-
-      final extraForVisit = Map<String, dynamic>.from(_formContext.extraData);
-      mergeComputedRouteMetricsIntoExtraData(extraForVisit, summary);
-
-      String? routeLinkStr;
-      if (summary != null && summary.trackPoints.length >= 2) {
-        final forLink = downsampleTrackPoints(summary.trackPoints);
-        routeLinkStr = jsonEncode(
-          forLink.map((p) => {'lat': p.latitude, 'lng': p.longitude}).toList(),
-        );
-      }
-
-      final double? distanceKmTop = scoredDistanceKm != null
-          ? double.parse(scoredDistanceKm.toStringAsFixed(4))
-          : (resolveScoringDistanceKm(extraData: extraForVisit) ??
-              widget.existingVisit?.distanceKm);
-      final int? durationMinTop = summary != null
-          ? (summary.duration.inSeconds / 60).ceil()
-          : widget.existingVisit?.durationMinutes;
-
-      final mergedExtra = Map<String, dynamic>.from(widget.existingVisit?.extraPoints ?? {});
-      mergedExtra['source'] = widget.slug == 'gpx-upload'
-          ? 'gpx_upload'
-          : (widget.slug == 'screenshot-upload' ? 'screenshot' : 'gps_tracking');
-      if (distanceKmTop != null) {
-        mergedExtra['distanceKm'] = distanceKmTop;
-        mergedExtra['distance'] = distanceKmTop;
-      }
-      if (durationMinTop != null) {
-        mergedExtra['elapsedTime'] = durationMinTop;
-      }
-
       List<Place> placesToSave = _formContext.places;
       try {
         placesToSave = await _uploadLocalPlacePhotos(placesToSave);
@@ -282,28 +220,20 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         throw Exception('Nahrání fotek bodovaných míst selhalo: $e');
       }
 
-      final visit = VisitData(
-        id: widget.existingVisit?.id ?? '',
-        userId: currentUser.id,
-        user: {'name': currentUser.name, 'email': currentUser.email, 'image': currentUser.image},
-        year: _formContext.visitDate.year,
+      final visit = buildPendingVisit(
+        slug: widget.slug,
+        user: currentUser!,
         visitDate: _formContext.visitDate,
-        createdAt: widget.existingVisit?.createdAt ?? DateTime.now(),
-        state: VisitState.PENDING_REVIEW,
-        points: points,
-        routeTitle: _formContext.routeTitle ?? 'Trasa ${DateTime.now().day}.${DateTime.now().month}.',
-        routeDescription: _formContext.routeDescription ?? '',
-        visitedPlaces: placesToSave.map((p) => p.name).join(', '),
-        dogName: extraForVisit['dog_name']?.toString() ?? currentUser.dogName,
-        dogNotAllowed: _formContext.dogNotAllowed ? 'true' : null,
-        routeLink: routeLinkStr,
-        extraData: extraForVisit,
-        photos: photos,
-        route: routeMap,
+        routeTitle: _formContext.routeTitle,
+        routeDescription: _formContext.routeDescription,
+        dogNotAllowed: _formContext.dogNotAllowed,
+        extraData: _formContext.extraData,
         places: placesToSave,
-        extraPoints: mergedExtra,
-        distanceKm: distanceKmTop,
-        durationMinutes: durationMinTop,
+        summary: summary,
+        scoring: scoringConfig,
+        placeTypes: placeTypeConfigs,
+        photos: photos,
+        existingVisit: widget.existingVisit,
       );
 
       final savedId = await VisitRepository().saveVisit(visit);

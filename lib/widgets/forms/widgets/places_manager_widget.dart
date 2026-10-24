@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import '../../../models/place_type_config.dart';
 import '../../../models/visit_data.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../services/nominatim_service.dart';
+import '../../../utils/place_label.dart';
 import '../../../widgets/maps/shared_map_widget.dart';
 import '../../../widgets/photo_viewer.dart';
 import '../../../widgets/ui/app_button.dart';
@@ -147,7 +149,7 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
             child: Icon(config.icon, color: config.color, size: 20),
           ),
           title: Text(
-            place.name.isEmpty ? 'Bez názvu' : place.name,
+            place.name.isEmpty ? 'Bez názvu' : friendlyPlaceTitle(place.name),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.libreFranklin(
@@ -233,6 +235,8 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
         : const LatLng(49.8175, 15.4730);
     double mapZoom = (pickLat != null && pickLng != null) ? 15.0 : 13.0;
     var didScheduleGpsBootstrap = false;
+    var searchListenReady = false;
+    Timer? searchTimer;
 
     showFormModalSheet(
       context: context,
@@ -273,7 +277,7 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
             final q = searchController.text.trim();
             if (q.length < 2) {
               setSheetState(() {
-                searchError = 'Napište alespoň 2 znaky.';
+                searchError = null;
                 searchHits = [];
               });
               return;
@@ -300,9 +304,20 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
             }
           }
 
+          if (!searchListenReady) {
+            searchListenReady = true;
+            searchController.addListener(() {
+              searchTimer?.cancel();
+              searchTimer = Timer(const Duration(milliseconds: 280), () {
+                if (!sheetContext.mounted) return;
+                runSearch();
+              });
+            });
+          }
+
           void applyHit(NominatimSearchHit h) {
             setSheetState(() {
-              nameController.text = h.displayName;
+              nameController.text = h.label;
               pickLat = h.lat;
               pickLng = h.lng;
               mapCenter = LatLng(h.lat, h.lng);
@@ -326,7 +341,8 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
             if (!context.mounted) return;
             setSheetState(() {
               reverseLoading = false;
-              if (nameController.text.trim().isEmpty) {
+              final current = nameController.text.trim();
+              if (current.isEmpty || isHouseLikeLabel(current) || current.startsWith('Místo na mapě')) {
                 nameController.text = label;
               }
             });
@@ -363,7 +379,8 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
             if (!context.mounted) return;
             setSheetState(() {
               reverseLoading = false;
-              if (nameController.text.trim().isEmpty) {
+              final current = nameController.text.trim();
+              if (current.isEmpty || isHouseLikeLabel(current) || current.startsWith('Místo na mapě')) {
                 nameController.text = label;
               }
             });
@@ -395,9 +412,9 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
             try {
               final x = await ImagePicker().pickImage(
                 source: source,
-                maxWidth: 1920,
-                maxHeight: 1080,
-                imageQuality: 88,
+                maxWidth: 2560,
+                maxHeight: 2560,
+                imageQuality: 90,
                 requestFullMetadata: false,
               );
               if (x == null) return;
@@ -637,11 +654,22 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                                 contentPadding: EdgeInsets.zero,
                                 leading: const Icon(Icons.place_outlined, size: 18),
                                 title: Text(
-                                  h.displayName,
-                                  maxLines: 2,
+                                  h.label,
+                                  maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.libreFranklin(fontSize: 13),
+                                  style: GoogleFonts.libreFranklin(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
+                                subtitle: h.detail.isEmpty
+                                    ? null
+                                    : Text(
+                                        h.detail,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.libreFranklin(fontSize: 12),
+                                      ),
                                 onTap: () => applyHit(h),
                               );
                             },
@@ -706,35 +734,33 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                                     ),
                                 ],
                               ),
-                              if (reverseLoading)
-                                Positioned.fill(
-                                  child: ColoredBox(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    child: const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  ),
-                                ),
                               Positioned(
                                 left: 10,
+                                right: 72,
                                 bottom: 10,
                                 child: DecoratedBox(
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.92),
-                                    borderRadius: BorderRadius.circular(8),
+                                    color: Colors.white.withValues(alpha: 0.94),
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 10,
-                                      vertical: 6,
+                                      vertical: 7,
                                     ),
                                     child: Text(
-                                      hasPick
-                                          ? 'Poloha vybraná'
-                                          : 'Klepněte do mapy',
+                                      reverseLoading
+                                          ? 'Hledám název…'
+                                          : hasPick
+                                              ? (nameController.text.trim().isEmpty
+                                                  ? 'Poloha vybraná'
+                                                  : friendlyPlaceTitle(nameController.text))
+                                              : 'Klepněte do mapy',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.libreFranklin(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
                                         color: hasPick
                                             ? const Color(0xFF166534)
                                             : AppColors.textSecondary,

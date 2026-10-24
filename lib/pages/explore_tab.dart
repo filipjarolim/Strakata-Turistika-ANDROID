@@ -10,6 +10,7 @@ import '../pages/results_visit_detail_page.dart';
 import '../pages/user_visits_page.dart';
 import '../repositories/visit_repository.dart';
 import '../models/visit_data.dart';
+import '../utils/season_year.dart';
 import '../widgets/tab_switch.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/strakata_editorial_background.dart';
@@ -73,7 +74,7 @@ class _QuickSeasonStats extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: _StatPill(
         label: 'Aktivní sezóna',
-        value: DateTime.now().year.toString(),
+        value: seasonEndingYear(DateTime.now()).toString(),
       ),
     );
   }
@@ -498,7 +499,7 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
     }
 
     try {
-      final season = DateTime.now().year;
+      final season = seasonEndingYear(DateTime.now());
       final currentUser = AuthService.currentUser;
       final result = await _visitRepository.getVisits(
         page: 1,
@@ -540,7 +541,7 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
                     builder: (_) => UserVisitsPage(
                       userId: u.id,
                       userName: u.name,
-                      seasonYear: DateTime.now().year,
+                      seasonYear: seasonEndingYear(DateTime.now()),
                       onlyApproved: false,
                     ),
                   ),
@@ -611,7 +612,7 @@ class ActivityItem extends StatelessWidget {
       child: InkWell(
         onTap: () {
           final u = AuthService.currentUser;
-          final season = visit.year > 0 ? visit.year : DateTime.now().year;
+          final season = visit.year > 0 ? visit.year : seasonEndingYear(DateTime.now());
           Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => ResultsVisitDetailPage(

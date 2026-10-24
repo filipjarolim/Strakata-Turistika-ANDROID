@@ -1,3 +1,4 @@
+import '../utils/season_year.dart';
 import '../utils/type_converter.dart';
 
 enum UserRole {
@@ -388,7 +389,7 @@ class VisitData {
         dogNotAllowed: map['dogNotAllowed']?.toString(),
         routeLink: map['routeLink']?.toString(),
         route: routeMap,
-        year: TypeConverter.toIntWithDefault(map['seasonYear'], parsedDate.year),
+        year: TypeConverter.toIntWithDefault(map['seasonYear'], seasonEndingYear(parsedDate)),
         extraPoints: Map<String, dynamic>.from(extra),
         extraData: extraDataMap.isEmpty ? null : extraDataMap,
         places: (map['places'] as List<dynamic>?)
@@ -418,7 +419,7 @@ class VisitData {
         id: map['_id']?.toString() ?? 'error',
         points: 0,
         visitedPlaces: 'Error parsing data',
-        year: DateTime.now().year,
+        year: seasonEndingYear(DateTime.now()),
         extraPoints: {},
         state: VisitState.REJECTED,
       );

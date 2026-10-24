@@ -14,6 +14,7 @@ import '../widgets/strakata_editorial_background.dart';
 import '../services/logging_service.dart';
 import '../repositories/visit_repository.dart';
 import '../services/auth_service.dart';
+import '../utils/season_year.dart';
 import '../services/database/database_service.dart';
 import '../services/cloudinary_service.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,7 +36,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   List<VisitData> _userVisits = [];
   bool _isLoading = true;
   VisitState? _activeState;
-  int _selectedYear = DateTime.now().year;
+  int _selectedYear = seasonEndingYear(DateTime.now());
 
   @override
   void initState() {
@@ -89,7 +90,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   List<int> _seasonYears() {
     final years = _userVisits.map((v) => v.year).where((y) => y > 0).toSet().toList()..sort((a, b) => b.compareTo(a));
-    if (years.isEmpty) return [DateTime.now().year];
+    if (years.isEmpty) return [seasonEndingYear(DateTime.now())];
     return years;
   }
 
