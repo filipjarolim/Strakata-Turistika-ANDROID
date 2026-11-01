@@ -1,5 +1,6 @@
 import 'dart:math';
 import '../services/database/database_service.dart';
+import '../models/leaderboard_entry.dart';
 import '../models/visit_data.dart';
 import '../utils/published_standings.dart';
 import '../utils/type_converter.dart';
@@ -136,11 +137,10 @@ class VisitRepository {
         {
           '\$addFields': {
             'groupKey': {
-               '\$ifNull': ['\$userId', {'\$ifNull': ['\$extraPoints.fullName', '\$fullName', 'Neznámý']}]
+              '\$ifNull': ['\$userId', _storedParticipantName()],
             },
-            'normalizedName': {
-               '\$ifNull': ['\$user.name', {'\$ifNull': ['\$extraPoints.fullName', {'\$ifNull': ['\$fullName', 'Neznámý']}]}]
-            }
+            // Jméno z účtu doplní _applyAccountNames. Tady jsou historická pole jako na webu.
+            'normalizedName': _storedParticipantName(),
           }
         },
         {
@@ -150,19 +150,28 @@ class VisitRepository {
             'visitsCount': {'\$sum': 1},
             'lastVisitDate': {'\$max': {'\$ifNull': ['\$visitDate', '\$createdAt']}},
             'userId': {'\$first': '\$userId'},
-            'legacyName': {'\$first': '\$normalizedName'},
+            'legacyName': {
+              '\$max': {
+                '\$cond': [
+                  {
+                    '\$in': [
+                      {'\$toLower': {'\$ifNull': ['\$normalizedName', '']}},
+                      ['neznámý', 'neznámý turista', 'neznámý uživatel', 'unknown user'],
+                    ],
+                  },
+                  null,
+                  '\$normalizedName',
+                ],
+              },
+            },
             'user': {'\$first': '\$user'},
             'dogName': {'\$first': '\$dogName'},
           }
         },
         {
           '\$addFields': {
-            'displayName': {
-              '\$ifNull': ['\$user.name', '\$legacyName']
-            },
-            'dogName': {
-              '\$ifNull': ['\$user.dogName', '\$dogName']
-            }
+            'displayName': {'\$ifNull': ['\$legacyName', 'Neznámý']},
+            'dogName': {'\$ifNull': ['\$user.dogName', '\$dogName']},
           }
         },
         if (searchQuery != null && searchQuery.isNotEmpty) 
@@ -193,6 +202,7 @@ class VisitRepository {
       final metadata = (formattedResult['metadata'] as List).cast<Map>();
       final total = metadata.isNotEmpty ? (metadata.first['total'] ?? 0) : 0;
       final data = (formattedResult['data'] as List).cast<Map<String, dynamic>>();
+      await _applyAccountNames(data);
 
       return {
         'data': data,
@@ -202,6 +212,92 @@ class VisitRepository {
     } catch (e) {
       print('❌ [VisitRepository] Error fetching leaderboard: $e');
       return {'data': [], 'total': 0, 'hasMore': false};
+    }
+  }
+
+  /// Jméno uložené na výletě. Jméno z účtu se doplní zvlášť, protože join uživatelů API nepustí.
+  Map<String, Object> _storedParticipantName() {
+    Map<String, Object> usable(String field) {
+      return {
+        '\$let': {
+          'vars': {
+            'raw': {
+              '\$trim': {'input': {'\$ifNull': [field, '']}},
+            },
+          },
+          'in': {
+            '\$cond': [
+              {
+                '\$in': [
+                  {'\$toLower': '\$\$raw'},
+                  ['', 'neznámý', 'neznámý turista', 'neznámý uživatel', 'unknown user'],
+                ],
+              },
+              null,
+              '\$\$raw',
+            ],
+          },
+        },
+      };
+    }
+
+    return {
+      '\$ifNull': [
+        usable('\$extraData.rankingParticipantName'),
+        usable('\$extraData.historicParticipantName'),
+        usable('\$extraData.fullName'),
+        usable('\$extraPoints.fullName'),
+        usable('\$extraPoints.Příjmení a jméno'),
+        usable('\$fullName'),
+        usable('\$user.name'),
+        'Neznámý',
+      ],
+    };
+  }
+
+  /// Výlet z aplikace má jen userId. Jméno je na účtu, web ho bere přes join.
+  Future<void> _applyAccountNames(List<Map<String, dynamic>> rows) async {
+    final ids = rows
+        .map((row) => (row['userId'] ?? '').toString().trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    if (ids.isEmpty) return;
+
+    try {
+      final users = await _dbService.find(
+        'users',
+        {'_id': {'\$in': ids}},
+        limit: ids.length,
+      );
+      final byId = <String, Map<String, dynamic>>{};
+      for (final user in users) {
+        final id = (user['_id'] ?? user['id'] ?? '').toString();
+        if (id.isNotEmpty) byId[id] = user;
+      }
+
+      for (final row in rows) {
+        final user = byId[(row['userId'] ?? '').toString()];
+        if (user == null) continue;
+        final accountName = (user['name'] ?? '').toString();
+        if (!isUsableParticipantName(accountName)) continue;
+
+        row['displayName'] = accountName.trim();
+        final embedded = row['user'] is Map
+            ? Map<String, dynamic>.from(row['user'] as Map)
+            : <String, dynamic>{};
+        embedded['name'] = accountName.trim();
+        final dogName = user['dogName']?.toString().trim() ?? '';
+        if (dogName.isNotEmpty) {
+          embedded['dogName'] = dogName;
+          row['dogName'] = dogName;
+        }
+        final image = user['image']?.toString().trim() ?? '';
+        if (image.isNotEmpty) embedded['image'] = image;
+        row['user'] = embedded;
+      }
+    } catch (e) {
+      print('❌ [VisitRepository] Nepodařilo se doplnit jména účtů: $e');
     }
   }
 

@@ -1,3 +1,17 @@
+/// Web (`resolveParticipantName`) prázdné a zástupné jméno přeskočí.
+bool isUsableParticipantName(String value) {
+  switch (value.trim().toLowerCase()) {
+    case '':
+    case 'unknown user':
+    case 'neznámý':
+    case 'neznámý turista':
+    case 'neznámý uživatel':
+      return false;
+    default:
+      return true;
+  }
+}
+
 class LeaderboardEntry {
   final String userId; // may be a real userId or a display key (full name) for legacy
   final String userName;
@@ -19,13 +33,16 @@ class LeaderboardEntry {
 
   factory LeaderboardEntry.fromMap(Map<String, dynamic> map) {
     // Aggregation returns `userDoc` from $lookup on `users`; legacy payloads may use `user`.
-    final user = (map['user'] ?? map['userDoc']) as Map<String, dynamic>?;
+    final rawUser = map['user'] ?? map['userDoc'];
+    final user = rawUser is Map ? Map<String, dynamic>.from(rawUser) : null;
     final String displayName = (map['displayName'] ?? '').toString();
+    final String accountName = (user?['name'] ?? '').toString();
+    final String explicitName = (map['userName'] ?? '').toString();
     return LeaderboardEntry(
       userId: (map['userId'] ?? map['firstUserId'] ?? map['_id'] ?? '').toString(),
-      userName: (user != null ? (user['name'] ?? '') : displayName).toString(),
+      userName: _firstUsableName([accountName, explicitName, displayName]),
       userImage: user?['image']?.toString(),
-      dogName: user?['dogName']?.toString(),
+      dogName: _firstFilled([map['dogName'], user?['dogName']]),
       totalPoints: _parsePointsDouble(map['totalPoints']) ?? 0.0,
       visitsCount: _parseInt(map['visitsCount']) ?? 0,
       lastVisitDate: map['lastVisitDate'] != null
@@ -34,6 +51,25 @@ class LeaderboardEntry {
               : DateTime.tryParse(map['lastVisitDate'].toString()))
           : null,
     );
+  }
+
+  static String _firstUsableName(List<String> candidates) {
+    for (final candidate in candidates) {
+      if (isUsableParticipantName(candidate)) return candidate.trim();
+    }
+    for (final candidate in candidates) {
+      final trimmed = candidate.trim();
+      if (trimmed.isNotEmpty) return trimmed;
+    }
+    return '';
+  }
+
+  static String? _firstFilled(List<dynamic> values) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return null;
   }
 
   static int? _parseInt(dynamic value) {
