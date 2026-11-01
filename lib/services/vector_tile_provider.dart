@@ -28,6 +28,10 @@ class VectorTileProvider extends TileProvider {
   static Box? _labelLayerBox;
   static Box? _metadataBox;
   
+  /// OSM dlaždice bez vlastního User-Agent často odmítá.
+  static const defaultUserAgent =
+      'StrakataTuristikaAndroid/1.1 (cz.strakata.turistika.strakataturistikaandroidapp)';
+
   VectorTileProvider({
     required this.urlTemplate,
     Map<String, String>? headers,
@@ -35,7 +39,10 @@ class VectorTileProvider extends TileProvider {
     this.minZoom = 5, // Start from zoom 5 for maximum detail
     this.enableCompression = true,
     this.enableLayering = true,
-  }) : headers = Map<String, String>.from(headers ?? const {});
+  }) : headers = <String, String>{
+          'User-Agent': defaultUserAgent,
+          ...?headers,
+        };
 
   /// Initialize the vector tile storage system
   static Future<void> initialize() async {
@@ -447,12 +454,14 @@ class ResilientCachedTileImageProvider extends ImageProvider<ResilientCachedTile
     final cached = VectorTileProvider.getCachedTileSync(key.tileKey, key.layer);
     // Čerstvá dlaždice jde rovnou z telefonu — bez signálu se mapa nesmí čekat na síť.
     if (cached != null && cached.isValid) {
-      final bytes = bytesFromCachedTile(cached);
-      if (bytes != null) return await ui.instantiateImageCodec(bytes);
+      final codec = await _codecFromBytes(bytesFromCachedTile(cached));
+      if (codec != null) return codec;
     }
 
     try {
-      final response = await http.get(Uri.parse(key.url), headers: key.headers);
+      final response = await http
+          .get(Uri.parse(key.url), headers: key.headers)
+          .timeout(const Duration(seconds: 15));
       if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
         try {
           final data = VectorTileData.compress(response.bodyBytes, key.layer);
@@ -474,14 +483,30 @@ class ResilientCachedTileImageProvider extends ImageProvider<ResilientCachedTile
             });
           }
         } catch (_) {}
-        return await ui.instantiateImageCodec(response.bodyBytes);
+        final codec = await _codecFromBytes(response.bodyBytes);
+        if (codec != null) return codec;
       }
-    } catch (_) {}
+    } catch (e) {
+      assert(() {
+        print('Failed to load tile: ${key.url}. Error: $e');
+        return true;
+      }());
+    }
 
-    final fallback = bytesFromCachedTile(cached);
-    if (fallback != null) return await ui.instantiateImageCodec(fallback);
+    final fallback = await _codecFromBytes(bytesFromCachedTile(cached));
+    if (fallback != null) return fallback;
 
-    throw Exception('Tile unavailable: ${key.url}');
+    // Prázdná dlaždice místo výjimky. ImageProvider bez listeneru by z ní udělal pád.
+    return ui.instantiateImageCodec(_transparentTilePng);
+  }
+
+  static Future<ui.Codec?> _codecFromBytes(Uint8List? bytes) async {
+    if (bytes == null || bytes.isEmpty) return null;
+    try {
+      return await ui.instantiateImageCodec(bytes);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -546,6 +571,16 @@ class VectorTileData {
     return age.inDays < 30;
   }
 }
+
+/// 1×1 průhledné PNG. Nepodařená dlaždice se vykreslí jako prázdné místo.
+final Uint8List _transparentTilePng = Uint8List.fromList(const <int>[
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+  0x0B, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0x00, 0x02, 0x00,
+  0x00, 0x05, 0x00, 0x01, 0x7A, 0x5E, 0xAB, 0x3F, 0x00, 0x00, 0x00, 0x00,
+  0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+]);
 
 /// Dlaždice uložená v telefonu, i když už je starší než 30 dní.
 Uint8List? bytesFromCachedTile(VectorTileData? cached) {

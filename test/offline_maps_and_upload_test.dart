@@ -142,6 +142,22 @@ void main() {
       expect(bytesFromCachedTile(null), isNull);
     });
 
+    test('dlaždice jdou na OSM s vlastním User-Agent', () {
+      final provider = VectorTileProvider(
+        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      );
+      expect(
+        provider.headers['User-Agent'],
+        contains('cz.strakata.turistika.strakataturistikaandroidapp'),
+      );
+
+      final custom = VectorTileProvider(
+        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        headers: {'User-Agent': 'CustomAgent/2'},
+      );
+      expect(custom.headers['User-Agent'], 'CustomAgent/2');
+    });
+
     test('podrobné stažení bere každou dlaždici, ne jen každou n-tou', () {
       expect(MapyCzDownloadService.tileStepForZoom(12), 1);
       expect(MapyCzDownloadService.tileStepForZoom(15), 1);
