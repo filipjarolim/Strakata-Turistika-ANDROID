@@ -455,13 +455,6 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
               setSheetState(() => saveError = 'Zadejte název místa.');
               return;
             }
-            if (pickLat == null || pickLng == null) {
-              setSheetState(
-                () => saveError =
-                    'Vyberte polohu na mapě, vyhledáním nebo aktuální polohou.',
-              );
-              return;
-            }
 
             final newPlace = Place(
               id: existingPlace?.id ??
@@ -682,7 +675,7 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                       Row(
                         children: [
                           Text(
-                            'Poloha na mapě',
+                            'Poloha na mapě (volitelné)',
                             style: GoogleFonts.libreFranklin(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/app_colors.dart';
 import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
+import '../models/place_type_config.dart';
 import '../models/tracking_summary.dart';
 import '../models/visit_data.dart';
 import 'dynamic_form_page.dart';
@@ -40,6 +41,7 @@ class _ResultsVisitDetailPageState extends State<ResultsVisitDetailPage> {
   final VisitRepository _repository = VisitRepository();
   late VisitData _visit;
   bool _loading = true;
+  Map<String, String> _typeLabels = {};
 
   @override
   void initState() {
@@ -56,9 +58,18 @@ class _ResultsVisitDetailPageState extends State<ResultsVisitDetailPage> {
     }
     try {
       final full = await _repository.getVisitById(id);
+      final labels = <String, String>{};
+      try {
+        final configs = await PlaceTypeConfigService().getPlaceTypeConfigs();
+        for (final config in configs) {
+          final label = config.label.trim();
+          if (label.isNotEmpty) labels[config.name] = label;
+        }
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         if (full != null) _visit = full;
+        _typeLabels = labels;
         _loading = false;
       });
     } catch (e) {
@@ -407,7 +418,9 @@ class _ResultsVisitDetailPageState extends State<ResultsVisitDetailPage> {
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
-                  place.type,
+                  _typeLabels[place.type]?.trim().isNotEmpty == true
+                      ? _typeLabels[place.type]!
+                      : place.type,
                   style: GoogleFonts.libreFranklin(
                     fontSize: 12,
                     color: AppColors.textTertiary,
