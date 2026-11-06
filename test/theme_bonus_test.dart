@@ -61,8 +61,20 @@ void main() {
     expect(result.matchedKeywords, ['babička / barunka / kněžna']);
   });
 
-  test('typ tématu bez slova v textu je 0', () {
-    expect(bonus(places: [place('Kladno', type: 'TEMA3')]).bonus, 0);
+  test('typ Téma měsíce bez slova je 1. část za 1 bod', () {
+    final result = bonus(places: [place('Kladno', type: 'TÉMA')]);
+    expect(result.bonus, 1);
+    expect(result.matchedKeywords, ['božena / němcová']);
+  });
+
+  test('typ Téma měsíce a slovo v názvu se nepočítají dvakrát', () {
+    final result = bonus(places: [place('Statek babička', type: 'TÉMA')]);
+    expect(result.bonus, 1);
+    expect(result.matchedKeywords, ['babička / barunka / kněžna']);
+  });
+
+  test('běžné místo bez slova je 0', () {
+    expect(bonus(places: [place('Kladno')]).bonus, 0);
   });
 
   test('lomítko bere kteroukoliv variantu a popis trasy taky', () {

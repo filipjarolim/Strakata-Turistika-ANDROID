@@ -107,6 +107,18 @@ ThemeBonusResult computeVisitThemeBonus({
     final normalizedCompleted = keyword.toLowerCase().trim();
     if (normalized.contains(normalizedCompleted)) completed.add(normalizedCompleted);
   }
+  final slots = places.where(isThemeSlotPlace).length;
+  final named = matched.where((keyword) => !completed.contains(keyword)).length;
+  var missing = slots - named;
+  if (missing > 0) {
+    for (final keyword in normalized) {
+      if (missing <= 0) break;
+      if (matched.contains(keyword) || completed.contains(keyword)) continue;
+      matched.add(keyword);
+      missing -= 1;
+    }
+  }
+
   final fresh = matched.where((keyword) => !completed.contains(keyword)).toList();
   if (fresh.isEmpty) {
     return const ThemeBonusResult(bonus: 0, matchedKeywords: []);
