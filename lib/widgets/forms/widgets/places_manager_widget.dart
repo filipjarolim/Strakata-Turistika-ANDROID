@@ -250,6 +250,7 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
     double mapZoom = (pickLat != null && pickLng != null) ? 15.0 : 13.0;
     var didScheduleGpsBootstrap = false;
     var searchListenReady = false;
+    var mapPickSeq = 0;
     Timer? searchTimer;
 
     showFormModalSheet(
@@ -343,22 +344,22 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
           }
 
           Future<void> onMapTap(LatLng p) async {
+            final seq = ++mapPickSeq;
             setSheetState(() {
               pickLat = p.latitude;
               pickLng = p.longitude;
               mapCenter = p;
               reverseLoading = true;
+              searchHits = [];
+              searchError = null;
               saveError = null;
             });
             final label =
                 await NominatimService.reverseGeocode(p.latitude, p.longitude);
-            if (!context.mounted) return;
+            if (!context.mounted || seq != mapPickSeq) return;
             setSheetState(() {
               reverseLoading = false;
-              final current = nameController.text.trim();
-              if (current.isEmpty || isHouseLikeLabel(current) || current.startsWith('Místo na mapě')) {
-                nameController.text = label;
-              }
+              if (label.trim().isNotEmpty) nameController.text = label;
             });
           }
 
@@ -377,6 +378,7 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
               }
               return;
             }
+            final seq = ++mapPickSeq;
             setSheetState(() {
               locating = false;
               pickLat = loc.latitude;
@@ -384,19 +386,17 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
               mapCenter = loc;
               mapZoom = 16;
               reverseLoading = true;
+              searchHits = [];
               saveError = null;
             });
             final label = await NominatimService.reverseGeocode(
               loc.latitude,
               loc.longitude,
             );
-            if (!context.mounted) return;
+            if (!context.mounted || seq != mapPickSeq) return;
             setSheetState(() {
               reverseLoading = false;
-              final current = nameController.text.trim();
-              if (current.isEmpty || isHouseLikeLabel(current) || current.startsWith('Místo na mapě')) {
-                nameController.text = label;
-              }
+              if (label.trim().isNotEmpty) nameController.text = label;
             });
           }
 
@@ -559,6 +559,13 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
+                            ChoiceChip(
+                              selected: selectedTypeName == 'TÉMA',
+                              label: const Text('Téma měsíce'),
+                              onSelected: (_) => setSheetState(
+                                () => selectedTypeName = 'TÉMA',
+                              ),
+                            ),
                             ..._placeTypes
                                 .where(
                                   (t) => _quickChipTypeNames.contains(t.name),

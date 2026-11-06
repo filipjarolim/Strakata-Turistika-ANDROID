@@ -96,7 +96,7 @@ class _MonthlyThemeWidgetState extends State<MonthlyThemeWidget> {
             return FormSectionCard(
               title: widget.field.label,
               subtitle:
-                  'Přehled tématu $monthLabel. Slovo napište do názvu nebo popisu místa. První nové slovo v měsíci je 1. část.',
+                  'Přehled tématu $monthLabel. Přidejte místo typu Téma měsíce a slovo napište do názvu nebo poznámky. První nové slovo v měsíci je 1. část.',
               icon: Icons.palette_outlined,
               child: Wrap(
                 spacing: 8,
