@@ -19,6 +19,7 @@ import '../services/cloudinary_service.dart'; // Ensure this exists or use appro
 import '../models/place_type_config.dart';
 import '../widgets/forms/form_field_validator.dart';
 import '../services/route_backup_service.dart';
+import '../utils/theme_month.dart';
 import '../utils/visit_submit.dart';
 
 class DynamicFormPage extends StatefulWidget {
@@ -220,9 +221,15 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         throw Exception('Nahrání fotek bodovaných míst selhalo: $e');
       }
 
+      final themeKeywords = await loadMonthlyThemeKeywords(_formContext.visitDate);
+      final themeHistory = await loadThemeMonthHistory(
+        userId: currentUser!.id,
+        visitDate: _formContext.visitDate,
+        excludeVisitId: widget.existingVisit?.id,
+      ).catchError((_) => ThemeMonthHistory.empty);
       final visit = buildPendingVisit(
         slug: widget.slug,
-        user: currentUser!,
+        user: currentUser,
         visitDate: _formContext.visitDate,
         routeTitle: _formContext.routeTitle,
         routeDescription: _formContext.routeDescription,
@@ -234,6 +241,9 @@ class _DynamicFormPageState extends State<DynamicFormPage> {
         placeTypes: placeTypeConfigs,
         photos: photos,
         existingVisit: widget.existingVisit,
+        monthlyThemeKeywords: themeKeywords,
+        completedThemeKeywords: themeHistory.keywords,
+        themeHistoryAmbiguous: themeHistory.ambiguous,
       );
 
       final savedId = await VisitRepository().saveVisit(visit);

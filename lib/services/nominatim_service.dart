@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../utils/place_label.dart';
 
-/// OpenStreetMap Nominatim (stejné API jako na webu v `PlacesManager.tsx`).
+/// Vyhledání místa přes Mapy.com. Klepnutí do mapy dál bere název z Nominatim.
 class NominatimService {
   static const _ua = 'StrakataTuristikaAndroid/1.0 (school project; contact via app)';
 
@@ -14,37 +14,30 @@ class NominatimService {
     final c = client ?? http.Client();
     try {
       final uri = Uri.parse(
-        'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&accept-language=cs&limit=6&q=${Uri.encodeQueryComponent(q)}',
+        'https://mapy.com/api/suggest?phrase=${Uri.encodeQueryComponent(q)}&lang=cs&count=6',
       );
       final res = await c.get(uri, headers: {'Accept': 'application/json', 'User-Agent': _ua});
       if (res.statusCode != 200) return [];
-      final list = jsonDecode(res.body) as List<dynamic>;
+      final decoded = jsonDecode(res.body);
+      final list = decoded is Map ? decoded['result'] : null;
+      if (list is! List) return [];
       final out = <NominatimSearchHit>[];
       for (final row in list) {
         if (row is! Map) continue;
-        final m = Map<String, dynamic>.from(row);
-        final displayName = (m['display_name'] as String?)?.trim() ?? '';
-        final address = NominatimAddress.fromMap(
-          m['address'] is Map ? Map<String, dynamic>.from(m['address'] as Map) : null,
-        );
-        final label = humanPlaceName(
-          name: m['name'] as String?,
-          displayName: displayName,
-          address: address,
-        );
-        final lat = double.tryParse('${m['lat']}');
-        final lon = double.tryParse('${m['lon']}');
+        final userData = row['userData'];
+        if (userData is! Map) continue;
+        final data = Map<String, dynamic>.from(userData);
+        final label = (data['suggestFirstRow'] as String?)?.trim() ?? '';
+        final detail = (data['suggestSecondRow'] as String?)?.trim() ?? '';
+        final lat = data['latitude'] is num ? (data['latitude'] as num).toDouble() : double.tryParse('${data['latitude']}');
+        final lon = data['longitude'] is num ? (data['longitude'] as num).toDouble() : double.tryParse('${data['longitude']}');
         if (label.isEmpty || lat == null || lon == null) continue;
         if (!lat.isFinite || !lon.isFinite) continue;
         out.add(
           NominatimSearchHit(
-            displayName: displayName,
+            displayName: detail.isEmpty ? label : '$label, $detail',
             label: label,
-            detail: humanPlaceDetail(
-              name: m['name'] as String?,
-              displayName: displayName,
-              address: address,
-            ),
+            detail: detail,
             lat: lat,
             lng: lon,
           ),

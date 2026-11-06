@@ -1,4 +1,5 @@
 import 'database/database_service.dart';
+import '../utils/theme_bonus.dart';
 import '../utils/type_converter.dart';
 
 class MonthlyThemeData {
@@ -24,10 +25,11 @@ class CompetitionDashboardService {
   /// výletu se předává datum návštěvy, aby se načetlo téma správného měsíce.
   Future<MonthlyThemeData?> getCurrentMonthlyTheme({DateTime? forDate}) async {
     final date = forDate ?? DateTime.now();
+    final calendar = pragueDate(date);
     try {
       final doc = await _db.findOne('monthly_themes', {
-        'year': date.year,
-        'month': date.month,
+        'year': calendar.year,
+        'month': calendar.month,
       });
       if (doc == null) return null;
       final rawKeywords = doc['keywords'] as List<dynamic>? ?? const [];
@@ -36,8 +38,8 @@ class CompetitionDashboardService {
           .where((e) => e.isNotEmpty)
           .toList();
       return MonthlyThemeData(
-        year: TypeConverter.toInt(doc['year']) ?? date.year,
-        month: TypeConverter.toInt(doc['month']) ?? date.month,
+        year: TypeConverter.toInt(doc['year']) ?? calendar.year,
+        month: TypeConverter.toInt(doc['month']) ?? calendar.month,
         keywords: keywords,
       );
     } catch (_) {

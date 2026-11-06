@@ -11,6 +11,9 @@ class ScoringConfig {
   final bool active;
   final DateTime updatedAt;
   final String? updatedBy;
+  /// Stejné výchozí hodnoty jako web: 1 bod za nové slovo, +2 za dokončení všech.
+  final double themeKeywordPoint;
+  final double themeAllKeywordsBonus;
 
   const ScoringConfig({
     required this.id,
@@ -21,6 +24,8 @@ class ScoringConfig {
     required this.active,
     required this.updatedAt,
     this.updatedBy,
+    this.themeKeywordPoint = 1,
+    this.themeAllKeywordsBonus = 2,
   });
 
   ScoringConfig copyWith({
@@ -32,6 +37,8 @@ class ScoringConfig {
     bool? active,
     DateTime? updatedAt,
     String? updatedBy,
+    double? themeKeywordPoint,
+    double? themeAllKeywordsBonus,
   }) => ScoringConfig(
         id: id ?? this.id,
         pointsPerKm: pointsPerKm ?? this.pointsPerKm,
@@ -41,6 +48,8 @@ class ScoringConfig {
         active: active ?? this.active,
         updatedAt: updatedAt ?? this.updatedAt,
         updatedBy: updatedBy ?? this.updatedBy,
+        themeKeywordPoint: themeKeywordPoint ?? this.themeKeywordPoint,
+        themeAllKeywordsBonus: themeAllKeywordsBonus ?? this.themeAllKeywordsBonus,
       );
 
   Map<String, dynamic> toMap() => {
@@ -51,6 +60,8 @@ class ScoringConfig {
         'requireAtLeastOnePlace': requireAtLeastOnePlace,
         'placeTypePoints': placeTypePoints,
         'active': active,
+        'themeKeywordPoint': themeKeywordPoint,
+        'themeAllKeywordsBonus': themeAllKeywordsBonus,
         // DateTime → {$date} → BSON Date; ISO string by rozbil Prisma na webu.
         'updatedAt': updatedAt,
         'updatedBy': updatedBy,
@@ -84,6 +95,11 @@ class ScoringConfig {
       active: map['active'] == true,
       updatedAt: DateTime.tryParse(map['updatedAt']?.toString() ?? '') ?? DateTime.now(),
       updatedBy: map['updatedBy']?.toString(),
+      themeKeywordPoint: TypeConverter.toDoubleWithDefault(map['themeKeywordPoint'], 1.0),
+      themeAllKeywordsBonus: TypeConverter.toDoubleWithDefault(
+        map['themeAllKeywordsBonus'] ?? map['themeBonus'],
+        2.0,
+      ),
     );
   }
 
@@ -99,6 +115,11 @@ class ScoringConfig {
       active: json['active'] == true,
       updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ?? DateTime.now(),
       updatedBy: json['updatedBy']?.toString(),
+      themeKeywordPoint: TypeConverter.toDoubleWithDefault(json['themeKeywordPoint'], 1.0),
+      themeAllKeywordsBonus: TypeConverter.toDoubleWithDefault(
+        json['themeAllKeywordsBonus'] ?? json['themeBonus'],
+        2.0,
+      ),
     );
   }
 }

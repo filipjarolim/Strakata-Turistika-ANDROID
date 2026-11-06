@@ -10,6 +10,7 @@ import '../models/place_type_config.dart';
 import '../services/auth_service.dart';
 import '../services/scoring_config_service.dart';
 import '../services/cloudinary_service.dart';
+import '../utils/theme_month.dart';
 import '../utils/visit_submit.dart';
 
 class DynamicUploadPage extends StatefulWidget {
@@ -112,9 +113,14 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
         );
       }
 
+      final themeKeywords = await loadMonthlyThemeKeywords(formContext.visitDate);
+      final themeHistory = await loadThemeMonthHistory(
+        userId: currentUser!.id,
+        visitDate: formContext.visitDate,
+      ).catchError((_) => ThemeMonthHistory.empty);
       final visitToSave = buildPendingVisit(
         slug: widget.slug,
-        user: currentUser!,
+        user: currentUser,
         visitDate: formContext.visitDate,
         routeTitle: formContext.routeTitle,
         routeDescription: formContext.routeDescription,
@@ -125,6 +131,9 @@ class _DynamicUploadPageState extends State<DynamicUploadPage> {
         scoring: scoringConfig,
         placeTypes: placeTypeConfigs,
         photos: photos,
+        monthlyThemeKeywords: themeKeywords,
+        completedThemeKeywords: themeHistory.keywords,
+        themeHistoryAmbiguous: themeHistory.ambiguous,
       );
 
       final savedId = await VisitRepository().saveVisit(visitToSave);

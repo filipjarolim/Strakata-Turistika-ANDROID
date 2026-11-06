@@ -65,18 +65,6 @@ String? validateFormField(FormContext c, FormFieldWidget field) {
     case 'map_preview':
       return null;
     case 'monthly_theme':
-      final n = c.monthlyThemeKeywordCount;
-      if (n == null) {
-        return 'Chvilku počkejte, načítá se téma měsíce…';
-      }
-      if (n == 0) return null;
-      final raw = c.extraData['themeKeywordsSelected'];
-      final picked = raw is List
-          ? raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList()
-          : const <String>[];
-      if (picked.isEmpty) {
-        return 'Vyberte alespoň jedno klíčové slovo tématu měsíce.';
-      }
       return null;
     case 'checkbox':
       final key = _storageName(field);

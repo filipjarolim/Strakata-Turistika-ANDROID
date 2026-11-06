@@ -37,6 +37,14 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
   List<PlaceTypeConfig> _placeTypes = [];
   bool _isLoadingTypes = true;
 
+  static const Set<String> _themeSlotNames = {
+    'TÉMA',
+    'TEMA',
+    'TEMA1',
+    'TEMA2',
+    'TEMA3',
+  };
+
   static const Set<String> _quickChipTypeNames = {
     'PEAK',
     'rozhledny',
@@ -51,6 +59,13 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
   void initState() {
     super.initState();
     _loadPlaceTypes();
+  }
+
+  String _defaultPlaceType() {
+    for (final type in _placeTypes) {
+      if (!_themeSlotNames.contains(type.name.toUpperCase())) return type.name;
+    }
+    return 'OTHER';
   }
 
   Future<void> _loadPlaceTypes() async {
@@ -208,11 +223,10 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
         TextEditingController(text: existingPlace?.description ?? '');
     final searchController = TextEditingController();
 
-    String selectedTypeName = existingPlace?.type ??
-        (_placeTypes.isNotEmpty ? _placeTypes.first.name : 'OTHER');
+    String selectedTypeName = existingPlace?.type ?? _defaultPlaceType();
     if (_placeTypes.isNotEmpty &&
         !_placeTypes.any((t) => t.name == selectedTypeName)) {
-      selectedTypeName = _placeTypes.first.name;
+      selectedTypeName = _defaultPlaceType();
     }
 
     List<PlacePhoto> draftPhotos =
@@ -523,7 +537,7 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                         textInputAction: TextInputAction.next,
                         decoration: FormDesign.inputDecoration(
                           label: 'Název',
-                          hint: 'Doplní se z mapy nebo vyhledávání',
+                          hint: 'Název z Mapy.com. Slovo tématu sem nebo do poznámky',
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -569,7 +583,9 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                                 ),
                             ..._placeTypes
                                 .where(
-                                  (t) => !_quickChipTypeNames.contains(t.name),
+                                  (t) =>
+                                      !_quickChipTypeNames.contains(t.name) &&
+                                      !_themeSlotNames.contains(t.name),
                                 )
                                 .map(
                                   (t) => ChoiceChip(
@@ -868,6 +884,7 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                         maxLines: 3,
                         decoration: FormDesign.inputDecoration(
                           label: 'Poznámka (volitelné)',
+                          hint: 'Sem patří i slovo z tématu měsíce',
                         ),
                       ),
 

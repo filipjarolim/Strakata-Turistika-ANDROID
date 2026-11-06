@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/scoring_config_service.dart';
 import '../services/track_file_parser.dart';
 import 'season_year.dart';
+import 'theme_bonus.dart';
 import 'visit_scoring.dart';
 
 /// Zdroj záznamu uložený v `extraPoints.source` a čtený zpět přes [VisitData.formSlug].
@@ -65,6 +66,9 @@ VisitData buildPendingVisit({
   required List<PlaceTypeConfig> placeTypes,
   required List<Map<String, dynamic>>? photos,
   VisitData? existingVisit,
+  List<String> monthlyThemeKeywords = const [],
+  List<String> completedThemeKeywords = const [],
+  bool themeHistoryAmbiguous = false,
 }) {
   final storedPhotos = (photos != null && photos.isNotEmpty)
       ? photos
@@ -89,6 +93,8 @@ VisitData buildPendingVisit({
     points += distancePointsForKm(scoredDistanceKm, scoring.pointsPerKm);
   }
   for (final place in places) {
+    // Slot tématu se boduje jen přes slova v textu, ne jako typ místa.
+    if (isThemeSlotPlace(place)) continue;
     final matches = placeTypes.where((c) => c.name == place.type);
     if (matches.isNotEmpty) {
       points += matches.first.points;
@@ -96,6 +102,17 @@ VisitData buildPendingVisit({
       points += scoring.getPointsForPlaceType(place.type);
     }
   }
+  final theme = computeVisitThemeBonus(
+    monthlyThemeKeywords: monthlyThemeKeywords,
+    places: places,
+    routeDescription: routeDescription,
+    completedThemeKeywords: completedThemeKeywords,
+    historyAmbiguous: themeHistoryAmbiguous,
+    keywordPoint: scoring.themeKeywordPoint,
+    allKeywordsBonus: scoring.themeAllKeywordsBonus,
+  );
+  points += theme.bonus;
+  points = (points * 10).round() / 10;
 
   final extraForVisit = Map<String, dynamic>.from(extraData);
   mergeComputedRouteMetricsIntoExtraData(extraForVisit, summary);
@@ -118,6 +135,12 @@ VisitData buildPendingVisit({
 
   final mergedExtra = Map<String, dynamic>.from(existingVisit?.extraPoints ?? {});
   mergedExtra['source'] = visitSourceForSlug(slug);
+  // Server bonus spočítá znovu a themeBonusIncluded nahradí. Uložený themeBonus
+  // by mu řekl, že body už měnil, a nový součet by nechal být.
+  mergedExtra.remove('themeBonus');
+  mergedExtra.remove('themeKeywordsMatched');
+  mergedExtra['themeScoring'] = 'text-v1';
+  mergedExtra['themeBonusIncluded'] = theme.bonus;
   if (distanceKmTop != null) {
     mergedExtra['distanceKm'] = distanceKmTop;
     mergedExtra['distance'] = distanceKmTop;
