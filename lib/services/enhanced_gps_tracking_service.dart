@@ -13,6 +13,7 @@ import '../models/tracking_summary.dart';
 import '../config/gps_config.dart';
 import 'gps_battery_profile.dart';
 import 'gps_power_mode.dart';
+import 'local_notification_guard.dart';
 import 'route_backup_service.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -711,8 +712,11 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
     await _iosPositionSubscription?.cancel();
     _iosPositionSubscription = null;
     
-    // Hide notification
-    await _notifications.cancel(_trackingNotificationId);
+    // Hide notification. cancel() on Android can throw "Missing type parameter".
+    await cancelLocalNotification(
+      _notifications.cancel,
+      _trackingNotificationId,
+    );
     
     // Calculate final statistics
     _calculateFinalStatistics();

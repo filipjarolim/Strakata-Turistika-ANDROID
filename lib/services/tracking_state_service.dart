@@ -7,6 +7,7 @@ import '../config/gps_config.dart';
 import '../models/tracking_summary.dart';
 import 'gps_power_mode.dart';
 import 'live_track_checkpoint_service.dart';
+import 'local_notification_guard.dart';
 import 'route_backup_service.dart';
 
 class TrackingStateService {
@@ -218,7 +219,10 @@ class TrackingStateService {
   
   // Hide tracking notification
   Future<void> _hideTrackingNotification() async {
-    await _notifications.cancel(_trackingNotificationId);
+    await cancelLocalNotification(
+      _notifications.cancel,
+      _trackingNotificationId,
+    );
   }
   
   // Get tracking summary

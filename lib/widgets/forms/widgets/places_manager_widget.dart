@@ -400,7 +400,15 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
             });
           }
 
+          void updateSheet(VoidCallback fn) {
+            if (!context.mounted) return;
+            try {
+              setSheetState(fn);
+            } catch (_) {}
+          }
+
           Future<void> addPhoto() async {
+            if (!sheetContext.mounted) return;
             final source = await showModalBottomSheet<ImageSource>(
               context: sheetContext,
               builder: (ctx) => SafeArea(
@@ -421,8 +429,8 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                 ),
               ),
             );
-            if (source == null) return;
-            setSheetState(() => uploadingPhoto = true);
+            if (source == null || !context.mounted) return;
+            updateSheet(() => uploadingPhoto = true);
             try {
               final x = await ImagePicker().pickImage(
                 source: source,
@@ -431,21 +439,24 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                 imageQuality: 90,
                 requestFullMetadata: false,
               );
-              if (x == null) return;
+              if (x == null || !context.mounted) return;
+              final path = x.path;
+              if (path.isEmpty) return;
               final response =
-                  await CloudinaryService.uploadImageResponse(File(x.path));
-              if (response == null) {
-                if (sheetContext.mounted) {
-                  ScaffoldMessenger.of(sheetContext).showSnackBar(
-                    const SnackBar(content: Text('Nahrání fotky se nepodařilo.')),
-                  );
-                }
+                  await CloudinaryService.uploadImageResponse(File(path));
+              if (!context.mounted) return;
+              if (response == null || response.secureUrl.isEmpty) {
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  const SnackBar(content: Text('Nahrání fotky se nepodařilo.')),
+                );
                 return;
               }
-              final title = response.originalFilename.trim().isEmpty
+              final rawTitle = response.originalFilename.trim();
+              final title = rawTitle.isEmpty
                   ? 'foto_${draftPhotos.length + 1}'
-                  : response.originalFilename.trim();
-              setSheetState(() {
+                  : rawTitle;
+              final publicId = response.publicId.trim();
+              updateSheet(() {
                 draftPhotos = [
                   ...draftPhotos,
                   PlacePhoto(
@@ -454,12 +465,17 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                     description: '',
                     uploadedAt: DateTime.now(),
                     title: title,
-                    publicId: response.publicId,
+                    publicId: publicId.isEmpty ? null : publicId,
                   ),
                 ];
               });
+            } catch (_) {
+              if (!sheetContext.mounted) return;
+              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                const SnackBar(content: Text('Fotku se nepodařilo přidat.')),
+              );
             } finally {
-              if (context.mounted) setSheetState(() => uploadingPhoto = false);
+              updateSheet(() => uploadingPhoto = false);
             }
           }
 

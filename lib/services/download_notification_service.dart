@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'local_notification_guard.dart';
 import 'notification_channels.dart';
 
 class DownloadNotificationService {
@@ -121,7 +122,8 @@ class DownloadNotificationService {
   }
 
   static Future<void> cancelProgressNotification() async {
-    if (_notificationsPlugin == null) return;
-    await _notificationsPlugin!.cancel(_downloadProgressId);
+    final plugin = _notificationsPlugin;
+    if (plugin == null) return;
+    await cancelLocalNotification(plugin.cancel, _downloadProgressId);
   }
 }
