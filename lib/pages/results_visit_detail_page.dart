@@ -17,6 +17,7 @@ import '../widgets/route_thumbnail.dart';
 import '../widgets/strakata_editorial_background.dart';
 import '../widgets/ui/app_button.dart';
 import '../widgets/ui/app_toast.dart';
+import '../utils/mapy_place_url.dart';
 import '../widgets/ui/web_mobile_section_card.dart';
 
 class ResultsVisitDetailPage extends StatefulWidget {
@@ -438,6 +439,27 @@ class _ResultsVisitDetailPageState extends State<ResultsVisitDetailPage> {
                   ),
                 ),
               ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => _openRouteLink(
+                  mapyPlaceUrl(lat: place.lat, lng: place.lng, name: place.name),
+                ),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.only(top: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Otevřít v turistické mapě',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
             if (photoUrls.isNotEmpty) ...[
               const SizedBox(height: 8),
               PhotoGrid(urls: photoUrls, crossAxisCount: photoUrls.length == 1 ? 1 : 2),

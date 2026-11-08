@@ -16,9 +16,16 @@ class ImageUploadWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final formContext = Provider.of<FormContext>(context);
 
+    final placeHasPhoto = formContext.places.any(
+      (place) => place.photos.any((photo) => photo.url.trim().isNotEmpty),
+    );
+    final subtitle = placeHasPhoto && formContext.photoAttachments.isEmpty
+        ? 'Fotky pořízené u bodovaných míst jsou už uložené. Další sem přidávat nemusíte.'
+        : 'Přidejte fotky jako důkaz návštěvy místa.';
+
     return FormSectionCard(
       title: field.label,
-      subtitle: 'Přidejte fotky jako důkaz návštěvy místa.',
+      subtitle: subtitle,
       icon: Icons.photo_library_outlined,
       child: ImagePickerWidget(
         title: field.label,

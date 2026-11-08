@@ -24,7 +24,10 @@ String? validateFormField(FormContext c, FormFieldWidget field) {
       }
       return null;
     case 'image_upload':
-      if (c.photoAttachments.isEmpty) {
+      final placeHasPhoto = c.places.any(
+        (place) => place.photos.any((photo) => photo.url.trim().isNotEmpty),
+      );
+      if (c.photoAttachments.isEmpty && !placeHasPhoto) {
         return 'Nahrajte alespoň jednu fotografii.';
       }
       return null;

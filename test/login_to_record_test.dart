@@ -370,6 +370,35 @@ void main() {
         ),
         contains('fotografii'),
       );
+
+      form.updatePlaces([
+        Place(
+          id: 'p1',
+          name: 'Rozhledna',
+          type: 'PEAK',
+          photos: [
+            PlacePhoto(
+              id: 'ph',
+              url: 'https://res.cloudinary.com/demo/foto.jpg',
+              uploadedAt: DateTime(2026, 11, 8),
+            ),
+          ],
+          createdAt: DateTime(2026, 11, 8),
+        ),
+      ]);
+      expect(
+        validateFormField(
+          form,
+          FormFieldWidget(
+            id: 'shot',
+            type: 'image_upload',
+            label: 'Screenshot',
+            order: 1,
+            required: true,
+          ),
+        ),
+        isNull,
+      );
     });
 
     test('krok edit vyžaduje název a vyplněná místa', () {

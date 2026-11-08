@@ -251,6 +251,7 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
     var didScheduleGpsBootstrap = false;
     var searchListenReady = false;
     var mapPickSeq = 0;
+    var mapStyle = MapStyle.standard;
     Timer? searchTimer;
 
     showFormModalSheet(
@@ -742,6 +743,26 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                         ],
                       ),
                       const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Základní'),
+                            selected: mapStyle == MapStyle.standard,
+                            onSelected: (_) => setSheetState(
+                              () => mapStyle = MapStyle.standard,
+                            ),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Turistická'),
+                            selected: mapStyle == MapStyle.tourist,
+                            onSelected: (_) => setSheetState(
+                              () => mapStyle = MapStyle.tourist,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                       SizedBox(
                         height: 240,
                         child: ClipRRect(
@@ -751,6 +772,8 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                               SharedMapWidget(
                                 center: mapCenter,
                                 zoom: mapZoom,
+                                mapStyle: mapStyle,
+                                showStyleButton: false,
                                 onTap: onMapTap,
                                 markers: [
                                   if (hasPick)

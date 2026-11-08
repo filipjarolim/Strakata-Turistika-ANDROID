@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -28,7 +28,9 @@ import 'package:strakataturistikaandroidapp/pages/dynamic_upload_page.dart';
 import 'package:strakataturistikaandroidapp/pages/dynamic_form_page.dart';
 import 'package:strakataturistikaandroidapp/models/visit_data.dart';
 import 'package:strakataturistikaandroidapp/models/place_type_config.dart';
+import 'package:strakataturistikaandroidapp/services/cloudinary_service.dart';
 import 'package:strakataturistikaandroidapp/services/nominatim_service.dart';
+import 'package:strakataturistikaandroidapp/services/place_photo_store.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:strakataturistikaandroidapp/config/app_colors.dart';
@@ -906,7 +908,15 @@ class _GpsPageState extends State<GpsPage>
                         imageQuality: 90,
                         requestFullMetadata: false,
                       );
-                      if (x != null) setSheet(() => photoFile = x);
+                      if (x == null) return;
+                      try {
+                        final stored = await persistPlacePhoto(File(x.path));
+                        if (!context.mounted) return;
+                        setSheet(() => photoFile = XFile(stored.path));
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        setSheet(() => photoFile = x);
+                      }
                     },
                     icon: const Icon(Icons.photo_camera_outlined),
                     label: Text(photoFile == null ? 'Vyfotit místo' : 'Fotka pořízena'),
@@ -935,19 +945,28 @@ class _GpsPageState extends State<GpsPage>
       return;
     }
 
+    final localPath = photoFile!.path;
+    var photo = PlacePhoto(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      url: localPath,
+      uploadedAt: DateTime.now(),
+      isLocal: true,
+      title: name,
+    );
+    final uploaded = await CloudinaryService.uploadImageResponse(File(localPath));
+    if (uploaded != null && uploaded.secureUrl.trim().isNotEmpty) {
+      final publicId = uploaded.publicId.trim();
+      photo = photo.copyWith(
+        url: uploaded.secureUrl,
+        publicId: publicId.isEmpty ? null : publicId,
+        isLocal: false,
+      );
+    }
     final place = Place(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       name: name,
       type: selectedType,
-      photos: [
-        PlacePhoto(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
-          url: photoFile!.path,
-          uploadedAt: DateTime.now(),
-          isLocal: true,
-          title: name,
-        ),
-      ],
+      photos: [photo],
       createdAt: DateTime.now(),
       lat: loc?.latitude,
       lng: loc?.longitude,
@@ -958,7 +977,9 @@ class _GpsPageState extends State<GpsPage>
       setState(() {});
       AppToast.showInfo(
         context,
-        'Místo uloženo k trase (${RouteBackupService().capturedPlaces.length}).',
+        photo.isLocal
+            ? 'Místo je uložené k trase. Fotka se nahraje při odeslání.'
+            : 'Místo i fotka jsou uložené k trase (${RouteBackupService().capturedPlaces.length}).',
       );
     }
   }

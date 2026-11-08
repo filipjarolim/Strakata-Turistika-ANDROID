@@ -24,6 +24,8 @@ class SharedMapWidget extends StatefulWidget {
   final Function(LatLng)? onTap;
   final EdgeInsets? controlsPadding;
   final bool showControls;
+  final bool showStyleButton;
+  final MapStyle? mapStyle;
   /// When false (default for live GPS), parent rebuilds with a new [center]
   /// do not yank the camera — only [mapController] moves it.
   final bool syncCameraFromParent;
@@ -43,6 +45,8 @@ class SharedMapWidget extends StatefulWidget {
     this.onTap,
     this.controlsPadding,
     this.showControls = true,
+    this.showStyleButton = true,
+    this.mapStyle,
     this.syncCameraFromParent = true,
   }) : super(key: key);
 
@@ -76,6 +80,8 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
     }
   }
 
+  MapStyle get _style => widget.mapStyle ?? _currentStyle;
+
   String getTemplateUrl(MapStyle style) {
     switch (style) {
       case MapStyle.standard:
@@ -99,19 +105,14 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
   }
 
   void _cycleMapStyle() {
-    setState(() {
-      switch (_currentStyle) {
-        case MapStyle.standard:
-          _currentStyle = MapStyle.tourist;
-          break;
-        case MapStyle.tourist:
-          _currentStyle = MapStyle.satellite;
-          break;
-        case MapStyle.satellite:
-          _currentStyle = MapStyle.standard;
-          break;
-      }
-    });
+    final next = switch (_style) {
+      MapStyle.standard => MapStyle.tourist,
+      MapStyle.tourist => MapStyle.satellite,
+      MapStyle.satellite => MapStyle.standard,
+    };
+    if (widget.mapStyle == null) {
+      setState(() => _currentStyle = next);
+    }
   }
 
   Future<void> _goToCurrentLocation() async {
@@ -209,10 +210,11 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
           ),
           children: [
             TileLayer(
-              urlTemplate: getTemplateUrl(_currentStyle),
+              urlTemplate: getTemplateUrl(_style),
+              maxNativeZoom: _style == MapStyle.tourist ? 17 : 19,
               userAgentPackageName: 'cz.strakata.turistika.strakataturistikaandroidapp',
               tileProvider: VectorTileProvider(
-                urlTemplate: getTemplateUrl(_currentStyle),
+                urlTemplate: getTemplateUrl(_style),
               ),
               keepBuffer: 2,
               panBuffer: 1,
@@ -237,12 +239,14 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildMapControl(
-                  icon: _getStyleIcon(_currentStyle),
-                  onPressed: _cycleMapStyle,
-                  tooltip: 'Změnit styl mapy',
-                ),
-                const SizedBox(height: 8),
+                if (widget.showStyleButton) ...[
+                  _buildMapControl(
+                    icon: _getStyleIcon(_style),
+                    onPressed: _cycleMapStyle,
+                    tooltip: 'Změnit styl mapy',
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 _buildMapControl(
                   icon: _locating 
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2E7D32))) 
