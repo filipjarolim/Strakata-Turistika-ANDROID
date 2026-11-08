@@ -1,3 +1,11 @@
+/// Stejné turistické dlaždice jako na mapy.com.
+const mapyTouristTileTemplate = 'https://mapserver.mapy.com/turist-m/{z}-{x}-{y}';
+
+const mapyTileHeaders = {
+  'Referer': 'https://mapy.com/',
+  'Origin': 'https://mapy.com',
+};
+
 /// Odkaz na turistickou mapu Mapy.com. Základní mapa turistické značky neukáže.
 String mapyPlaceUrl({double? lat, double? lng, String? name}) {
   if (lat != null && lng != null && lat.isFinite && lng.isFinite) {

@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../services/vector_tile_provider.dart';
+import '../../utils/mapy_place_url.dart';
 
 enum MapStyle {
   standard,
@@ -87,7 +88,7 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
       case MapStyle.standard:
         return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
       case MapStyle.tourist:
-        return 'https://tile.opentopomap.org/{z}/{x}/{y}.png';
+        return mapyTouristTileTemplate;
       case MapStyle.satellite:
         return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
     }
@@ -211,10 +212,11 @@ class _SharedMapWidgetState extends State<SharedMapWidget> {
           children: [
             TileLayer(
               urlTemplate: getTemplateUrl(_style),
-              maxNativeZoom: _style == MapStyle.tourist ? 17 : 19,
+              maxNativeZoom: 19,
               userAgentPackageName: 'cz.strakata.turistika.strakataturistikaandroidapp',
               tileProvider: VectorTileProvider(
                 urlTemplate: getTemplateUrl(_style),
+                headers: _style == MapStyle.tourist ? mapyTileHeaders : null,
               ),
               keepBuffer: 2,
               panBuffer: 1,

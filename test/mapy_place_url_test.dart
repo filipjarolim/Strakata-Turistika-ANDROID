@@ -10,6 +10,14 @@ void main() {
     expect(url, isNot(contains('zakladni')));
   });
 
+  test('turistická vrstva používá dlaždice Mapy.com', () {
+    expect(
+      mapyTouristTileTemplate,
+      'https://mapserver.mapy.com/turist-m/{z}-{x}-{y}',
+    );
+    expect(mapyTileHeaders['Referer'], 'https://mapy.com/');
+  });
+
   test('bez souřadnic hledá název na turistické mapě', () {
     expect(
       mapyPlaceUrl(name: 'Karlštejn'),
