@@ -1145,7 +1145,7 @@ class _GpsPageState extends State<GpsPage>
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Trasa byla uložena jako návrh. Najdete ji v Můj profil -> Koncepty (nebo Všechny).',
+                        'Trasa byla uložena jako návrh. Najdete ji v Můj profil → Koncepty, v aktuální sezóně.',
                         style: TextStyle(
                           color: AppColors.secondary,
                           fontWeight: FontWeight.w600,
