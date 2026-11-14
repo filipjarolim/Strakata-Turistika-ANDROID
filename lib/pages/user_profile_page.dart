@@ -60,7 +60,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           return bd.compareTo(ad);
         });
         if (mounted) {
-          final years = visits.map((v) => v.year).where((y) => y > 0).toSet().toList()..sort((a, b) => b.compareTo(a));
+          final years = visits.map(_shownSeason).where((y) => y > 0).toSet().toList()..sort((a, b) => b.compareTo(a));
           setState(() {
             _userVisits = visits;
             if (years.isNotEmpty && !years.contains(_selectedYear)) {
@@ -88,15 +88,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
+  int _shownSeason(VisitData visit) {
+    return seasonYearShownForVisit(
+      storedYear: visit.year,
+      visitDate: visit.visitDate,
+      state: visit.state.name,
+      source: visit.extraPoints['source']?.toString(),
+    );
+  }
+
   List<int> _seasonYears() {
     return seasonsShownForResults(
-      _userVisits.map((v) => v.year),
+      _userVisits.map(_shownSeason),
       DateTime.now(),
     );
   }
 
   List<VisitData> _visitsForSelectedYear() {
-    return _userVisits.where((v) => v.year == _selectedYear).toList();
+    return _userVisits.where((v) => _shownSeason(v) == _selectedYear).toList();
   }
 
   List<VisitData> _filteredVisits() {
@@ -462,7 +471,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
               MaterialPageRoute<void>(
                 builder: (_) => ResultsVisitDetailPage(
                   visit: visit,
-                  seasonYear: visit.year > 0 ? visit.year : _selectedYear,
+                  seasonYear: _shownSeason(visit),
                   userName: AuthService.currentUser?.name ?? 'Já',
                   allowDraftActions: true,
                 ),

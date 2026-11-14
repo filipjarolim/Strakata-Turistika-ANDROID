@@ -1,6 +1,7 @@
 import '../models/tracking_summary.dart';
 import '../models/visit_data.dart';
 import '../repositories/visit_repository.dart';
+import '../utils/season_year.dart';
 import 'auth_service.dart';
 import 'route_backup_service.dart';
 import 'track_file_parser.dart';
@@ -60,7 +61,7 @@ class LiveTrackCheckpointService {
           'image': currentUser.image,
         },
         seasonId: null,
-        year: start.year,
+        year: seasonEndingYear(start),
         visitDate: start,
         createdAt: now,
         state: VisitState.DRAFT,

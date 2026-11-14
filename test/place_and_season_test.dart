@@ -29,6 +29,36 @@ void main() {
     );
   });
 
+  test('GPS koncept z listopadu patří do aktuální sezóny, ne do kalendářního roku', () {
+    expect(
+      seasonYearShownForVisit(
+        storedYear: 2026,
+        visitDate: DateTime(2026, 11, 14),
+        state: 'DRAFT',
+        source: 'gps_tracking',
+      ),
+      2027,
+    );
+    expect(
+      seasonYearShownForVisit(
+        storedYear: 2026,
+        visitDate: DateTime(2026, 1, 18),
+        state: 'DRAFT',
+        source: 'gps_tracking',
+      ),
+      2026,
+    );
+    expect(
+      seasonYearShownForVisit(
+        storedYear: 2026,
+        visitDate: DateTime(2026, 11, 14),
+        state: 'APPROVED',
+        source: 'gps_tracking',
+      ),
+      2026,
+    );
+  });
+
   test('listopad patří do sezóny dalšího roku', () {
     expect(seasonEndingYear(DateTime(2025, 10, 31)), 2025);
     expect(seasonEndingYear(DateTime(2025, 11, 1)), 2026);
