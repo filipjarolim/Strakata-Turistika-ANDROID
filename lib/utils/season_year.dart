@@ -5,6 +5,20 @@ int seasonEndingYear(DateTime date) {
   return date.month >= 11 ? date.year + 1 : date.year;
 }
 
+/// GPS koncept se v profilu řadí podle data výletu.
+/// Starší appka ho ukládala s kalendářním rokem, takže listopad zmizel z aktuální sezóny.
+int seasonYearShownForVisit({
+  required int storedYear,
+  required DateTime? visitDate,
+  required String? state,
+  required String? source,
+}) {
+  if (state == 'DRAFT' && source == 'gps_tracking' && visitDate != null) {
+    return seasonEndingYear(visitDate);
+  }
+  return storedYear;
+}
+
 /// Veřejný výběr sezón: aktuální ročník je vždy v seznamu, budoucí ne.
 /// Nejnovější (běžící) sezóna je první.
 List<int> seasonsShownForResults(Iterable<int> seasonYears, DateTime now) {
