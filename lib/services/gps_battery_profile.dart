@@ -1,8 +1,9 @@
 /// Jak často a jak přesně má Android žádat GPS. Úsporný režim je výchozí
-/// pro výlet na několik hodin: při stání se GNSS nemusí držet naplno.
+/// pro výlet na několik hodin: při stání se interval protáhne, ale GNSS zůstane.
+/// Balanced power a práh 25 m při pomalé chůzi v lese polohu skoro neposouvaly.
 enum GpsMotionProfile { stationary, walking, running, driving }
 
-/// `priority` 100 = HIGH_ACCURACY, 102 = BALANCED_POWER_ACCURACY.
+/// `priority` 100 = HIGH_ACCURACY. Při záznamu trasy se na síťovou polohu neschází.
 Map<String, dynamic> androidGpsSettings({
   required GpsMotionProfile profile,
   required bool saver,
@@ -10,11 +11,11 @@ Map<String, dynamic> androidGpsSettings({
   switch (profile) {
     case GpsMotionProfile.stationary:
       return {
-        'intervalMs': saver ? 25000 : 15000,
-        'fastestIntervalMs': saver ? 15000 : 8000,
-        'maxWaitTimeMs': saver ? 50000 : 25000,
-        'smallestDisplacementM': saver ? 25.0 : 12.0,
-        'priority': 102,
+        'intervalMs': saver ? 20000 : 12000,
+        'fastestIntervalMs': saver ? 8000 : 5000,
+        'maxWaitTimeMs': saver ? 40000 : 20000,
+        'smallestDisplacementM': 5.0,
+        'priority': 100,
       };
     case GpsMotionProfile.walking:
       return saver
@@ -22,7 +23,7 @@ Map<String, dynamic> androidGpsSettings({
               'intervalMs': 12000,
               'fastestIntervalMs': 8000,
               'maxWaitTimeMs': 24000,
-              'smallestDisplacementM': 10.0,
+              'smallestDisplacementM': 5.0,
               'priority': 100,
             }
           : {

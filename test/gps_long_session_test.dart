@@ -28,7 +28,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('GPS baterie na dlouhém výletě', () {
-    test('úsporný režim při stání pustí GNSS a prodlouží interval', () {
+    test('stání prodlouží interval, ale GNSS zůstane zapnuté', () {
       final saverStill = androidGpsSettings(
         profile: GpsMotionProfile.stationary,
         saver: true,
@@ -37,9 +37,10 @@ void main() {
         profile: GpsMotionProfile.stationary,
         saver: false,
       );
-      expect(saverStill['priority'], 102);
-      expect(saverStill['intervalMs'], greaterThanOrEqualTo(20000));
-      expect(saverStill['smallestDisplacementM'], greaterThanOrEqualTo(20));
+      expect(saverStill['priority'], 100);
+      expect(preciseStill['priority'], 100);
+      expect(saverStill['intervalMs'], greaterThanOrEqualTo(15000));
+      expect(saverStill['smallestDisplacementM'], lessThanOrEqualTo(8));
       expect(saverStill['intervalMs'], greaterThan(preciseStill['intervalMs']));
     });
 
@@ -53,7 +54,8 @@ void main() {
         saver: false,
       );
       expect(saver['intervalMs'], greaterThanOrEqualTo(10000));
-      expect(saver['smallestDisplacementM'], greaterThanOrEqualTo(8));
+      expect(saver['smallestDisplacementM'], lessThanOrEqualTo(8));
+      expect(saver['priority'], 100);
       expect(precise['intervalMs'], lessThan(saver['intervalMs']));
       expect(precise['priority'], 100);
     });

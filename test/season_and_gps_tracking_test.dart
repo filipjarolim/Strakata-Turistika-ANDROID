@@ -240,11 +240,29 @@ void main() {
           lng: 14.5,
           time: start.add(Duration(seconds: i * 4)),
           speed: 1.0,
-          accuracy: 16.0, // under slowAccuracyCap 18
+          accuracy: 16.0,
         ));
       }
       expect(service.totalDistance, greaterThan(30));
       expect(service.testTrackPoints.length, greaterThan(5));
+    });
+
+    test('seniorské tempo v lese nezkrátí 2 km na čtvrtinu', () {
+      final start = DateTime(2026, 11, 15, 9, 0, 0);
+      // ~8 m každých 12 s ≈ 0,67 m/s (2,4 km/h). Android často hlásí speed 0.
+      // Přesnost 30 m je v lese běžná a dřív se celý krok zahodil.
+      const steps = 250; // 250 * 8 m = 2 km
+      for (var i = 0; i <= steps; i++) {
+        service.onPositionUpdate(_pos(
+          lat: 49.2 + i * 0.000072,
+          lng: 16.6,
+          time: start.add(Duration(seconds: i * 12)),
+          speed: 0,
+          accuracy: 30,
+        ));
+      }
+      expect(service.totalDistance, greaterThan(1600));
+      expect(service.totalDistance, lessThan(2300));
     });
 
     test('teleport does not inflate distance; recovery continues from new place', () {

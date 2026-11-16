@@ -1,10 +1,9 @@
 class GpsConfig {
   // Accuracy thresholds (meters)
-  // Pozn.: dřívější přísné limity (12/6/8 m) zahazovaly většinu bodů v lese či
-  // při pomalé chůzi a měřená vzdálenost pak vycházela výrazně kratší než skutečnost.
-  static const double maxAccuracyMeters = 25.0; // global cap
-  static const double stationaryAccuracyCap = 12.0; // when nearly stationary
-  static const double slowAccuracyCap = 18.0; // slow movement
+  // Lesní fix při chůzi seniorů bývá 20–35 m. Přísnější strop ty body zahodil
+  // a z 2 km trasy zbylo třeba 0,5 km. Skoky pořád řeže maxJumpSpeedMs.
+  static const double maxAccuracyMeters = 40.0;
+  static const double stationaryAccuracyCap = 12.0; // jen když se skoro nejde
 
   // Movement thresholds
   static const double minMovementMeters = 2.0; // ignore tiny drift

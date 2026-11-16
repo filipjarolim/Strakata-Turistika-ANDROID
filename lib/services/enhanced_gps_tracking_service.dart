@@ -57,16 +57,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   int _consecutiveUnlockEligible = 0;
   int _consecutiveJumpRejections = 0;
   Position? _lastJumpCandidate;
-  
-  // Kalman filter parameters.
-  // Pozn.: původní processNoise 0.05 dával ustálený gain ~0.05 — filtrovaná
-  // pozice se téměř nehýbala, řezala zatáčky a měřená vzdálenost vycházela
-  // výrazně kratší. Gain ~0.6 stále tlumí šum, ale sleduje skutečný pohyb.
-  double _processNoise = 1.0;
-  double _measurementNoise = 1.0;
-  double _kalmanGain = 0.0;
-  double _errorCovariance = 1.0;
-  
+
   // Speed and distance calculations
   double _totalDistance = 0.0;
   double _averageSpeed = 0.0;
@@ -738,7 +729,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   
 
   
-  // Advanced position processing with Kalman filtering
+  // Advanced position processing
   void onPositionUpdate(Position position) {
     _lastRawAt = DateTime.now();
     if (_recordingPaused) return;
@@ -749,22 +740,21 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
 
     _lastRawAt = DateTime.now();
 
-    // Validate the RAW fix first. Kalman must not smear GPS jumps into the track.
+    // Vzdálenost se počítá z přijatého fixu. Uhlazení polohy při nulovém
+    // headingu z Androidu nechávalo bod stát a trasu zkracovalo.
     if (!_isValidPosition(position)) {
       return;
     }
 
-    final filteredPosition = _applyKalmanFilter(position);
-
-    _addTrackPoint(filteredPosition);
-    _updateStatistics(filteredPosition);
-    _lastValidPosition = filteredPosition;
+    _addTrackPoint(position);
+    _updateStatistics(position);
+    _lastValidPosition = position;
     if (_trackPoints.length == 2 || _trackPoints.length % 10 == 0) {
       if (!testSuppressSideEffects) {
         unawaited(RouteBackupService().saveBackup(getSummary(), active: true));
       }
     }
-    _maybeEngageStationaryLock(filteredPosition);
+    _maybeEngageStationaryLock(position);
     if (!_hasFirstFix) {
       _hasFirstFix = true;
       if (_periodicLocationTimer != null) {
@@ -774,56 +764,23 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
     _lastAcceptedAt = DateTime.now();
     if (!testSuppressSideEffects) {
       unawaited(_updateTrackingNotification());
-      unawaited(_maybeUpdateAdaptiveSettings(filteredPosition));
+      unawaited(_maybeUpdateAdaptiveSettings(position));
     }
-  }
-  
-  // Kalman filter implementation for GPS noise reduction
-  Position _applyKalmanFilter(Position position) {
-    if (_lastValidPosition == null) {
-      _errorCovariance = _measurementNoise;
-      return position;
-    }
-    
-    // Prediction step
-    final predictedPosition = _predictPosition(_lastValidPosition!);
-    _errorCovariance += _processNoise;
-    
-    // Update step
-    _kalmanGain = _errorCovariance / (_errorCovariance + _measurementNoise);
-    
-    // Calculate filtered position
-    final filteredLat = predictedPosition.latitude + _kalmanGain * (position.latitude - predictedPosition.latitude);
-    final filteredLng = predictedPosition.longitude + _kalmanGain * (position.longitude - predictedPosition.longitude);
-    
-    _errorCovariance = (1 - _kalmanGain) * _errorCovariance;
-    
-    return Position(
-      latitude: filteredLat,
-      longitude: filteredLng,
-      timestamp: position.timestamp,
-      accuracy: position.accuracy,
-      altitude: position.altitude,
-      altitudeAccuracy: position.altitudeAccuracy,
-      heading: position.heading,
-      headingAccuracy: position.headingAccuracy,
-      speed: position.speed,
-      speedAccuracy: position.speedAccuracy,
-    );
   }
 
-  // Decide motion profile from current speed (m/s)
+  // 0,6 m/s je běžné tempo seniorského výletu, ne stání.
   _MotionProfile _selectMotionProfile(double speedMs) {
-    if (speedMs < 0.6) return _MotionProfile.stationary; // ~2.2 km/h
-    if (speedMs < 2.2) return _MotionProfile.walking;    // ~8 km/h
-    if (speedMs < 6.5) return _MotionProfile.running;    // ~23.4 km/h
+    if (speedMs < 0.25) return _MotionProfile.stationary;
+    if (speedMs < 2.2) return _MotionProfile.walking;
+    if (speedMs < 6.5) return _MotionProfile.running;
     return _MotionProfile.driving;
   }
 
   Future<void> _maybeUpdateAdaptiveSettings(Position position) async {
-    final profile = _selectMotionProfile(
-      position.speed.isFinite && position.speed >= 0 ? position.speed : (_lastFilteredSpeed ?? 0.0),
-    );
+    // Android často pošle speed 0 i při chůzi. Profil se řídí uraženou vzdáleností.
+    final reported = position.speed.isFinite && position.speed > 0.2 ? position.speed : 0.0;
+    final derived = _lastDerivedSpeedMs ?? 0.0;
+    final profile = _selectMotionProfile(derived > reported ? derived : reported);
     await _commitMotionProfile(profile);
   }
 
@@ -885,16 +842,12 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   }
 
   void _startOrUpdateIosStream(_MotionProfile profile) {
-    int distanceFilter;
-    LocationAccuracy accuracy;
-    final saver = GpsPowerModeStore().mode != GpsPowerMode.precise;
+    final int distanceFilter;
+    final LocationAccuracy accuracy;
     switch (profile) {
       case _MotionProfile.stationary:
-        distanceFilter = saver ? 20 : 10;
-        accuracy = LocationAccuracy.medium;
-        break;
       case _MotionProfile.walking:
-        distanceFilter = saver ? 10 : 5;
+        distanceFilter = 5;
         accuracy = LocationAccuracy.best;
         break;
       case _MotionProfile.running:
@@ -910,7 +863,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
       accuracy: accuracy,
       distanceFilter: distanceFilter,
       activityType: ActivityType.fitness,
-      pauseLocationUpdatesAutomatically: profile == _MotionProfile.stationary,
+      pauseLocationUpdatesAutomatically: false,
       allowBackgroundLocationUpdates: true,
       showBackgroundLocationIndicator: true,
     );
@@ -947,6 +900,15 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   void _onUserAccel(UserAccelerometerEvent event) {
     if (!_isTracking || _recordingPaused) return;
     final mag = sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+    final pace = _lastDerivedSpeedMs ?? 0;
+    // Telefon v kapse při pomalé chůzi má malé zrychlení. Tempo z GPS má přednost.
+    if (pace >= 0.25) {
+      _accelStillSince = null;
+      if (_currentProfile == _MotionProfile.stationary) {
+        unawaited(_commitMotionProfile(_MotionProfile.walking, immediate: true));
+      }
+      return;
+    }
     if (mag < GpsConfig.accelRestMagnitude) {
       _accelStillSince ??= DateTime.now();
       if (DateTime.now().difference(_accelStillSince!) >=
@@ -961,41 +923,6 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
         unawaited(_commitMotionProfile(_MotionProfile.walking, immediate: true));
       }
     }
-  }
-  
-  // Predict next position based on current speed and heading
-  Position _predictPosition(Position current) {
-    // Android služba posílá heading vždy 0.0 — predikce by pak posouvala bod
-    // na sever a znehodnotila filtr. Bez věrohodného headingu nepredikujeme.
-    if (current.speed <= 0 ||
-        current.heading == 0.0 ||
-        !current.headingAccuracy.isFinite ||
-        current.headingAccuracy <= 0) {
-      return current;
-    }
-    
-    const earthRadius = 6371000.0; // meters
-    final distance = current.speed * 1.0; // 1 second prediction
-    
-    final lat1 = current.latitude * pi / 180;
-    final lng1 = current.longitude * pi / 180;
-    final bearing = current.heading * pi / 180;
-    
-    final lat2 = asin(sin(lat1) * cos(distance / earthRadius) + cos(lat1) * sin(distance / earthRadius) * cos(bearing));
-    final lng2 = lng1 + atan2(sin(bearing) * sin(distance / earthRadius) * cos(lat1), cos(distance / earthRadius) - sin(lat1) * sin(lat2));
-    
-    return Position(
-      latitude: lat2 * 180 / pi,
-      longitude: lng2 * 180 / pi,
-      timestamp: current.timestamp,
-      accuracy: current.accuracy,
-      altitude: current.altitude,
-      altitudeAccuracy: current.altitudeAccuracy,
-      heading: current.heading,
-      headingAccuracy: current.headingAccuracy,
-      speed: current.speed,
-      speedAccuracy: current.speedAccuracy,
-    );
   }
   
   // Validate position quality with strict filtering
@@ -1125,10 +1052,6 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
     if (!relaxed) {
       if (derivedSpeed < 0.3 && position.accuracy > GpsConfig.stationaryAccuracyCap) {
         print('GPS: Rejected - stationary but accuracy ${position.accuracy}m worse than ${GpsConfig.stationaryAccuracyCap}m');
-        return false;
-      }
-      if (derivedSpeed < 1.0 && position.accuracy > GpsConfig.slowAccuracyCap) {
-        print('GPS: Rejected - slow movement requires <${GpsConfig.slowAccuracyCap}m accuracy (got ${position.accuracy}m)');
         return false;
       }
     }
