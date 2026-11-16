@@ -265,6 +265,103 @@ void main() {
       expect(service.totalDistance, lessThan(2300));
     });
 
+    test('pomalá chůze s bočním šumem se pořád počítá dopředu', () {
+      final start = DateTime(2026, 11, 15, 11, 0, 0);
+      const steps = 200; // 200 * 8 m = 1,6 km
+      for (var i = 0; i <= steps; i++) {
+        final lateral = (i.isEven ? 12.0 : -12.0) / 111320.0;
+        service.onPositionUpdate(_pos(
+          lat: 50.0 + i * 0.000072,
+          lng: 14.4 + lateral,
+          time: start.add(Duration(seconds: i * 12)),
+          speed: 0,
+          accuracy: 28,
+        ));
+      }
+      expect(service.totalDistance, greaterThan(1200));
+      expect(service.totalDistance, lessThan(2000));
+    });
+
+    test('stání s kmitajícím GPS nepřidá kilometry', () {
+      final start = DateTime(2026, 11, 15, 12, 0, 0);
+      // 40 minut, bod každých 8 s. Poloha skáče tam a zpátky v okruhu ~25 m.
+      for (var i = 0; i <= 300; i++) {
+        final north = (i.isEven ? 22.0 : -14.0) / 111320.0;
+        final east = (((i * 17) % 11) - 5) * 3.0 / (111320.0 * 0.65);
+        service.onPositionUpdate(_pos(
+          lat: 49.2 + north,
+          lng: 16.6 + east,
+          time: start.add(Duration(seconds: i * 8)),
+          speed: 0,
+          accuracy: 25,
+        ));
+      }
+      expect(service.totalDistance, lessThan(150));
+    });
+
+    test('náhodný oblak bodů při stání nezvedne vzdálenost o kilometry', () {
+      final start = DateTime(2026, 11, 15, 13, 0, 0);
+      var seed = 42;
+      double nextUnit() {
+        seed = (1103515245 * seed + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
+      }
+
+      for (var i = 0; i <= 400; i++) {
+        final northM = (nextUnit() * 2 - 1) * 28;
+        final eastM = (nextUnit() * 2 - 1) * 28;
+        service.onPositionUpdate(_pos(
+          lat: 49.5 + northM / 111320.0,
+          lng: 14.4 + eastM / (111320.0 * 0.65),
+          time: start.add(Duration(seconds: i * 6)),
+          speed: 0.4,
+          accuracy: 22,
+        ));
+      }
+      expect(service.totalDistance, lessThan(200));
+    });
+
+    test('chůze, půlhodinové stání a další chůze nesčítá šum z přestávky', () {
+      final start = DateTime(2026, 11, 15, 14, 0, 0);
+      var t = start;
+      var lat = 49.8;
+
+      void walk(int steps) {
+        for (var i = 0; i < steps; i++) {
+          lat += 0.000072; // ~8 m
+          t = t.add(const Duration(seconds: 12));
+          service.onPositionUpdate(_pos(
+            lat: lat,
+            lng: 15.0,
+            time: t,
+            speed: 0,
+            accuracy: 18,
+          ));
+        }
+      }
+
+      walk(125); // ~1 km
+      final afterWalk = service.totalDistance;
+      expect(afterWalk, greaterThan(700));
+
+      for (var i = 0; i < 225; i++) {
+        t = t.add(const Duration(seconds: 8));
+        final north = (i.isEven ? 18.0 : -12.0) / 111320.0;
+        service.onPositionUpdate(_pos(
+          lat: lat + north,
+          lng: 15.0 + ((i % 5) - 2) * 0.00004,
+          time: t,
+          speed: 0,
+          accuracy: 24,
+        ));
+      }
+      final afterStand = service.totalDistance;
+      expect(afterStand - afterWalk, lessThan(120));
+      walk(125); // další ~1 km
+      expect(service.totalDistance, greaterThan(afterStand + 700));
+      expect(service.totalDistance, lessThan(2400));
+    });
+
     test('teleport does not inflate distance; recovery continues from new place', () {
       final t0 = DateTime(2026, 9, 10, 14, 0, 0);
       service.onPositionUpdate(_pos(lat: 50.0, lng: 14.4, time: t0, speed: 1.2));

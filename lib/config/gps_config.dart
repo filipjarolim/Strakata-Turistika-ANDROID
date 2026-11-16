@@ -13,6 +13,13 @@ class GpsConfig {
   static const double maxJumpSpeedMs = 12.0;
   /// Ignore a second fix this soon — almost always a duplicate source.
   static const int minSampleIntervalMs = 700;
+  // Lesní / rozhozená poloha: práh výš, ať poskok při stání není chůze.
+  static const double progressNoiseAccuracyFactor = 0.55;
+  static const double progressNoiseFloorCapMeters = 22.0;
+  static const int progressSampleCount = 3;
+  /// Krok proti směru celé řady je šum, ne chůze.
+  static const double progressForwardRatio = 0.35;
+
   // Dynamic minimum movement: add fraction of current accuracy to threshold
   static const double dynamicMinMoveAccuracyFactor = 0.3;
   // Horní strop dynamického prahu — jinak by nepřesnost 20 m znamenala

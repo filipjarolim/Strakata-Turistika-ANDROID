@@ -19,6 +19,175 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 enum _MotionProfile { stationary, walking, running, driving }
 
+/// Sčítá jen postup trasy. Krátká řada bodů, která se vrací nebo kličkuje
+/// kolem jednoho místa, je šum při stání a kilometry nepřidá.
+class _DistanceFold {
+  TrackPoint? anchor;
+  final List<TrackPoint> leg = [];
+  double committed = 0;
+
+  static double noiseFloor(double accuracy) {
+    if (!accuracy.isFinite || accuracy <= 0) return 6;
+    // Přesná poloha: pár metrů stačí, ať se krátké kroky nasčítají.
+    // Lesní / rozhozená poloha: práh výš, ať poskok při stání není chůze.
+    if (accuracy <= 12) {
+      return max(4.0, min(8.0, accuracy * 0.9));
+    }
+    return max(
+      12.0,
+      min(GpsConfig.progressNoiseFloorCapMeters, accuracy * GpsConfig.progressNoiseAccuracyFactor),
+    );
+  }
+
+  void reset() {
+    anchor = null;
+    leg.clear();
+    committed = 0;
+  }
+
+  void add(TrackPoint point) {
+    if (anchor == null) {
+      anchor = point;
+      return;
+    }
+    final prev = leg.isEmpty ? anchor! : leg.last;
+    final step = _meters(prev, point);
+    final dtMs = point.timestamp.difference(prev.timestamp).inMilliseconds;
+    final stepSpeed = dtMs > 0 ? step / (dtMs / 1000.0) : double.infinity;
+    if (stepSpeed > GpsConfig.maxSpeedMs) {
+      _commitShortLeg();
+      anchor = point;
+      leg.clear();
+      return;
+    }
+    leg.add(point);
+    if (leg.length < GpsConfig.progressSampleCount) return;
+    _tryCommit();
+  }
+
+  double get total => committed + _peek();
+
+  void _tryCommit() {
+    final start = anchor;
+    if (start == null || leg.length < GpsConfig.progressSampleCount) return;
+    final last = leg.last;
+    final net = _meters(start, last);
+    final path = _pathMeters(start, leg);
+    final dtMs = last.timestamp.difference(start.timestamp).inMilliseconds;
+    final speed = dtMs > 0 ? net / (dtMs / 1000.0) : double.infinity;
+    if (speed > GpsConfig.maxSpeedMs) {
+      anchor = last;
+      leg.clear();
+      return;
+    }
+    if (_isProgress(start, leg, net, path)) {
+      committed += net;
+      anchor = last;
+      leg.clear();
+      return;
+    }
+    if (leg.length >= 8) {
+      if (net < noiseFloor(max(start.accuracy, last.accuracy))) {
+        leg.clear();
+      } else {
+        leg.removeAt(0);
+      }
+    }
+  }
+
+  double _peek() {
+    final start = anchor;
+    if (start == null || leg.isEmpty) return 0;
+    final net = _meters(start, leg.last);
+    final path = _pathMeters(start, leg);
+    if (leg.length == 1) {
+      // Jen u přesného fixu. V lese by jeden poskok při stání připsal desítky metrů.
+      if (start.accuracy > 12 || leg.last.accuracy > 12) return 0;
+      return _shortStepMeters(start, leg.last);
+    }
+    if (!_isProgress(start, leg, net, path)) return 0;
+    final dtMs = leg.last.timestamp.difference(start.timestamp).inMilliseconds;
+    final speed = dtMs > 0 ? net / (dtMs / 1000.0) : double.infinity;
+    if (speed > GpsConfig.maxSpeedMs) return 0;
+    return net;
+  }
+
+  void _commitShortLeg() {
+    final start = anchor;
+    if (start == null || leg.isEmpty) return;
+    if (leg.length == 1) {
+      final step = _shortStepMeters(start, leg.last);
+      if (step > 0) committed += step;
+      return;
+    }
+    final net = _meters(start, leg.last);
+    final path = _pathMeters(start, leg);
+    if (!_isProgress(start, leg, net, path)) return;
+    final dtMs = leg.last.timestamp.difference(start.timestamp).inMilliseconds;
+    final speed = dtMs > 0 ? net / (dtMs / 1000.0) : double.infinity;
+    if (speed <= GpsConfig.maxSpeedMs) committed += net;
+  }
+
+  double _shortStepMeters(TrackPoint start, TrackPoint point) {
+    final net = _meters(start, point);
+    final floor = noiseFloor(max(start.accuracy, point.accuracy));
+    final dtMs = point.timestamp.difference(start.timestamp).inMilliseconds;
+    final speed = dtMs > 0 ? net / (dtMs / 1000.0) : double.infinity;
+    if (net >= floor && speed <= GpsConfig.maxJumpSpeedMs) return net;
+    return 0;
+  }
+
+  bool _isProgress(TrackPoint start, List<TrackPoint> points, double net, double path) {
+    if (points.isEmpty) return false;
+    final floor = noiseFloor(max(start.accuracy, points.last.accuracy));
+    if (net < floor) return false;
+    if (path > 0 && net < path * 0.45) return false;
+    return _mostlyForward(start, points);
+  }
+
+  bool _mostlyForward(TrackPoint start, List<TrackPoint> points) {
+    final last = points.last;
+    final northM = (last.latitude - start.latitude) * 111320.0;
+    final eastM = (last.longitude - start.longitude) * 111320.0 * cos(start.latitude * pi / 180);
+    final netLen = sqrt(northM * northM + eastM * eastM);
+    if (netLen < 1) return false;
+    var prevLat = start.latitude;
+    var prevLng = start.longitude;
+    for (final point in points) {
+      final stepN = (point.latitude - prevLat) * 111320.0;
+      final stepE = (point.longitude - prevLng) * 111320.0 * cos(start.latitude * pi / 180);
+      final stepLen = sqrt(stepN * stepN + stepE * stepE);
+      final projection = (stepN * northM + stepE * eastM) / netLen;
+      if (stepLen > 1 && projection < stepLen * GpsConfig.progressForwardRatio) return false;
+      prevLat = point.latitude;
+      prevLng = point.longitude;
+    }
+    return true;
+  }
+
+  static double _meters(TrackPoint a, TrackPoint b) {
+    return Geolocator.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude);
+  }
+
+  static double _pathMeters(TrackPoint start, List<TrackPoint> points) {
+    var path = 0.0;
+    var prev = start;
+    for (final point in points) {
+      path += _meters(prev, point);
+      prev = point;
+    }
+    return path;
+  }
+
+  static double sum(List<TrackPoint> points) {
+    final fold = _DistanceFold();
+    for (final point in points) {
+      fold.add(point);
+    }
+    return fold.total;
+  }
+}
+
 class EnhancedGPSTrackingService with WidgetsBindingObserver {
   static final EnhancedGPSTrackingService _instance = EnhancedGPSTrackingService._internal();
   factory EnhancedGPSTrackingService() => _instance;
@@ -40,7 +209,7 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   // Advanced tracking algorithms
   /// Kotva pro průběžnou vzdálenost. Celá trasa se znovu nesčítá po každém bodu,
   /// jinak je 4h+ záznam kvadratický a žere CPU i baterii.
-  TrackPoint? _distanceAnchor;
+  final _DistanceFold _distanceFold = _DistanceFold();
   Position? _lastValidPosition;
   double? _lastDerivedSpeedMs;
   bool _hasFirstFix = false;
@@ -1245,68 +1414,24 @@ class EnhancedGPSTrackingService with WidgetsBindingObserver {
   }
 
   void _resetDistanceAnchor() {
-    _distanceAnchor = null;
+    _distanceFold.reset();
   }
 
   /// Stejná pravidla jako [_sumFilteredDistance], ale jen pro nový bod.
   void _appendDistancePoint(TrackPoint current) {
-    final anchor = _distanceAnchor;
-    if (anchor == null) {
-      _distanceAnchor = current;
-      return;
-    }
-    final distance = Geolocator.distanceBetween(
-      anchor.latitude,
-      anchor.longitude,
-      current.latitude,
-      current.longitude,
-    );
-    if (distance < GpsConfig.minMovementMeters) return;
-
-    final dtMs = current.timestamp.difference(anchor.timestamp).inMilliseconds;
-    final speed = dtMs > 0 ? distance / (dtMs / 1000.0) : double.infinity;
-    if (speed > GpsConfig.maxSpeedMs) {
-      _distanceAnchor = current;
-      return;
-    }
-    _totalDistance += distance;
-    _distanceAnchor = current;
+    _distanceFold.add(current);
+    _totalDistance = _distanceFold.total;
   }
 
   void _rebuildDistanceFromTrack() {
-    _distanceAnchor = null;
-    _totalDistance = 0;
+    _distanceFold.reset();
     for (final point in _trackPoints) {
-      _appendDistancePoint(point);
+      _distanceFold.add(point);
     }
+    _totalDistance = _distanceFold.total;
   }
 
-  double _sumFilteredDistance(List<TrackPoint> points) {
-    if (points.length < 2) return 0;
-    double total = 0;
-    TrackPoint anchor = points.first;
-    for (int i = 1; i < points.length; i++) {
-      final current = points[i];
-      final distance = Geolocator.distanceBetween(
-        anchor.latitude,
-        anchor.longitude,
-        current.latitude,
-        current.longitude,
-      );
-      if (distance < GpsConfig.minMovementMeters) continue;
-
-      final dtMs = current.timestamp.difference(anchor.timestamp).inMilliseconds;
-      final speed = dtMs > 0 ? distance / (dtMs / 1000.0) : double.infinity;
-      // Skip teleport jumps without polluting cumulative distance
-      if (speed > GpsConfig.maxSpeedMs) {
-        anchor = current;
-        continue;
-      }
-      total += distance;
-      anchor = current;
-    }
-    return total;
-  }
+  double _sumFilteredDistance(List<TrackPoint> points) => _DistanceFold.sum(points);
 
   @visibleForTesting
   double testSumFilteredDistance(List<TrackPoint> points) => _sumFilteredDistance(points);
