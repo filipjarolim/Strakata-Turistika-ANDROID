@@ -96,24 +96,40 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                   final stats = snap.data ?? {};
                   final total = stats['totalTiles'] ?? 0;
                   final bytes = stats['totalCompressedBytes'] ?? 0;
-                  final mb = (bytes is int) ? (bytes / 1024 / 1024).toStringAsFixed(1) : '0.0';
+                  final mb = (bytes is int)
+                      ? (bytes / 1024 / 1024).toStringAsFixed(1)
+                      : '0.0';
                   final minZoom = stats['minZoom'] as int?;
                   final maxZoom = stats['maxZoom'] as int?;
                   final sourceHistogram =
-                      (stats['sourceHistogram'] as Map?)?.cast<String, dynamic>() ?? {};
-                  final browsing = (sourceHistogram['browsing'] as num?)?.toInt() ?? 0;
-                  final download = (sourceHistogram['download'] as num?)?.toInt() ?? 0;
-                  final unknown = (sourceHistogram['unknown'] as num?)?.toInt() ?? 0;
-                  final bounds = (stats['bounds'] as Map?)?.cast<String, dynamic>() ?? {};
+                      (stats['sourceHistogram'] as Map?)
+                          ?.cast<String, dynamic>() ??
+                      {};
+                  final browsing =
+                      (sourceHistogram['browsing'] as num?)?.toInt() ?? 0;
+                  final download =
+                      (sourceHistogram['download'] as num?)?.toInt() ?? 0;
+                  final unknown =
+                      (sourceHistogram['unknown'] as num?)?.toInt() ?? 0;
+                  final bounds =
+                      (stats['bounds'] as Map?)?.cast<String, dynamic>() ?? {};
                   final south = (bounds['south'] as num?)?.toDouble();
                   final north = (bounds['north'] as num?)?.toDouble();
                   final west = (bounds['west'] as num?)?.toDouble();
                   final east = (bounds['east'] as num?)?.toDouble();
                   final zoomHistogram =
-                      (stats['zoomHistogram'] as Map?)?.cast<dynamic, dynamic>() ?? {};
+                      (stats['zoomHistogram'] as Map?)
+                          ?.cast<dynamic, dynamic>() ??
+                      {};
                   final sortedZooms = zoomHistogram.entries.toList()
-                    ..sort((a, b) => int.parse(a.key.toString()).compareTo(int.parse(b.key.toString())));
-                  final recentTiles = (stats['recentTiles'] as List?)?.cast<Map>() ?? const <Map>[];
+                    ..sort(
+                      (a, b) => int.parse(
+                        a.key.toString(),
+                      ).compareTo(int.parse(b.key.toString())),
+                    );
+                  final recentTiles =
+                      (stats['recentTiles'] as List?)?.cast<Map>() ??
+                      const <Map>[];
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,11 +158,21 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                             ),
                             const SizedBox(height: 14),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
-                                _metric('částí mapy', total.toString()),
-                                Container(width: 1, height: 42, color: const Color(0xFFE8E4DC)),
-                                _metric('místo v telefonu', '$mb MB'),
+                                Expanded(
+                                  child: _metric(
+                                    'částí mapy',
+                                    total.toString(),
+                                  ),
+                                ),
+                                Container(
+                                  width: 1,
+                                  height: 42,
+                                  color: const Color(0xFFE8E4DC),
+                                ),
+                                Expanded(
+                                  child: _metric('místo v telefonu', '$mb MB'),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -222,13 +248,27 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                       WebMobileSectionCard(
                         padding: const EdgeInsets.all(8),
                         child: Theme(
-                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          data: Theme.of(
+                            context,
+                          ).copyWith(dividerColor: Colors.transparent),
                           child: ExpansionTile(
-                            tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                            tilePadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 4,
+                            ),
+                            childrenPadding: const EdgeInsets.fromLTRB(
+                              12,
+                              0,
+                              12,
+                              12,
+                            ),
                             title: Row(
                               children: [
-                                Icon(Icons.tune_rounded, size: 20, color: AppColors.textSecondary),
+                                Icon(
+                                  Icons.tune_rounded,
+                                  size: 20,
+                                  color: AppColors.textSecondary,
+                                ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
@@ -255,7 +295,10 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                               ),
                             ),
                             children: [
-                              if (south != null && north != null && west != null && east != null)
+                              if (south != null &&
+                                  north != null &&
+                                  west != null &&
+                                  east != null)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 10),
                                   child: SelectableText(
@@ -281,9 +324,12 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                                 ...sortedZooms.map((entry) {
                                   final z = int.parse(entry.key.toString());
                                   final count = (entry.value as num).toInt();
-                                  final totalTiles = (stats['totalTiles'] as num?)?.toInt() ?? 1;
-                                  final ratio =
-                                      totalTiles == 0 ? 0.0 : (count / totalTiles).clamp(0.0, 1.0);
+                                  final totalTiles =
+                                      (stats['totalTiles'] as num?)?.toInt() ??
+                                      1;
+                                  final ratio = totalTiles == 0
+                                      ? 0.0
+                                      : (count / totalTiles).clamp(0.0, 1.0);
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 8),
                                     child: Row(
@@ -300,13 +346,19 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                                         ),
                                         Expanded(
                                           child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                             child: LinearProgressIndicator(
                                               value: ratio,
                                               minHeight: 8,
-                                              backgroundColor: const Color(0xFFE8E4DC),
+                                              backgroundColor: const Color(
+                                                0xFFE8E4DC,
+                                              ),
                                               valueColor:
-                                                  AlwaysStoppedAnimation<Color>(AppColors.brand),
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    AppColors.brand,
+                                                  ),
                                             ),
                                           ),
                                         ),
@@ -348,16 +400,24 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                                   final y = tile['y'] ?? '?';
                                   final source = tile['source'] ?? '?';
                                   final age = tile['ageMinutes'] ?? 0;
-                                  final kb = ((tile['compressedSize'] as num?)?.toDouble() ?? 0) / 1024;
+                                  final kb =
+                                      ((tile['compressedSize'] as num?)
+                                              ?.toDouble() ??
+                                          0) /
+                                      1024;
                                   return Container(
                                     margin: const EdgeInsets.only(bottom: 8),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFF8F7F4),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'úroveň $z • část $x/$y',
@@ -396,10 +456,12 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                 builder: (context, snapshot) {
                   final progressData = snapshot.data ?? {};
                   final isDownloading = progressData['isDownloading'] == true;
-                  final progress = (progressData['progress'] as num?)?.toDouble() ??
+                  final progress =
+                      (progressData['progress'] as num?)?.toDouble() ??
                       (progressData['currentProgress'] as num?)?.toDouble() ??
                       0.0;
-                  final statusRaw = (progressData['status'] ?? progressData['currentStatus'])
+                  final statusRaw =
+                      (progressData['status'] ?? progressData['currentStatus'])
                           ?.toString() ??
                       '';
                   final status = _friendlyDownloadStatus(statusRaw);
@@ -424,8 +486,12 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                         Row(
                           children: [
                             Icon(
-                              isDownloading ? Icons.downloading_rounded : Icons.cloud_done_outlined,
-                              color: isDownloading ? AppColors.brand : AppColors.textSecondary,
+                              isDownloading
+                                  ? Icons.downloading_rounded
+                                  : Icons.cloud_done_outlined,
+                              color: isDownloading
+                                  ? AppColors.brand
+                                  : AppColors.textSecondary,
                               size: 20,
                             ),
                             const SizedBox(width: 8),
@@ -457,7 +523,9 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                             value: progress.clamp(0.0, 1.0),
                             minHeight: 8,
                             backgroundColor: const Color(0xFFE8E4DC),
-                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.brand),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppColors.brand,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -529,7 +597,10 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                             batchSize: 800,
                           );
                           if (context.mounted) {
-                            AppToast.showInfo(context, 'Stahuje se střední přiblížení pro velkou část Česka…');
+                            AppToast.showInfo(
+                              context,
+                              'Stahuje se střední přiblížení pro velkou část Česka…',
+                            );
                           }
                         },
                         icon: Icons.download_rounded,
@@ -554,7 +625,10 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                             batchSize: 800,
                           );
                           if (context.mounted) {
-                            AppToast.showInfo(context, 'Stahuje se Praha s podrobnější mapou…');
+                            AppToast.showInfo(
+                              context,
+                              'Stahuje se Praha s podrobnější mapou…',
+                            );
                           }
                         },
                         icon: Icons.download_rounded,
@@ -589,7 +663,10 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
                         onPressed: () async {
                           await MapyCzDownloadService.clearCache();
                           if (context.mounted) {
-                            AppToast.showSuccess(context, 'Uložená mapa byla smazána.');
+                            AppToast.showSuccess(
+                              context,
+                              'Uložená mapa byla smazána.',
+                            );
                           }
                           setState(() {});
                         },
@@ -673,12 +750,16 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
         children: [
           Icon(icon, size: 14, color: AppColors.textPrimary),
           const SizedBox(width: 6),
-          Text(
-            '$label: $count',
-            style: GoogleFonts.libreFranklin(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+          Flexible(
+            child: Text(
+              '$label: $count',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.libreFranklin(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
         ],
@@ -701,8 +782,10 @@ class _OfflineMapsPageState extends State<OfflineMapsPage> {
     if (s.isEmpty) return '';
     const pairs = <String, String>{
       'Initializing Mapy.cz-style download...': 'Připravuje se stahování…',
-      'Initializing custom area download...': 'Připravuje se stahování vybrané oblasti…',
-      'Network unavailable': 'Bez připojení k internetu — stahování nelze spustit.',
+      'Initializing custom area download...':
+          'Připravuje se stahování vybrané oblasti…',
+      'Network unavailable':
+          'Bez připojení k internetu — stahování nelze spustit.',
       'Download completed!': 'Stahování dokončeno.',
       'Download stopped': 'Stahování bylo zastaveno.',
       'Stopping download...': 'Zastavuje se stahování…',

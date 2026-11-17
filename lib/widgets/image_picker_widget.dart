@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../config/app_colors.dart';
 import '../models/forms/form_image_attachment.dart';
 import '../services/auth_service.dart';
+import '../services/gallery_save.dart';
 import '../widgets/photo_viewer.dart';
 import '../widgets/ui/app_toast.dart';
 
@@ -160,6 +161,7 @@ class _ImagePickerWidgetState extends State<ImagePickerWidget> {
       );
 
       if (photo == null) return;
+      await saveCameraPhotoToGallery(photo.path);
       _appendFiles([File(photo.path)]);
     } catch (e) {
       debugPrint('Camera error: $e');

@@ -10,11 +10,7 @@ enum AppButtonType {
   destructiveOutline,
 }
 
-enum AppButtonSize {
-  medium,
-  large,
-  small,
-}
+enum AppButtonSize { medium, large, small }
 
 class AppButton extends StatelessWidget {
   final String? text;
@@ -48,7 +44,7 @@ class AppButton extends StatelessWidget {
       child: _buildButton(),
     );
   }
-  
+
   Widget _buildButton() {
     final style = _getStyle();
     final isGradientPrimary = type == AppButtonType.primary;
@@ -84,7 +80,8 @@ class AppButton extends StatelessWidget {
       );
     }
 
-    if (type == AppButtonType.outline || type == AppButtonType.destructiveOutline) {
+    if (type == AppButtonType.outline ||
+        type == AppButtonType.destructiveOutline) {
       return OutlinedButton(
         onPressed: isLoading ? null : onPressed,
         style: style,
@@ -97,14 +94,14 @@ class AppButton extends StatelessWidget {
         child: _buildContent(),
       );
     }
-    
+
     return ElevatedButton(
       onPressed: isLoading ? null : onPressed,
       style: style,
       child: _buildContent(),
     );
   }
-  
+
   Widget _buildContent() {
     if (isLoading) {
       return SizedBox(
@@ -116,7 +113,7 @@ class AppButton extends StatelessWidget {
         ),
       );
     }
-    
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -130,6 +127,7 @@ class AppButton extends StatelessWidget {
         ],
         if (text != null)
           Flexible(
+            fit: FlexFit.loose,
             child: Text(
               text!,
               overflow: TextOverflow.ellipsis,
@@ -145,13 +143,13 @@ class AppButton extends StatelessWidget {
       ],
     );
   }
-  
+
   ButtonStyle _getStyle() {
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(12),
     );
     final padding = _getPadding();
-    
+
     switch (type) {
       case AppButtonType.primary:
         return ElevatedButton.styleFrom(
@@ -187,7 +185,10 @@ class AppButton extends StatelessWidget {
       case AppButtonType.destructiveOutline:
         return OutlinedButton.styleFrom(
           foregroundColor: AppColors.error,
-          side: BorderSide(color: AppColors.error.withValues(alpha: 0.35), width: 1.5),
+          side: BorderSide(
+            color: AppColors.error.withValues(alpha: 0.35),
+            width: 1.5,
+          ),
           shape: shape,
           padding: padding,
           backgroundColor: AppColors.errorContainer,
@@ -203,7 +204,7 @@ class AppButton extends StatelessWidget {
 
   Color _getContentColor() {
     if (onPressed == null) return Colors.grey[400]!;
-    
+
     switch (type) {
       case AppButtonType.primary:
       case AppButtonType.destructive:
@@ -218,38 +219,47 @@ class AppButton extends StatelessWidget {
         return AppColors.textSecondary;
     }
   }
-  
+
   double _getHeight() {
     switch (size) {
-      case AppButtonSize.small: return 44;
-      case AppButtonSize.medium: return 52;
-      case AppButtonSize.large: return 56;
+      case AppButtonSize.small:
+        return 44;
+      case AppButtonSize.medium:
+        return 52;
+      case AppButtonSize.large:
+        return 56;
     }
   }
-  
+
   double _getFontSize() {
     switch (size) {
-      case AppButtonSize.small: return 13;
-      case AppButtonSize.medium: return 15;
-      case AppButtonSize.large: return 17;
+      case AppButtonSize.small:
+        return 13;
+      case AppButtonSize.medium:
+        return 15;
+      case AppButtonSize.large:
+        return 17;
     }
   }
-  
+
   double _getIconSize() {
-      switch (size) {
-      case AppButtonSize.small: return 16;
-      case AppButtonSize.medium: return 20;
-      case AppButtonSize.large: return 24;
+    switch (size) {
+      case AppButtonSize.small:
+        return 16;
+      case AppButtonSize.medium:
+        return 20;
+      case AppButtonSize.large:
+        return 24;
     }
   }
-  
+
   EdgeInsetsGeometry _getPadding() {
     switch (size) {
-      case AppButtonSize.small: 
+      case AppButtonSize.small:
         return const EdgeInsets.symmetric(horizontal: 16, vertical: 0);
-      case AppButtonSize.medium: 
+      case AppButtonSize.medium:
         return const EdgeInsets.symmetric(horizontal: 24, vertical: 0);
-      case AppButtonSize.large: 
+      case AppButtonSize.large:
         return const EdgeInsets.symmetric(horizontal: 32, vertical: 0);
     }
   }

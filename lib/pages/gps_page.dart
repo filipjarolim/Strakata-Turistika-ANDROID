@@ -31,6 +31,7 @@ import 'package:strakataturistikaandroidapp/models/place_type_config.dart';
 import 'package:strakataturistikaandroidapp/services/cloudinary_service.dart';
 import 'package:strakataturistikaandroidapp/services/nominatim_service.dart';
 import 'package:strakataturistikaandroidapp/services/place_photo_store.dart';
+import 'package:strakataturistikaandroidapp/services/gallery_save.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:strakataturistikaandroidapp/config/app_colors.dart';
@@ -820,6 +821,33 @@ class _GpsPageState extends State<GpsPage>
     // Removed simulation completion toast per request
   }
 
+  Future<void> _attachPlacePhoto(
+    BuildContext context,
+    void Function(VoidCallback) setSheet,
+    ImageSource source,
+    void Function(XFile file) assign,
+  ) async {
+    final x = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 2560,
+      maxHeight: 2560,
+      imageQuality: 90,
+      requestFullMetadata: false,
+    );
+    if (x == null) return;
+    if (source == ImageSource.camera) {
+      await saveCameraPhotoToGallery(x.path);
+    }
+    try {
+      final stored = await persistPlacePhoto(File(x.path));
+      if (!context.mounted) return;
+      setSheet(() => assign(XFile(stored.path)));
+    } catch (_) {
+      if (!context.mounted) return;
+      setSheet(() => assign(x));
+    }
+  }
+
   Future<void> _capturePlaceDuringTracking() async {
     if (!_trackingStateService.isTracking) return;
     HapticService.lightImpact();
@@ -899,27 +927,34 @@ class _GpsPageState extends State<GpsPage>
                     }).toList(),
                   ),
                   const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final x = await ImagePicker().pickImage(
-                        source: ImageSource.camera,
-                        maxWidth: 2560,
-                        maxHeight: 2560,
-                        imageQuality: 90,
-                        requestFullMetadata: false,
-                      );
-                      if (x == null) return;
-                      try {
-                        final stored = await persistPlacePhoto(File(x.path));
-                        if (!context.mounted) return;
-                        setSheet(() => photoFile = XFile(stored.path));
-                      } catch (_) {
-                        if (!context.mounted) return;
-                        setSheet(() => photoFile = x);
-                      }
-                    },
-                    icon: const Icon(Icons.photo_camera_outlined),
-                    label: Text(photoFile == null ? 'Vyfotit místo' : 'Fotka pořízena'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _attachPlacePhoto(
+                            context,
+                            setSheet,
+                            ImageSource.gallery,
+                            (file) => photoFile = file,
+                          ),
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('Galerie'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _attachPlacePhoto(
+                            context,
+                            setSheet,
+                            ImageSource.camera,
+                            (file) => photoFile = file,
+                          ),
+                          icon: const Icon(Icons.photo_camera_outlined),
+                          label: Text(photoFile == null ? 'Vyfotit' : 'Nová fotka'),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   AppButton(

@@ -5,6 +5,7 @@ import '../config/app_colors.dart';
 import '../config/app_theme.dart';
 import '../config/strakata_design_tokens.dart';
 import '../services/auth_service.dart';
+import '../services/competition_dashboard_service.dart';
 import '../pages/dynamic_upload_page.dart';
 import '../pages/results_visit_detail_page.dart';
 import '../pages/user_visits_page.dart';
@@ -46,10 +47,14 @@ class ExploreTab extends StatelessWidget {
                 const _HomeTitleBlock(),
                 const SizedBox(height: 28),
                 const _QuickSeasonStats(),
+                const _MonthThemeCard(),
                 const SizedBox(height: 20),
                 _HeroCompetitionCard(radius: _cardRadius, dogAsset: _dogAsset),
                 const SizedBox(height: 20),
-                _AboutUsCard(radius: _cardRadius, mountainsAsset: _mountainsAsset),
+                _AboutUsCard(
+                  radius: _cardRadius,
+                  mountainsAsset: _mountainsAsset,
+                ),
                 const SizedBox(height: 28),
                 const _HomeQuickNavRow(),
                 const SizedBox(height: 28),
@@ -61,6 +66,111 @@ class ExploreTab extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _MonthThemeCard extends StatefulWidget {
+  const _MonthThemeCard();
+
+  @override
+  State<_MonthThemeCard> createState() => _MonthThemeCardState();
+}
+
+class _MonthThemeCardState extends State<_MonthThemeCard> {
+  static const _months = [
+    'leden',
+    'únor',
+    'březen',
+    'duben',
+    'květen',
+    'červen',
+    'červenec',
+    'srpen',
+    'září',
+    'říjen',
+    'listopad',
+    'prosinec',
+  ];
+
+  late final Future<MonthlyThemeData?> _theme;
+
+  @override
+  void initState() {
+    super.initState();
+    _theme = CompetitionDashboardService().getCurrentMonthlyTheme();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<MonthlyThemeData?>(
+      future: _theme,
+      builder: (context, snapshot) {
+        final theme = snapshot.data;
+        final keywords = theme?.keywords ?? const <String>[];
+        if (keywords.isEmpty) return const SizedBox.shrink();
+        final monthName = _months[(theme!.month - 1).clamp(0, 11)];
+        return Padding(
+          padding: const EdgeInsets.only(top: 20),
+          child: WebMobileSectionCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Téma měsíce',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$monthName ${theme.year}',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: keywords
+                      .map(
+                        (keyword) => Chip(
+                          label: Text(keyword),
+                          backgroundColor: AppColors.brand.withValues(
+                            alpha: 0.12,
+                          ),
+                          labelStyle: GoogleFonts.libreFranklin(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.textPrimary,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Při odeslání trasy napište slovo do názvu nebo poznámky místa.',
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -167,10 +277,7 @@ class _HomeTitleBlock extends StatelessWidget {
 }
 
 class _HeroCompetitionCard extends StatelessWidget {
-  const _HeroCompetitionCard({
-    required this.radius,
-    required this.dogAsset,
-  });
+  const _HeroCompetitionCard({required this.radius, required this.dogAsset});
 
   final double radius;
   final String dogAsset;
@@ -281,14 +388,18 @@ class _CompetitionPillButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.explore_rounded, size: 22, color: Colors.black),
+              const Icon(Icons.explore_rounded, size: 22, color: Colors.black),
               const SizedBox(width: 10),
-              Text(
-                'Soutěžit',
-                style: GoogleFonts.libreFranklin(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black,
+              Flexible(
+                child: Text(
+                  'Soutěžit',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.libreFranklin(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                  ),
                 ),
               ),
             ],
@@ -300,10 +411,7 @@ class _CompetitionPillButton extends StatelessWidget {
 }
 
 class _AboutUsCard extends StatelessWidget {
-  const _AboutUsCard({
-    required this.radius,
-    required this.mountainsAsset,
-  });
+  const _AboutUsCard({required this.radius, required this.mountainsAsset});
 
   final double radius;
   final String mountainsAsset;
@@ -335,13 +443,17 @@ class _AboutUsCard extends StatelessWidget {
                 alignment: Alignment.center,
                 errorBuilder: (_, __, ___) => const ColoredBox(
                   color: Color(0xFFA8CFE8),
-                  child: Center(child: Icon(Icons.landscape_rounded, size: 48, color: Colors.white70)),
+                  child: Center(
+                    child: Icon(
+                      Icons.landscape_rounded,
+                      size: 48,
+                      color: Colors.white70,
+                    ),
+                  ),
                 ),
               ),
             ),
-            Positioned.fill(
-              child: ColoredBox(color: _tintWhite),
-            ),
+            Positioned.fill(child: ColoredBox(color: _tintWhite)),
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 22, 22, 26),
               child: Column(
@@ -436,7 +548,10 @@ class _TintedHomeCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(r),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.65), width: 1.2),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.65),
+              width: 1.2,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
@@ -530,7 +645,7 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const WebMobileSectionTitle('Poslední aktivita'),
+            const Expanded(child: WebMobileSectionTitle('Poslední aktivita')),
             AppButton(
               text: 'Zobrazit vše',
               onPressed: () {
@@ -561,15 +676,17 @@ class _RecentActivitySectionState extends State<RecentActivitySection> {
             ),
           )
         else if (_recent.isEmpty)
-          _EmptyHomePanel(
-            message: 'Zatím žádná aktivita.',
-          )
+          _EmptyHomePanel(message: 'Zatím žádná aktivita.')
         else
           Column(
-            children: _recent.map((v) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: ActivityItem(v),
-                )).toList(),
+            children: _recent
+                .map(
+                  (v) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ActivityItem(v),
+                  ),
+                )
+                .toList(),
           ),
       ],
     );
@@ -612,7 +729,9 @@ class ActivityItem extends StatelessWidget {
       child: InkWell(
         onTap: () {
           final u = AuthService.currentUser;
-          final season = visit.year > 0 ? visit.year : seasonEndingYear(DateTime.now());
+          final season = visit.year > 0
+              ? visit.year
+              : seasonEndingYear(DateTime.now());
           Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => ResultsVisitDetailPage(
@@ -629,34 +748,44 @@ class ActivityItem extends StatelessWidget {
           child: Material(
             color: Colors.transparent,
             child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEEF2F0),
-                borderRadius: BorderRadius.circular(14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 6,
               ),
-              child: const Icon(Icons.terrain_rounded, color: Color(0xFF5C5C5C)),
-            ),
-            title: Text(
-              visit.routeTitle ?? visit.visitedPlaces,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.libreFranklin(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                color: AppColors.textPrimary,
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2F0),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.terrain_rounded,
+                  color: Color(0xFF5C5C5C),
+                ),
               ),
-            ),
-            subtitle: Text(
-              '${visit.points.toStringAsFixed(0)} bodů',
-              style: GoogleFonts.libreFranklin(
-                color: AppColors.brand,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+              title: Text(
+                visit.routeTitle ?? visit.visitedPlaces,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.libreFranklin(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-            trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey[500]),
+              subtitle: Text(
+                '${visit.points.toStringAsFixed(0)} bodů',
+                style: GoogleFonts.libreFranklin(
+                  color: AppColors.brand,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              trailing: Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Colors.grey[500],
+              ),
             ),
           ),
         ),
@@ -685,7 +814,10 @@ class ManualUploadSection extends StatelessWidget {
                 iconColor: const Color(0xFF1D4ED8),
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const DynamicUploadPage(slug: 'gpx-upload')),
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        const DynamicUploadPage(slug: 'gpx-upload'),
+                  ),
                 ),
               ),
             ),
@@ -698,7 +830,10 @@ class ManualUploadSection extends StatelessWidget {
                 iconColor: const Color(0xFF7C3AED),
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const DynamicUploadPage(slug: 'screenshot-upload')),
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        const DynamicUploadPage(slug: 'screenshot-upload'),
+                  ),
                 ),
               ),
             ),

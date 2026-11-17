@@ -21,7 +21,8 @@ class ResultsPage extends StatefulWidget {
   State<ResultsPage> createState() => _ResultsPageState();
 }
 
-class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin, WidgetsBindingObserver {
+class _ResultsPageState extends State<ResultsPage>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   // Data
   final VisitRepository _visitRepository = VisitRepository();
   List<int> availableSeasons = [];
@@ -35,7 +36,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   bool _isLoadingMore = false;
   String _searchQuery = '';
   Timer? _searchDebounce;
-  
+
   // Network state
   bool _isOnline = true;
   Timer? _networkTimer;
@@ -50,10 +51,10 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    
+
     // Add lifecycle observer
     WidgetsBinding.instance.addObserver(this);
-    
+
     _scrollController = ScrollController()..addListener(_onScroll);
     _searchController = TextEditingController();
     _animationController = AnimationController(
@@ -63,10 +64,10 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController!, curve: Curves.easeOut),
     );
-    
+
     // Start network monitoring
     _startNetworkMonitor();
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadSeasons();
@@ -84,11 +85,11 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     _animationController?.dispose();
     super.dispose();
   }
-  
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
+
     if (state == AppLifecycleState.resumed) {
       _startNetworkMonitor();
       _checkNetworkOnce();
@@ -127,7 +128,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     setState(() {
       _isOnline = online;
     });
-    
+
     // When coming back online, reload data if we have no data
     if (online && _leaders.isEmpty) {
       _loadSeasons();
@@ -144,8 +145,9 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
       if (!mounted) return;
       setState(() {
         availableSeasons = seasonsShownForResults(seasons, DateTime.now());
-        selectedSeason =
-            availableSeasons.isNotEmpty ? availableSeasons.first : null;
+        selectedSeason = availableSeasons.isNotEmpty
+            ? availableSeasons.first
+            : null;
       });
       if (_animationController != null) {
         _animationController!.forward();
@@ -193,9 +195,11 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     });
     if (resetScroll) {
       if (_scrollController.hasClients) {
-        await _scrollController.animateTo(0,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut);
+        await _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
       }
     }
     await _loadNextLeaderboardPage();
@@ -204,7 +208,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
       _isInitialLoading = false;
     });
   }
-
 
   Future<void> _loadNextLeaderboardPage() async {
     if (_isLoadingMore || selectedSeason == null) return;
@@ -219,7 +222,8 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
         searchQuery: _searchQuery.isEmpty ? null : _searchQuery,
         sortByVisits: _sortByVisits,
       );
-      final raw = (result['data'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final raw = (result['data'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
       final data = raw.map((m) => LeaderboardEntry.fromMap(m)).toList();
       if (!mounted) return;
 
@@ -238,14 +242,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
       // _showErrorSnackBar('Chyba načítání žebříčku');
     }
   }
-
-
-
-
-
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -278,15 +274,19 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0EBE3),
                   borderRadius: BorderRadius.circular(100),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
                 ),
                 child: IconButton(
                   onPressed: () => _showFilterSheet(),
-                  icon: Icon(Icons.tune_rounded, color: AppColors.textPrimary, size: 22),
-                  tooltip: 'Filtrovat',
-                  style: IconButton.styleFrom(
-                    padding: const EdgeInsets.all(8),
+                  icon: Icon(
+                    Icons.tune_rounded,
+                    color: AppColors.textPrimary,
+                    size: 22,
                   ),
+                  tooltip: 'Filtrovat',
+                  style: IconButton.styleFrom(padding: const EdgeInsets.all(8)),
                 ),
               ),
               const SizedBox(width: 10),
@@ -295,15 +295,15 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
           body: _isInitialLoading
               ? _buildInitialSkeleton()
               : availableSeasons.isEmpty
-                  ? _buildEmptyState()
-                  : RefreshIndicator(
-                      onRefresh: () async {
-                        await _reloadForCurrentFilters(resetScroll: false);
-                      },
-                      color: AppColors.brand,
-                      backgroundColor: Colors.white,
-                      child: _buildResultsContent(),
-                    ),
+              ? _buildEmptyState()
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    await _reloadForCurrentFilters(resetScroll: false);
+                  },
+                  color: AppColors.brand,
+                  backgroundColor: Colors.white,
+                  child: _buildResultsContent(),
+                ),
         ),
       ],
     );
@@ -362,7 +362,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     );
   }
 
-
   Widget _buildResultsContent() {
     return _fadeAnimation != null
         ? FadeTransition(
@@ -384,18 +383,23 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
               ],
             ),
           )
-        : Center(
-            child: const StrakataLoader(label: 'Načítám výsledky…'),
-          );
+        : Center(child: const StrakataLoader(label: 'Načítám výsledky…'));
   }
 
   Widget _buildTopSummary() {
     final season = selectedSeason;
-    final isCurrent = season != null && season == seasonEndingYear(DateTime.now());
-    
+    final isCurrent =
+        season != null && season == seasonEndingYear(DateTime.now());
+
     final totalCompetitors = _leaders.length;
-    final totalVisits = _leaders.fold<int>(0, (sum, entry) => sum + entry.visitsCount);
-    final totalPoints = _leaders.fold<double>(0.0, (sum, entry) => sum + entry.totalPoints);
+    final totalVisits = _leaders.fold<int>(
+      0,
+      (sum, entry) => sum + entry.visitsCount,
+    );
+    final totalPoints = _leaders.fold<double>(
+      0.0,
+      (sum, entry) => sum + entry.totalPoints,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
@@ -407,11 +411,16 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
             if (isCurrent)
               Container(
                 margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(100),
-                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.25)),
+                  border: Border.all(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                  ),
                 ),
                 child: Text(
                   'Probíhající',
@@ -447,7 +456,10 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                   const SizedBox(width: 8),
                   _buildMetricTile('Návštěvy', '$totalVisits'),
                   const SizedBox(width: 8),
-                  _buildMetricTile('Body celkem', totalPoints.toStringAsFixed(0)),
+                  _buildMetricTile(
+                    'Body celkem',
+                    totalPoints.toStringAsFixed(0),
+                  ),
                 ],
               ),
             ],
@@ -470,17 +482,20 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              label.toUpperCase(),
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.libreFranklin(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textTertiary,
-                letterSpacing: 0.4,
               ),
             ),
             const SizedBox(height: 3),
             Text(
               value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.libreFranklin(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -521,7 +536,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
         children: [
           _buildSectionHeader(
             title: 'Žebříček',
-            description: 'Pořadí soutěžících podle pravidel sezóny.',
+            description: 'Jméno, pes a body za schválené výlety.',
           ),
           if (_leaders.isEmpty && !_isInitialLoading && !_isLoadingMore)
             Padding(
@@ -539,10 +554,15 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
             )
           else
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+              padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
               child: Column(
                 children: [
-                  for (int i = 0; i < _leaders.length; i++) _buildLeaderCard(i + 1, _leaders[i]),
+                  for (int i = 0; i < _leaders.length; i++)
+                    LeaderboardTile(
+                      rank: i + 1,
+                      entry: _leaders[i],
+                      onTap: () => _showUserVisitsFromLeaderboard(_leaders[i]),
+                    ),
                 ],
               ),
             ),
@@ -551,7 +571,10 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildSectionHeader({required String title, required String description}) {
+  Widget _buildSectionHeader({
+    required String title,
+    required String description,
+  }) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -649,201 +672,6 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     );
   }
 
-
-
-
-
-
-  Widget _buildLeaderCard(int rank, LeaderboardEntry entry) {
-    final Color badgeColor = rank == 1
-        ? const Color(0xFFFFD700)
-        : rank == 2
-            ? const Color(0xFFC0C0C0)
-            : rank == 3
-                ? const Color(0xFFCD7F32)
-                : const Color(0xFFE0E0E0);
-    
-    final Color rankTextColor = rank <= 3 ? Colors.white : const Color(0xFF6B7280);
-    final Color rankBgColor = rank <= 3 ? badgeColor : Colors.transparent;
-    final BoxBorder? rankBorder = rank <= 3 ? null : Border.all(color: const Color(0xFFE5E7EB), width: 2);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: WebMobileSectionCard.decoration(),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () => _showUserVisitsFromLeaderboard(entry),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                // Rank badge
-                Container(
-                  width: 40,
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: rankBgColor,
-                    shape: BoxShape.circle,
-                    border: rankBorder,
-                    boxShadow: rank <= 3 
-                      ? [BoxShadow(color: badgeColor.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 4))] 
-                      : null,
-                  ),
-                  child: Text(
-                    '$rank',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: rankTextColor,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                
-                // Avatar with premium border
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: rank <= 3 
-                      ? LinearGradient(colors: [badgeColor, badgeColor.withValues(alpha: 0.5)], begin: Alignment.topLeft, end: Alignment.bottomRight)
-                      : null,
-                  ),
-                  child: Builder(
-                    builder: (context) {
-                      final imageUrl = entry.userImage?.trim();
-                      final hasImage = imageUrl != null && imageUrl.isNotEmpty;
-                      return CircleAvatar(
-                        radius: 24,
-                        backgroundColor: const Color(0xFFF3F4F6),
-                        backgroundImage: hasImage ? NetworkImage(imageUrl) : null,
-                        onBackgroundImageError: hasImage ? (_, __) {} : null,
-                        child: hasImage
-                            ? null
-                            : Icon(Icons.person_rounded, color: Colors.grey[400], size: 24),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 16),
-                
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.userName.isEmpty ? 'Neznámý uživatel' : entry.userName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.libreFranklin(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          if (entry.dogName != null && entry.dogName!.isNotEmpty)
-                            Flexible(
-                              flex: 2,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(100),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.pets, size: 10, color: AppColors.primary),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        entry.dogName!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          if (entry.dogName != null && entry.dogName!.isNotEmpty && entry.visitsCount > 0)
-                            const SizedBox(width: 8),
-                          if (entry.visitsCount > 0)
-                            Flexible(
-                              flex: 1,
-                              child: Text(
-                                '${entry.visitsCount} výletů',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.start,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // Points
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0EBE3),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.star_rounded, color: Color(0xFFFFC107), size: 18),
-                          const SizedBox(width: 4),
-                          Text(
-                            entry.totalPoints.toStringAsFixed(0),
-                            style: GoogleFonts.libreFranklin(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
-                              letterSpacing: -0.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        'bodů',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey[400]),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildInitialSkeleton() {
     return ListView.builder(
       padding: EdgeInsets.fromLTRB(
@@ -860,12 +688,7 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
   Widget _buildLoadMoreSkeleton() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Column(
-        children: [
-          _skeletonCard(),
-          _skeletonCard(),
-        ],
-      ),
+      child: Column(children: [_skeletonCard(), _skeletonCard()]),
     );
   }
 
@@ -920,17 +743,10 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
     );
   }
 
-
-
-
-
-
-
-
   void _showUserVisitsFromLeaderboard(LeaderboardEntry entry) {
     final userId = entry.userId;
     if (userId.isEmpty) return;
-    
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => UserVisitsPage(
@@ -977,8 +793,10 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
               children: [
                 Text(
                   'Filtrovat výsledky',
-                  style: AppTheme.editorialHeadline(color: AppColors.textPrimary, fontSize: 22)
-                      .copyWith(fontWeight: FontWeight.w700),
+                  style: AppTheme.editorialHeadline(
+                    color: AppColors.textPrimary,
+                    fontSize: 22,
+                  ).copyWith(fontWeight: FontWeight.w700),
                 ),
                 Container(
                   decoration: BoxDecoration(
@@ -986,7 +804,11 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.close, size: 20, color: Color(0xFF6B7280)),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 20,
+                      color: Color(0xFF6B7280),
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
@@ -1016,9 +838,15 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                       color: isSelected ? AppColors.primary : Colors.grey[300]!,
                       width: 1.5,
                     ),
-                    boxShadow: isSelected 
-                      ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))]
-                      : null,
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: InkWell(
                     onTap: () async {
@@ -1030,11 +858,16 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
                     },
                     borderRadius: BorderRadius.circular(100),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       child: Text(
                         'Sezóna $season',
                         style: TextStyle(
-                          color: isSelected ? Colors.white : const Color(0xFF4B5563),
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF4B5563),
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
                         ),
@@ -1050,4 +883,170 @@ class _ResultsPageState extends State<ResultsPage> with TickerProviderStateMixin
       ),
     );
   }
-} 
+}
+
+/// One leaderboard row. Name gets the leftover width so it stays readable
+/// on a 360 dp phone; dog and visit count sit on a second line.
+class LeaderboardTile extends StatelessWidget {
+  const LeaderboardTile({
+    super.key,
+    required this.rank,
+    required this.entry,
+    this.onTap,
+  });
+
+  final int rank;
+  final LeaderboardEntry entry;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeColor = switch (rank) {
+      1 => const Color(0xFFFFD700),
+      2 => const Color(0xFFC0C0C0),
+      3 => const Color(0xFFCD7F32),
+      _ => const Color(0xFFE0E0E0),
+    };
+    final rankTextColor = rank <= 3 ? Colors.white : const Color(0xFF6B7280);
+    final rankBgColor = rank <= 3 ? badgeColor : Colors.transparent;
+    final rankBorder = rank <= 3
+        ? null
+        : Border.all(color: const Color(0xFFE5E7EB), width: 2);
+    final name = entry.userName.trim().isEmpty
+        ? 'Neznámý uživatel'
+        : entry.userName.trim();
+    final dog = entry.dogName?.trim();
+    final details = [
+      if (dog != null && dog.isNotEmpty) dog,
+      if (entry.visitsCount > 0) _visitCountLabel(entry.visitsCount),
+    ].join(' · ');
+    final imageUrl = entry.userImage?.trim();
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: WebMobileSectionCard.decoration(),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: rankBgColor,
+                    shape: BoxShape.circle,
+                    border: rankBorder,
+                  ),
+                  child: Text(
+                    '$rank',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: rankTextColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: const Color(0xFFF3F4F6),
+                  backgroundImage: hasImage ? NetworkImage(imageUrl) : null,
+                  onBackgroundImageError: hasImage ? (_, __) {} : null,
+                  child: hasImage
+                      ? null
+                      : Text(
+                          name.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.libreFranklin(
+                          fontSize: 15,
+                          height: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      if (details.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          details,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.libreFranklin(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.star_rounded,
+                          color: Color(0xFFFFC107),
+                          size: 16,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          entry.totalPoints.toStringAsFixed(0),
+                          style: GoogleFonts.libreFranklin(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'bodů',
+                      style: GoogleFonts.libreFranklin(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _visitCountLabel(int count) {
+  if (count == 1) return '1 výlet';
+  if (count >= 2 && count <= 4) return '$count výlety';
+  return '$count výletů';
+}

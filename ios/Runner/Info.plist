@@ -42,6 +42,8 @@
 	<string>Aplikace potřebuje přístup k poloze pro záznam turistické trasy a měření ujeté vzdálenosti.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Aplikace potřebuje přístup k fotkám pro výběr snímků z návštěv.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Fotka pořízená v aplikaci se uloží i do galerie telefonu, abyste ji měli pro sebe.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Aplikace používá pohybové senzory pro lepší sledování aktivity při turistice.</string>
 	<key>NSFaceIDUsageDescription</key>

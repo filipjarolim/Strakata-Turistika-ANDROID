@@ -83,9 +83,14 @@ class CustomBottomNavBar extends StatelessWidget {
                     ),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final itemWidth = (constraints.maxWidth - (_NavMetrics.itemGap * 2)) / 3;
-                        final activeSlot = currentIndex == 0 ? 0 : (currentIndex == 2 ? 1 : 2);
-                        final left = (itemWidth + _NavMetrics.itemGap) * activeSlot;
+                        final itemWidth =
+                            (constraints.maxWidth - (_NavMetrics.itemGap * 2)) /
+                            3;
+                        final activeSlot = currentIndex == 0
+                            ? 0
+                            : (currentIndex == 2 ? 1 : 2);
+                        final left =
+                            (itemWidth + _NavMetrics.itemGap) * activeSlot;
                         return Stack(
                           children: [
                             AnimatedPositioned(
@@ -96,10 +101,16 @@ class CustomBottomNavBar extends StatelessWidget {
                               bottom: 0,
                               child: Container(
                                 width: itemWidth,
-                                margin: const EdgeInsets.symmetric(vertical: _NavMetrics.indicatorInsetY - _NavMetrics.pillInnerPaddingY),
+                                margin: const EdgeInsets.symmetric(
+                                  vertical:
+                                      _NavMetrics.indicatorInsetY -
+                                      _NavMetrics.pillInnerPaddingY,
+                                ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFE5E5E5),
-                                  borderRadius: BorderRadius.circular(_NavMetrics.itemRadius),
+                                  borderRadius: BorderRadius.circular(
+                                    _NavMetrics.itemRadius,
+                                  ),
                                 ),
                               ),
                             ),
@@ -118,7 +129,8 @@ class CustomBottomNavBar extends StatelessWidget {
                                   icon: Icons.explore_outlined,
                                   selectedIcon: Icons.explore_rounded,
                                   isSelected: currentIndex == 2,
-                                  isHighlighted: isTracking && currentIndex != 2,
+                                  isHighlighted:
+                                      isTracking && currentIndex != 2,
                                   onTap: () => onTap(2),
                                 ),
                                 const SizedBox(width: _NavMetrics.itemGap),
@@ -199,30 +211,44 @@ class _PillNavItem extends StatelessWidget {
           splashColor: AppColors.primary.withValues(alpha: 0.10),
           highlightColor: AppColors.primary.withValues(alpha: 0.05),
           child: Container(
-            constraints: const BoxConstraints(minHeight: _NavMetrics.itemMinHeight),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            constraints: const BoxConstraints(
+              minHeight: _NavMetrics.itemMinHeight,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(_NavMetrics.itemRadius),
-              color: isTrackingHighlight ? const Color(0xFFFFF5F5) : Colors.transparent,
+              color: isTrackingHighlight
+                  ? const Color(0xFFFFF5F5)
+                  : Colors.transparent,
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   isSelected ? selectedIcon : icon,
                   size: _NavMetrics.iconSize,
-                  color: isTrackingHighlight ? const Color(0xFFE53935) : Colors.black,
+                  color: isTrackingHighlight
+                      ? const Color(0xFFE53935)
+                      : Colors.black,
                 ),
                 const SizedBox(height: 1),
                 Opacity(
                   opacity: isSelected ? 1.0 : 0.9,
-                  child: Text(
-                    label,
-                    style: GoogleFonts.libreFranklin(
-                      fontSize: _NavMetrics.labelSize,
-                      fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                      color: Colors.black,
-                      height: 1.0,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: GoogleFonts.libreFranklin(
+                        fontSize: _NavMetrics.labelSize,
+                        fontWeight: isSelected
+                            ? FontWeight.w500
+                            : FontWeight.w400,
+                        color: Colors.black,
+                        height: 1.0,
+                      ),
                     ),
                   ),
                 ),

@@ -52,9 +52,7 @@ import 'widgets/legal/legal_actions.dart';
 void _recordStartupError(Object e, StackTrace st, String reason) {
   print('❌ $reason: $e');
   if (Firebase.apps.isEmpty) return;
-  unawaited(
-    FirebaseCrashlytics.instance.recordError(e, st, reason: reason),
-  );
+  unawaited(FirebaseCrashlytics.instance.recordError(e, st, reason: reason));
 }
 
 void _useAndroidPhotoPicker() {
@@ -210,7 +208,8 @@ class MyApp extends StatelessWidget {
             '/user-profile': (context) => const UserProfilePage(),
             '/offline-maps': (context) => const OfflineMapsPage(),
             '/exception-request': (context) => const ExceptionRequestPage(),
-            '/visit-data-form': (context) => const DynamicFormPage(slug: 'gps-tracking'),
+            '/visit-data-form': (context) =>
+                const DynamicFormPage(slug: 'gps-tracking'),
             '/tos': (context) => WebViewPage(
               title: 'Podmínky použití',
               url: LegalConfig.termsUrl,
@@ -267,8 +266,9 @@ class _MyHomePageState extends State<MyHomePage>
     _offlineOpenListener = () {
       if (OfflineUiBridge.openManager.value && mounted) {
         OfflineUiBridge.consumeOpenManager();
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (context) => const OfflineMapsPage()));
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const OfflineMapsPage()),
+        );
       }
     };
     OfflineUiBridge.openManager.addListener(_offlineOpenListener);
@@ -425,82 +425,93 @@ class _MyHomePageState extends State<MyHomePage>
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (sheetContext) {
-        return Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFFBF7),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: const Color(0xFFE8E4DC)),
-          ),
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 42,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey[350],
-                  borderRadius: BorderRadius.circular(100),
+        final media = MediaQuery.of(sheetContext);
+        return SafeArea(
+          top: false,
+          child: Container(
+            constraints: BoxConstraints(maxHeight: media.size.height * 0.92),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBF7),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              border: Border.all(color: const Color(0xFFE8E4DC)),
+            ),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+            child: ListView(
+              shrinkWrap: true,
+              physics: const ClampingScrollPhysics(),
+              children: [
+                Container(
+                  width: 42,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[350],
+                    borderRadius: BorderRadius.circular(100),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _profileMenuItem(
-                icon: Icons.person_outline_rounded,
-                title: 'Profil',
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  if (!mounted) return;
-                  _ensureTabInitialized(3);
-                  setState(() {
-                    _currentIndex = 3;
-                  });
-                },
-              ),
-              _profileMenuItem(
-                icon: Icons.download_for_offline_outlined,
-                title: 'Offline mapy',
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  if (!mounted) return;
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const OfflineMapsPage()),
-                  );
-                },
-              ),
-              _profileMenuItem(
-                icon: Icons.settings_outlined,
-                title: 'Nastavení',
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  Navigator.of(context).pushNamed('/settings');
-                },
-              ),
-              _profileMenuItem(
-                icon: Icons.gavel_rounded,
-                title: 'Žádost o výjimku',
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  Navigator.of(context).pushNamed('/exception-request');
-                },
-              ),
-              _profileMenuItem(
-                icon: Icons.description_outlined,
-                title: 'Pravidla soutěže',
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  LegalActions.openCompetitionRules(context);
-                },
-              ),
-              _profileMenuItem(
-                icon: Icons.info_outline_rounded,
-                title: 'O aplikaci',
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  LegalActions.showAbout(context);
-                },
-              ),
-            ],
+                const SizedBox(height: 12),
+                _profileMenuItem(
+                  icon: Icons.person_outline_rounded,
+                  title: 'Profil',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    if (!mounted) return;
+                    _ensureTabInitialized(3);
+                    setState(() {
+                      _currentIndex = 3;
+                    });
+                  },
+                ),
+                _profileMenuItem(
+                  icon: Icons.download_for_offline_outlined,
+                  title: 'Offline mapy',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    if (!mounted) return;
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const OfflineMapsPage(),
+                      ),
+                    );
+                  },
+                ),
+                _profileMenuItem(
+                  icon: Icons.settings_outlined,
+                  title: 'Nastavení',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    Navigator.of(context).pushNamed('/settings');
+                  },
+                ),
+                _profileMenuItem(
+                  icon: Icons.gavel_rounded,
+                  title: 'Žádost o výjimku',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    Navigator.of(context).pushNamed('/exception-request');
+                  },
+                ),
+                _profileMenuItem(
+                  icon: Icons.description_outlined,
+                  title: 'Pravidla soutěže',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    LegalActions.openCompetitionRules(context);
+                  },
+                ),
+                _profileMenuItem(
+                  icon: Icons.info_outline_rounded,
+                  title: 'O aplikaci',
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    LegalActions.showAbout(context);
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -539,7 +550,10 @@ class _MyHomePageState extends State<MyHomePage>
                   ),
                 ),
                 const Spacer(),
-                const Icon(Icons.chevron_right_rounded, color: Color(0xFF9CA3AF)),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF9CA3AF),
+                ),
               ],
             ),
           ),

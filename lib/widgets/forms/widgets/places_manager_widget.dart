@@ -15,6 +15,7 @@ import '../../../models/forms/form_context.dart';
 import '../../../models/place_type_config.dart';
 import '../../../models/visit_data.dart';
 import '../../../services/cloudinary_service.dart';
+import '../../../services/gallery_save.dart';
 import '../../../services/nominatim_service.dart';
 import '../../../utils/place_label.dart';
 import '../../../widgets/maps/shared_map_widget.dart';
@@ -441,6 +442,9 @@ class _PlacesManagerWidgetState extends State<PlacesManagerWidget> {
                 requestFullMetadata: false,
               );
               if (x == null || !context.mounted) return;
+              if (source == ImageSource.camera) {
+                await saveCameraPhotoToGallery(x.path);
+              }
               final path = x.path;
               if (path.isEmpty) return;
               final response =
